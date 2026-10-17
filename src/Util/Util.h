@@ -4,6 +4,11 @@
 #include <memory>
 #include <utility>
 
+inline size_t GetUniqueId() {
+  static size_t id = 0;
+  return id++;
+}
+
 template <class Container, class T, class Comp = std::equal_to<>>
 bool Contains(const Container &c, const T &t, Comp comp = Comp{}) {
   for (const auto &x : c) {

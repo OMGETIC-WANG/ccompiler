@@ -17,13 +17,13 @@ static std::unique_ptr<FunctionDecl>
 ParseFunctionDecl(FilteredLexer &lexer, std::unique_ptr<TypeBase> type,
                   CompileContext &context);
 
-static std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
-                                                   std::string_view name,
-                                                   CompileContext &context);
+std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
+                                            std::string_view name,
+                                            CompileContext &context);
 
-static std::unique_ptr<EnumDecl> ParseEnumDecl(FilteredLexer &lexer,
-                                               std::string_view name,
-                                               CompileContext &context);
+std::unique_ptr<EnumDecl> ParseEnumDecl(FilteredLexer &lexer,
+                                        std::string_view name,
+                                        CompileContext &context);
 
 std::unique_ptr<CompoundStmt> ParseCompoundStmt(FilteredLexer &lexer,
                                                 CompileContext &context);
@@ -66,21 +66,24 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
 
   tok = lexer.PeekNextToken();
   if (IsDeclarationSpecifier(tok, context)) {
-    auto decl = ParseDeclaration(lexer);
+    auto decl = ParseDeclaration(lexer, context);
     auto decl_types = ParseType(decl.get());
-    auto type_spec = decl->declaration_specifier.type_spec;
+    auto type_spec = std::move(decl->declaration_specifier.type_spec);
 
     auto decl_stmt = std::make_unique<DeclStmt>();
-    auto &results = decl_stmt->decls;
 
     if (type_spec.is_typedef) {
+      if (decl->declaration_specifier.anoymous_decl) {
+        decl_stmt->decls.push_back(
+            std::move(decl->declaration_specifier.anoymous_decl));
+      }
       for (auto &type : decl_types) {
         if (!type->identifier.empty()) {
           auto typedef_decl = std::make_unique<TypedefDecl>();
           typedef_decl->name = type->identifier;
           typedef_decl->type = std::move(type);
-          stmt = std::move(typedef_decl);
           context.AddTypedef(typedef_decl->name);
+          decl_stmt->decls.push_back(std::move(typedef_decl));
         }
       }
     } else {
@@ -96,14 +99,14 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
             var_decl->initializer =
                 std::move(decl->init_declarators[i]->initializer);
             context.AddVariable(var_decl->name);
-            results.push_back(std::move(var_decl));
+            decl_stmt->decls.push_back(std::move(var_decl));
           } else {
             if (type_spec.is_struct) {
-              results.push_back(
+              decl_stmt->decls.push_back(
                   std::move(ParseStructDecl(lexer, type_spec.type, context)));
               context.AddStruct(type_spec.type);
             } else if (type_spec.is_enum) {
-              results.push_back(
+              decl_stmt->decls.push_back(
                   std::move(ParseEnumDecl(lexer, type_spec.type, context)));
               context.AddEnum(type_spec.type);
             }
@@ -123,7 +126,7 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
           }
           break;
         case TypeBaseType::FunctionType:
-          results.push_back(
+          decl_stmt->decls.push_back(
               std::move(ParseFunctionDecl(lexer, std::move(type), context)));
         }
       }
@@ -209,9 +212,9 @@ static std::unique_ptr<ASTNode> ParseGotoStmt(FilteredLexer &lexer,
   return goto_stmt;
 }
 
-static std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
-                                                   std::string_view name,
-                                                   CompileContext &context) {
+std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
+                                            std::string_view name,
+                                            CompileContext &context) {
   auto SD = std::make_unique<StructDecl>();
   SD->name = name;
   if (lexer.PeekNextToken().type == TokenType::LBrace) {
@@ -252,9 +255,9 @@ static void ParseEnumContent(FilteredLexer &lexer, EnumDecl *decl) {
   }
 }
 
-static std::unique_ptr<EnumDecl> ParseEnumDecl(FilteredLexer &lexer,
-                                               std::string_view name,
-                                               CompileContext &context) {
+std::unique_ptr<EnumDecl> ParseEnumDecl(FilteredLexer &lexer,
+                                        std::string_view name,
+                                        CompileContext &context) {
   auto ED = std::make_unique<EnumDecl>();
   ED->name = name;
   if (lexer.PeekNextToken().type == TokenType::LBrace) {

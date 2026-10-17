@@ -1,13 +1,25 @@
 #include "Declaration.h"
 #include "../Util/Keyword.h"
+#include "../Util/Util.h"
 #include "Expr.h"
+#include "TranslationUnit.h"
+#include <list>
 
 std::string_view DeclBase::GetNodeTypeName() const {
   return EnumRefl<DeclType>::GetName(GetType());
 }
 
-TypeSpecifier ParseTypeSpecifier(FilteredLexer &lexer) {
-  TypeSpecifier spec;
+static std::list<std::string> anoymous_symbols;
+
+static std::string_view GenerateAnoymousSymbol() {
+  std::string sym = "<anoymous_symbol_" + std::to_string(GetUniqueId()) + ">";
+  anoymous_symbols.push_back(std::move(sym));
+  return anoymous_symbols.back();
+}
+
+static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
+                               FilteredLexer &lexer, CompileContext &context) {
+  TypeSpecifier &spec = decl_spec.type_spec;
   while (true) {
     Token tok = lexer.PeekNextToken();
     if (tok.type == TokenType::Keyword) {
@@ -33,40 +45,56 @@ TypeSpecifier ParseTypeSpecifier(FilteredLexer &lexer) {
       spec.type = tok.value;
       lexer.ConsumeToken(tok);
       break;
+    } else if (tok.type == TokenType::LBrace) {
+      if (spec.is_struct) {
+        std::string_view name = GenerateAnoymousSymbol();
+        decl_spec.anoymous_decl = ParseStructDecl(lexer, name, context);
+        spec.type = name;
+        break;
+      }
+      if (spec.is_enum) {
+        std::string_view name = GenerateAnoymousSymbol();
+        decl_spec.anoymous_decl = ParseEnumDecl(lexer, name, context);
+        spec.type = name;
+        break;
+      }
     } else {
       RAISE_ERROR("Unexpected token");
       break;
     }
   }
-  return spec;
 }
 
-DeclarationSpecifier ParseDeclarationSpecifier(FilteredLexer &lexer) {
+static DeclarationSpecifier ParseDeclarationSpecifier(FilteredLexer &lexer,
+                                                      CompileContext &context) {
   DeclarationSpecifier decl_spec;
-  decl_spec.type_spec = ParseTypeSpecifier(lexer);
+  ParseTypeSpecifier(decl_spec, lexer, context);
   return decl_spec;
 }
 
-std::unique_ptr<Declarator> ParseDeclarator(FilteredLexer &lexer);
+static std::unique_ptr<Declarator> ParseDeclarator(FilteredLexer &lexer,
+                                                   CompileContext &context);
 
-ParamListItem ParseParamListItem(FilteredLexer &lexer) {
+static ParamListItem ParseParamListItem(FilteredLexer &lexer,
+                                        CompileContext &context) {
   ParamListItem item;
-  item.specifier = ParseDeclarationSpecifier(lexer);
+  item.specifier = ParseDeclarationSpecifier(lexer, context);
   Token tok = lexer.PeekNextToken();
   if (tok.type != TokenType::RParen && tok.type != TokenType::Comma) {
-    item.declarator = ParseDeclarator(lexer);
+    item.declarator = ParseDeclarator(lexer, context);
   }
   return item;
 }
 
-std::unique_ptr<ParamList> ParseParamList(FilteredLexer &lexer) {
+static std::unique_ptr<ParamList> ParseParamList(FilteredLexer &lexer,
+                                                 CompileContext &context) {
   auto param_list = std::make_unique<ParamList>();
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::RParen) {
     return param_list;
   }
   while (true) {
-    param_list->params.push_back(ParseParamListItem(lexer));
+    param_list->params.push_back(ParseParamListItem(lexer, context));
     tok = lexer.PeekNextToken();
     if (tok.type == TokenType::RParen) {
       break;
@@ -82,7 +110,7 @@ std::unique_ptr<ParamList> ParseParamList(FilteredLexer &lexer) {
   return param_list;
 }
 
-std::unique_ptr<ArraySuffix> ParseArraySuffix(FilteredLexer &lexer) {
+static std::unique_ptr<ArraySuffix> ParseArraySuffix(FilteredLexer &lexer) {
   auto array_suffix = std::make_unique<ArraySuffix>();
   if (lexer.PeekNextToken().type == TokenType::RBracket) {
     return array_suffix;
@@ -94,7 +122,8 @@ std::unique_ptr<ArraySuffix> ParseArraySuffix(FilteredLexer &lexer) {
   return array_suffix;
 }
 
-std::unique_ptr<DirectDeclarator> ParseDirectDeclarator(FilteredLexer &lexer) {
+static std::unique_ptr<DirectDeclarator>
+ParseDirectDeclarator(FilteredLexer &lexer, CompileContext &context) {
   auto direct_declarator = std::make_unique<DirectDeclarator>();
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::Identifier) {
@@ -103,7 +132,7 @@ std::unique_ptr<DirectDeclarator> ParseDirectDeclarator(FilteredLexer &lexer) {
         std::make_unique<IdentifierDeclarator>(tok.value);
   } else if (tok.type == TokenType::LParen) {
     lexer.ConsumeToken(tok);
-    direct_declarator->declarator = ParseDeclarator(lexer);
+    direct_declarator->declarator = ParseDeclarator(lexer, context);
     ASSERT(lexer.ConsumeNextToken().type == TokenType::RParen,
            "Expected closing paren");
   } else {
@@ -114,7 +143,7 @@ std::unique_ptr<DirectDeclarator> ParseDirectDeclarator(FilteredLexer &lexer) {
     tok = lexer.PeekNextToken();
     if (tok.type == TokenType::LParen) {
       lexer.ConsumeToken(tok);
-      direct_declarator->suffixes.push_back(ParseParamList(lexer));
+      direct_declarator->suffixes.push_back(ParseParamList(lexer, context));
       ASSERT(lexer.ConsumeNextToken().type == TokenType::RParen,
              "Expected closing paren");
     } else if (tok.type == TokenType::LBracket) {
@@ -130,7 +159,8 @@ std::unique_ptr<DirectDeclarator> ParseDirectDeclarator(FilteredLexer &lexer) {
   return direct_declarator;
 }
 
-std::unique_ptr<Declarator> ParseDeclarator(FilteredLexer &lexer) {
+static std::unique_ptr<Declarator> ParseDeclarator(FilteredLexer &lexer,
+                                                   CompileContext &context) {
   auto declarator = std::make_unique<Declarator>();
   while (true) {
     Token tok = lexer.PeekNextToken();
@@ -141,17 +171,19 @@ std::unique_ptr<Declarator> ParseDeclarator(FilteredLexer &lexer) {
       break;
     }
   }
-  declarator->direct_declarator = ParseDirectDeclarator(lexer);
+  declarator->direct_declarator = ParseDirectDeclarator(lexer, context);
   return declarator;
 }
 
-std::unique_ptr<ValueInitializer> ParseValueInitializer(FilteredLexer &lexer) {
+static std::unique_ptr<ValueInitializer>
+ParseValueInitializer(FilteredLexer &lexer) {
   auto value_initializer = std::make_unique<ValueInitializer>();
   value_initializer->value = ParseExpr(lexer);
   return value_initializer;
 }
 
-std::unique_ptr<FieldInitializer> ParseFieldInitializer(FilteredLexer &lexer) {
+static std::unique_ptr<FieldInitializer>
+ParseFieldInitializer(FilteredLexer &lexer) {
   auto initializer = std::make_unique<FieldInitializer>();
   while (true) {
     Token tok = lexer.PeekNextToken();
@@ -181,7 +213,7 @@ std::unique_ptr<FieldInitializer> ParseFieldInitializer(FilteredLexer &lexer) {
   return initializer;
 }
 
-std::unique_ptr<Initializer> ParseInitializer(FilteredLexer &lexer) {
+static std::unique_ptr<Initializer> ParseInitializer(FilteredLexer &lexer) {
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::EndOfFile || tok.type == TokenType::Semicolon ||
       tok.type == TokenType::Comma) {
@@ -200,9 +232,10 @@ std::unique_ptr<Initializer> ParseInitializer(FilteredLexer &lexer) {
   }
 }
 
-std::unique_ptr<InitDeclarator> ParseInitDeclarator(FilteredLexer &lexer) {
+static std::unique_ptr<InitDeclarator>
+ParseInitDeclarator(FilteredLexer &lexer, CompileContext &context) {
   auto init_declarator = std::make_unique<InitDeclarator>();
-  init_declarator->declarator = ParseDeclarator(lexer);
+  init_declarator->declarator = ParseDeclarator(lexer, context);
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::Equal) {
     lexer.ConsumeToken(tok);
@@ -232,15 +265,18 @@ bool IsDeclarationSpecifier(Token tok, const CompileContext &context) {
   }
 }
 
-std::unique_ptr<Declaration> ParseDeclaration(FilteredLexer &lexer) {
+std::unique_ptr<Declaration> ParseDeclaration(FilteredLexer &lexer,
+                                              CompileContext &context) {
   auto declaration = std::make_unique<Declaration>();
-  declaration->declaration_specifier = ParseDeclarationSpecifier(lexer);
+  declaration->declaration_specifier =
+      ParseDeclarationSpecifier(lexer, context);
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::Semicolon || tok.type == TokenType::LBrace) {
     return declaration;
   }
   while (true) {
-    declaration->init_declarators.push_back(ParseInitDeclarator(lexer));
+    declaration->init_declarators.push_back(
+        ParseInitDeclarator(lexer, context));
     tok = lexer.PeekNextToken();
     if (tok.type == TokenType::Semicolon || tok.type == TokenType::LBrace ||
         tok.type == TokenType::EndOfFile) {

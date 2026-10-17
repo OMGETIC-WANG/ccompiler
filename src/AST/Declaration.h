@@ -9,6 +9,7 @@
 
 struct DeclarationSpecifier {
   TypeSpecifier type_spec;
+  std::unique_ptr<ASTNode> anoymous_decl;
 };
 
 // clang-format off
@@ -164,4 +165,5 @@ public:
 
 bool IsDeclarationSpecifier(Token tok, const CompileContext &context);
 
-std::unique_ptr<Declaration> ParseDeclaration(FilteredLexer &lexer);
+std::unique_ptr<Declaration> ParseDeclaration(FilteredLexer &lexer,
+                                              CompileContext &context);
