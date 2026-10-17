@@ -5,8 +5,16 @@
 #include <vector>
 
 #include "../Util/EnumRefl.h"
+#include "../Util/Tree.h"
 
-#include "Declaration.h"
+struct TypeSpecifier {
+  std::string_view type;
+  bool is_struct = false;
+  bool is_typedef = false;
+  bool is_builtin = false;
+  bool is_enum = false;
+  bool is_static = false;
+};
 
 // clang-format off
 #define TYPE_BASE_TYPE_VALUES(x)\
@@ -19,13 +27,13 @@
 MAKE_ENUM(TypeBaseType, TYPE_BASE_TYPE_VALUES)
 REGISTER_ENUM(TypeBaseType, TYPE_BASE_TYPE_VALUES)
 
-class TypeBase {
+class TypeBase : public TreeNode {
 public:
   virtual ~TypeBase() = default;
 
   virtual TypeBaseType GetType() const = 0;
 
-  void Print(std::ostream &out) const;
+  std::string_view GetNodeTypeName() const override;
 
   std::string_view identifier;
 };
@@ -37,13 +45,17 @@ public:                                                                        \
 
 class RawType : public TypeBase {
   TypeNodeImpl(RawType);
+  TreeNodePrintFields(identifier);
 
 public:
+  std::string ToString() const override { return std::string(specifier.type); }
+
   TypeSpecifier specifier;
 };
 
 class FunctionType : public TypeBase {
   TypeNodeImpl(FunctionType);
+  TreeNodePrintFields(identifier, return_type, parameters);
 
 public:
   std::unique_ptr<TypeBase> return_type;
@@ -52,6 +64,7 @@ public:
 
 class PointerType : public TypeBase {
   TypeNodeImpl(PointerType);
+  TreeNodePrintFields(identifier, pointee_type);
 
 public:
   std::unique_ptr<TypeBase> pointee_type;
@@ -59,10 +72,17 @@ public:
 
 class ArrayType : public TypeBase {
   TypeNodeImpl(ArrayType);
+  TreeNodePrintFields(identifier, element_type);
 
 public:
+  std::string ToString() const override {
+    return size == (size_t)-1 ? "[]" : "[" + std::to_string(size) + "]";
+  }
+
   std::unique_ptr<TypeBase> element_type;
   size_t size = (size_t)-1; // default undecleared
 };
+
+class Declaration;
 
 std::vector<std::unique_ptr<TypeBase>> ParseType(const Declaration *decl);

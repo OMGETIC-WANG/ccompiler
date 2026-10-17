@@ -4,14 +4,9 @@
 
 class TranslationUnit : public ASTNode {
   ASTNodeImpl(TranslationUnit);
+  TreeNodePrintFields(body);
 
 public:
-  size_t GetChildCount() const override { return body ? 1 : 0; }
-
-  ASTNode *GetChild(size_t index) const override {
-    return index == 0 ? body.get() : nullptr;
-  }
-
   std::unique_ptr<CompoundStmt> body;
 };
 

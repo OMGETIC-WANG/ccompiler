@@ -1,6 +1,6 @@
 #include "Type.h"
 #include "../Exception.h"
-#include "../Util/Tree.h"
+#include "Declaration.h"
 
 std::unique_ptr<TypeBase> ParseDeclarator(std::unique_ptr<TypeBase> curr_type,
                                           const Declarator *D) {
@@ -90,72 +90,6 @@ std::vector<std::unique_ptr<TypeBase>> ParseType(const Declaration *decl) {
   return results;
 }
 
-static size_t GetChildCount(const TypeBase *node) {
-  switch (node->GetType()) {
-  case TypeBaseType::RawType:
-    return 0;
-  case TypeBaseType::FunctionType: {
-    const auto *function = static_cast<const FunctionType *>(node);
-    return (function->return_type ? 1 : 0) + function->parameters.size();
-  }
-  case TypeBaseType::PointerType:
-    return static_cast<const PointerType *>(node)->pointee_type ? 1 : 0;
-  case TypeBaseType::ArrayType:
-    return static_cast<const ArrayType *>(node)->element_type ? 1 : 0;
-  }
-  return 0;
-}
-
-static const TypeBase *GetChild(const TypeBase *node, size_t index) {
-  switch (node->GetType()) {
-  case TypeBaseType::RawType:
-    return nullptr;
-  case TypeBaseType::FunctionType: {
-    const auto *function = static_cast<const FunctionType *>(node);
-    if (function->return_type) {
-      if (index == 0)
-        return function->return_type.get();
-      --index;
-    }
-    return function->parameters[index].get();
-  }
-  case TypeBaseType::PointerType:
-    return static_cast<const PointerType *>(node)->pointee_type.get();
-  case TypeBaseType::ArrayType:
-    return static_cast<const ArrayType *>(node)->element_type.get();
-  }
-  return nullptr;
-}
-
-static std::string GetString(const TypeBase *node) {
-  std::string result(EnumRefl<TypeBaseType>::GetName(node->GetType()));
-
-  switch (node->GetType()) {
-  case TypeBaseType::RawType:
-    result += ": ";
-    result += static_cast<const RawType *>(node)->specifier.type;
-    break;
-  case TypeBaseType::ArrayType: {
-    const auto *array = static_cast<const ArrayType *>(node);
-    result += ": ";
-    result += array->size == (size_t)-1
-                  ? "[]"
-                  : "[" + std::to_string(array->size) + "]";
-    break;
-  }
-  case TypeBaseType::FunctionType:
-  case TypeBaseType::PointerType:
-    break;
-  }
-
-  if (!node->identifier.empty()) {
-    result += '\'';
-    result += node->identifier;
-    result += '\'';
-  }
-  return result;
-}
-
-void TypeBase::Print(std::ostream &out) const {
-  PrintTree(this, GetChildCount, GetChild, GetString, out);
+std::string_view TypeBase::GetNodeTypeName() const {
+  return EnumRefl<TypeBaseType>::GetName(GetType());
 }

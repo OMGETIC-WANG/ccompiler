@@ -1,16 +1,10 @@
 #pragma once
 
-#include "AST.h"
-
+#include "../Lexer.h"
+#include "../Util/Tree.h"
+#include "ASTNode.h"
+#include "Type.h"
 #include <vector>
-
-struct TypeSpecifier {
-  std::string_view type;
-  bool is_struct = false;
-  bool is_builtin = false;
-  bool is_enum = false;
-  bool is_static = false;
-};
 
 struct DeclarationSpecifier {
   TypeSpecifier type_spec;
@@ -34,13 +28,13 @@ struct DeclarationSpecifier {
 MAKE_ENUM(DeclType, DECL_TYPE_VALUES)
 REGISTER_ENUM(DeclType, DECL_TYPE_VALUES)
 
-class DeclBase {
+class DeclBase : public TreeNode {
 public:
   virtual ~DeclBase() = default;
 
   virtual DeclType GetType() const = 0;
 
-  void Print(std::ostream &out) const;
+  std::string_view GetNodeTypeName() const override;
 };
 
 #define DeclBaseImpl(type_enum)                                                \
@@ -50,6 +44,7 @@ public:                                                                        \
 
 class DirectDeclarator : public DeclBase {
   DeclBaseImpl(DirectDeclarator);
+  TreeNodePrintFields(declarator, suffixes);
 
 public:
   std::unique_ptr<DeclBase> declarator;
@@ -58,14 +53,20 @@ public:
 
 class Declarator : public DeclBase {
   DeclBaseImpl(Declarator);
+  TreeNodePrintFields(direct_declarator);
 
 public:
+  std::string ToString() const override {
+    return "pointers=" + std::to_string(pointer_count);
+  }
+
   size_t pointer_count = 0;
   std::unique_ptr<DirectDeclarator> direct_declarator;
 };
 
 class IdentifierDeclarator : public DeclBase {
   DeclBaseImpl(IdentifierDeclarator);
+  TreeNodeFieldAsString(identifier);
 
 public:
   IdentifierDeclarator(std::string_view id = {}) : identifier(id) {}
@@ -77,6 +78,10 @@ class ArraySuffix : public DeclBase {
   DeclBaseImpl(ArraySuffix);
 
 public:
+  std::string ToString() const override {
+    return size == (size_t)-1 ? "[]" : "[" + std::to_string(size) + "]";
+  }
+
   size_t size = (size_t)-1; // default undecleared
 };
 
@@ -90,6 +95,19 @@ class ParamList : public DeclBase {
   DeclBaseImpl(ParamList);
 
 public:
+  std::vector<TreeNodePrintField> GetPrintFields() const override {
+    std::vector<TreeNodePrintField> print_fields;
+    for (const auto &param : params) {
+      if (param.declarator) {
+        AppendTreeNodePrintField(print_fields, "declarator", param.declarator);
+      } else {
+        AppendTreeNodePrintField(print_fields, "parameter",
+                                 param.specifier.type_spec.type);
+      }
+    }
+    return print_fields;
+  }
+
   std::vector<ParamListItem> params;
 };
 
@@ -99,6 +117,7 @@ class Initializer : public DeclBase {
 
 class ValueInitializer : public Initializer {
   DeclBaseImpl(ValueInitializer);
+  TreeNodePrintFields(value);
 
 public:
   std::unique_ptr<ASTNode> value;
@@ -108,12 +127,21 @@ class FieldInitializer : public Initializer {
   DeclBaseImpl(FieldInitializer);
 
 public:
+  std::vector<TreeNodePrintField> GetPrintFields() const override {
+    std::vector<TreeNodePrintField> print_fields;
+    for (const auto &[name, initializer] : field_initializers) {
+      AppendTreeNodePrintField(print_fields, name, initializer);
+    }
+    return print_fields;
+  }
+
   std::vector<std::pair<std::string_view, std::unique_ptr<Initializer>>>
       field_initializers;
 };
 
 class InitDeclarator : public DeclBase {
   DeclBaseImpl(InitDeclarator);
+  TreeNodePrintFields(declarator, initializer);
 
 public:
   std::unique_ptr<Declarator> declarator;
@@ -122,8 +150,13 @@ public:
 
 class Declaration : public DeclBase {
   DeclBaseImpl(Declaration);
+  TreeNodePrintFields(init_declarators);
 
 public:
+  std::string ToString() const override {
+    return std::string(declaration_specifier.type_spec.type);
+  }
+
   DeclarationSpecifier declaration_specifier;
   std::vector<std::unique_ptr<InitDeclarator>> init_declarators;
 };

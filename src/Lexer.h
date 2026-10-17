@@ -1,6 +1,8 @@
 #pragma once
 
+#include "Exception.h"
 #include "Util/EnumRefl.h"
+#include <deque>
 #include <memory>
 #include <string_view>
 #include <unordered_map>
@@ -79,6 +81,8 @@ inline bool IsPreprocessorToken(TokenType type) {
 struct Token {
   TokenType type;
   std::string_view value;
+
+  bool operator==(const Token &) const = default;
 };
 
 inline bool IsPreprocessorToken(const Token &token) {
@@ -162,28 +166,46 @@ class FilteredLexer {
 public:
   FilteredLexer(Lexer &lexer) : _lexer(lexer) {}
 
-  Token PeekNextToken() {
-    while (true) {
-      Token tok = _lexer.PeekNextToken();
-      if (IsPreprocessorToken(tok)) {
+  Token PeekNextToken(size_t offset = 0) {
+    if (offset < _parsed_tokens.size()) {
+      return _parsed_tokens[offset];
+    }
+    while (offset >= _parsed_tokens.size()) {
+      while (true) {
+        Token tok = _lexer.PeekNextToken();
         _lexer.ConsumeToken(tok);
-        continue;
-      } else {
-        return tok;
+        if (IsPreprocessorToken(tok)) {
+          continue;
+        } else {
+          _parsed_tokens.push_back(tok);
+          break;
+        }
       }
     }
+    return _parsed_tokens[offset];
   }
 
   Token ConsumeNextToken() {
     Token tok = PeekNextToken();
-    _lexer.ConsumeToken(tok);
+    _parsed_tokens.pop_front();
     return tok;
   }
 
-  void ConsumeToken(Token token) { _lexer.ConsumeToken(token); }
+  void ConsumeTokens(size_t count = 1) {
+    for (size_t i = 0; i < count; ++i) {
+      ConsumeNextToken();
+    }
+  }
+
+  void ConsumeToken(Token token) {
+    ASSERT(token == PeekNextToken(), "Token mismatch while consuming");
+    _parsed_tokens.pop_front();
+  }
 
   std::string_view Rest() const { return _lexer.Rest(); }
 
 private:
   Lexer &_lexer;
+
+  std::deque<Token> _parsed_tokens;
 };

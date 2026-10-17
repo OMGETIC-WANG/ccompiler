@@ -15,15 +15,15 @@ int main() {
     source += '\n';
   }
 
-  {
-    Lexer lexer(source);
-    while (lexer.PeekNextToken().type != TokenType::EndOfFile) {
-      Token tok = lexer.ConsumeNextToken();
-      std::cout << EnumRefl<TokenType>::GetName(tok.type) << " " << tok.value
-                << "\n";
-    }
-  }
-  std::cout << "------\n";
+  // {
+  //   Lexer lexer(source);
+  //   while (lexer.PeekNextToken().type != TokenType::EndOfFile) {
+  //     Token tok = lexer.ConsumeNextToken();
+  //     std::cout << EnumRefl<TokenType>::GetName(tok.type) << " " << tok.value
+  //               << "\n";
+  //   }
+  // }
+  // std::cout << "------\n";
 
   Lexer lexer(source);
   FilteredLexer filtered_lexer(lexer);

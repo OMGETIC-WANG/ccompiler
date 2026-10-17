@@ -34,6 +34,9 @@ TypeSpecifier ParseTypeSpecifier(FilteredLexer &lexer) {
       if (tok.value == "struct") {
         spec.is_struct = true;
         lexer.ConsumeToken(tok);
+      } else if (tok.value == "typedef") {
+        spec.is_typedef = true;
+        lexer.ConsumeToken(tok);
       } else if (tok.value == "static") {
         spec.is_static = true;
         lexer.ConsumeToken(tok);
@@ -234,7 +237,8 @@ bool IsDeclarationSpecifier(Token tok, const CompileContext &context) {
     if (IsTypeKeyword(tok.value) || IsStorageSpecifierKeyword(tok.value)) {
       return true;
     }
-    if (tok.value == "struct" || tok.value == "enum") {
+    if (tok.value == "struct" || tok.value == "enum" ||
+        tok.value == "typedef") {
       return true;
     }
     return false;
@@ -268,26 +272,36 @@ std::unique_ptr<Declaration> ParseDeclaration(FilteredLexer &lexer) {
   return declaration;
 }
 
-enum class ExpectType { Val, Op };
-
-constexpr int postfix_op_prec = 5;
-constexpr int prefix_op_prec = 4;
-constexpr int mul_div_mod_prec = 3;
-constexpr int add_sub_prec = 2;
-constexpr int assign_op_prec = 1;
+enum class PrecLevel {
+  Primary,
+  Assign,
+  Logic,
+  AddSub,
+  MulDivMod,
+  Prefix,
+  Postfix,
+};
 
 static int GetPrecedence(TokenType type) {
   switch (type) {
   case TokenType::Identifier:
-    return 0;
+    return (int)PrecLevel::Primary;
   case TokenType::Add:
   case TokenType::Sub:
-    return add_sub_prec;
+    return (int)PrecLevel::AddSub;
   case TokenType::Star:
   case TokenType::Div:
-    return mul_div_mod_prec;
+  case TokenType::Mod:
+    return (int)PrecLevel::MulDivMod;
   case TokenType::Equal:
-    return assign_op_prec;
+    return (int)PrecLevel::Assign;
+  case TokenType::Eq:
+  case TokenType::Ne:
+  case TokenType::Lt:
+  case TokenType::Gt:
+  case TokenType::Le:
+  case TokenType::Ge:
+    return (int)PrecLevel::Logic;
 
   default:
     RAISE_ERROR("Operator not supported yet");
@@ -308,6 +322,8 @@ static OperationType GetOperationType(TokenType type) {
     return OperationType::Mod;
   case TokenType::Equal:
     return OperationType::Assignment;
+  case TokenType::Eq:
+    return OperationType::Eq;
   default:
     RAISE_ERROR("Operator not supported yet");
   }
@@ -580,12 +596,12 @@ static bool IsFlowControlKeyword(Token tok) {
     return false;
   }
   static const std::string_view flow_control_keywords[] = {
-      "if", "else", "while", "for", "return", "break", "continue"};
+      "if", "else", "while", "for", "return", "break", "continue", "goto"};
   return Contains(flow_control_keywords, tok.value);
 }
 
 static std::unique_ptr<FunctionDecl>
-ParseFunctionDecl(FilteredLexer &lexer, std::shared_ptr<TypeBase> type,
+ParseFunctionDecl(FilteredLexer &lexer, std::unique_ptr<TypeBase> type,
                   CompileContext &context);
 
 static std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
@@ -599,76 +615,143 @@ static std::unique_ptr<EnumDecl> ParseEnumDecl(FilteredLexer &lexer,
 std::unique_ptr<CompoundStmt> ParseCompoundStmt(FilteredLexer &lexer,
                                                 CompileContext &context);
 
-static void ParseStmt(FilteredLexer &lexer, CompileContext &context,
-                      std::vector<std::unique_ptr<ASTNode>> &statements) {
+static std::unique_ptr<ASTNode> ParseControlCondExpr(FilteredLexer &lexer) {
+  Token tok = lexer.PeekNextToken();
+  ASSERT_EQ(tok.type, TokenType::LParen, "Expected (");
+  lexer.ConsumeToken(tok);
+  auto expr = ParseExpr(lexer);
+  tok = lexer.PeekNextToken();
+  ASSERT_EQ(tok.type, TokenType::RParen, "Expected )");
+  lexer.ConsumeToken(tok);
+  return expr;
+}
+
+static std::unique_ptr<ASTNode> ParseIfStmt(FilteredLexer &lexer,
+                                            CompileContext &context);
+
+static std::unique_ptr<ASTNode> ParseReturnStmt(FilteredLexer &lexer,
+                                                CompileContext &context);
+
+static std::unique_ptr<ASTNode> ParseGotoStmt(FilteredLexer &lexer,
+                                              CompileContext &context);
+
+// Parse one statement or a compound statement.
+static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
+                                          CompileContext &context) {
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::LBrace) {
-    lexer.ConsumeToken(tok);
-    statements.push_back(ParseCompoundStmt(lexer, context));
-    return;
+    return ParseCompoundStmt(lexer, context);
   }
   if (tok.type == TokenType::RBrace) {
-    return;
+    return nullptr;
   }
   if (tok.type == TokenType::EndOfFile) {
-    return;
+    return nullptr;
   }
+
+  std::unique_ptr<ASTNode> stmt;
 
   tok = lexer.PeekNextToken();
   if (IsDeclarationSpecifier(tok, context)) {
     auto decl = ParseDeclaration(lexer);
     auto decl_types = ParseType(decl.get());
-    for (auto &type : decl_types) {
-      switch (type->GetType()) {
-      case TypeBaseType::RawType:
+    auto type_spec = decl->declaration_specifier.type_spec;
+
+    auto decl_stmt = std::make_unique<DeclStmt>();
+    auto &results = decl_stmt->decls;
+
+    if (type_spec.is_typedef) {
+      for (auto &type : decl_types) {
         if (!type->identifier.empty()) {
-          auto var_decl = std::make_unique<VarDecl>();
-          var_decl->name = type->identifier;
-          var_decl->type = std::move(type);
-          statements.push_back(std::move(var_decl));
-        } else {
-          TypeSpecifier type_spec = ((RawType *)type.get())->specifier;
-          if (type_spec.is_struct) {
-            statements.push_back(
-                ParseStructDecl(lexer, type_spec.type, context));
-          } else if (type_spec.is_enum) {
-            statements.push_back(ParseEnumDecl(lexer, type_spec.type, context));
+          auto typedef_decl = std::make_unique<TypedefDecl>();
+          typedef_decl->name = type->identifier;
+          typedef_decl->type = std::move(type);
+          stmt = std::move(typedef_decl);
+          context.AddTypedef(typedef_decl->name);
+        }
+      }
+    } else {
+      for (size_t i = 0; i < decl_types.size(); i++) {
+        auto &type = decl_types[i];
+
+        switch (type->GetType()) {
+        case TypeBaseType::RawType: {
+          if (!type->identifier.empty()) {
+            auto var_decl = std::make_unique<VarDecl>();
+            var_decl->name = type->identifier;
+            var_decl->type = std::move(type);
+            var_decl->initializer =
+                std::move(decl->init_declarators[i]->initializer);
+            context.AddVariable(var_decl->name);
+            results.push_back(std::move(var_decl));
+          } else {
+            if (type_spec.is_struct) {
+              results.push_back(
+                  std::move(ParseStructDecl(lexer, type_spec.type, context)));
+              context.AddStruct(type_spec.type);
+            } else if (type_spec.is_enum) {
+              results.push_back(
+                  std::move(ParseEnumDecl(lexer, type_spec.type, context)));
+              context.AddEnum(type_spec.type);
+            }
           }
+          break;
         }
-        break;
-      case TypeBaseType::PointerType:
-      case TypeBaseType::ArrayType:
-        if (!type->identifier.empty()) {
-          auto var_decl = std::make_unique<VarDecl>();
-          var_decl->name = type->identifier;
-          var_decl->type = std::move(type);
-          statements.push_back(std::move(var_decl));
-        } else {
-          RAISE_ERROR("Expected an identifier");
+        case TypeBaseType::PointerType:
+        case TypeBaseType::ArrayType:
+          if (!type->identifier.empty()) {
+            auto var_decl = std::make_unique<VarDecl>();
+            var_decl->name = type->identifier;
+            var_decl->type = std::move(type);
+            stmt = std::move(var_decl);
+            context.AddVariable(var_decl->name);
+          } else {
+            RAISE_ERROR("Expected an identifier");
+          }
+          break;
+        case TypeBaseType::FunctionType:
+          results.push_back(
+              std::move(ParseFunctionDecl(lexer, std::move(type), context)));
         }
-        break;
-      case TypeBaseType::FunctionType:
-        statements.push_back(
-            ParseFunctionDecl(lexer, std::move(type), context));
-        break;
       }
     }
+    stmt = std::move(decl_stmt);
   } else if (IsFlowControlKeyword(tok)) {
-    // TODO: parse flow control statements
+    if (tok.value == "if") {
+      stmt = ParseIfStmt(lexer, context);
+    } else if (tok.value == "return") {
+      stmt = ParseReturnStmt(lexer, context);
+    } else {
+      RAISE_ERROR("Flow control not supported yet");
+    }
   } else {
-    auto expr = ParseExpr(lexer);
-    statements.push_back(std::move(expr));
+    Token next_tok = lexer.PeekNextToken(1);
+    if (next_tok.type == TokenType::Colon) {
+      lexer.ConsumeTokens(2);
+      auto label_stmt = std::make_unique<LabelStmt>();
+      label_stmt->name = tok.value;
+      stmt = std::move(label_stmt);
+      context.AddLabel(label_stmt->name);
+    } else {
+      stmt = ParseExpr(lexer);
+    }
   }
 
   while (lexer.PeekNextToken().type == TokenType::Semicolon)
     lexer.ConsumeNextToken();
+
+  return stmt;
 }
 
 std::unique_ptr<CompoundStmt> ParseCompoundStmt(FilteredLexer &lexer,
                                                 CompileContext &context) {
+  auto tok = lexer.PeekNextToken();
+  ASSERT_EQ(tok.type, TokenType::LBrace, "Expected {");
+  lexer.ConsumeToken(tok);
   auto CS = std::make_unique<CompoundStmt>();
+  CompileContextLayerGuard layer_guard(context);
   while (true) {
-    Token tok = lexer.PeekNextToken();
+    tok = lexer.PeekNextToken();
     if (tok.type == TokenType::EndOfFile) {
       return CS;
     }
@@ -676,9 +759,41 @@ std::unique_ptr<CompoundStmt> ParseCompoundStmt(FilteredLexer &lexer,
       lexer.ConsumeToken(tok);
       break;
     }
-    ParseStmt(lexer, context, CS->statements);
+    CS->statements.push_back(ParseStmt(lexer, context));
   }
   return CS;
+}
+
+static std::unique_ptr<ASTNode> ParseIfStmt(FilteredLexer &lexer,
+                                            CompileContext &context) {
+  auto if_stmt = std::make_unique<IfStmt>();
+  lexer.ConsumeNextToken(); // consume "if"
+  if_stmt->condition = ParseControlCondExpr(lexer);
+  if_stmt->then_branch = ParseStmt(lexer, context);
+  Token tok = lexer.PeekNextToken();
+  if (tok.type == TokenType::Keyword && tok.value == "else") {
+    lexer.ConsumeToken(tok);
+    if_stmt->else_branch = ParseStmt(lexer, context);
+  }
+  return if_stmt;
+}
+
+static std::unique_ptr<ASTNode> ParseReturnStmt(FilteredLexer &lexer,
+                                                CompileContext &context) {
+  auto ret_stmt = std::make_unique<ReturnStmt>();
+  lexer.ConsumeNextToken(); // consume "return"
+  ret_stmt->ret_value = ParseExpr(lexer);
+  return ret_stmt;
+}
+
+static std::unique_ptr<ASTNode> ParseGotoStmt(FilteredLexer &lexer,
+                                              CompileContext &context) {
+  auto goto_stmt = std::make_unique<GotoStmt>();
+  lexer.ConsumeNextToken(); // consume "goto"
+  Token tok = lexer.ConsumeNextToken();
+  ASSERT_EQ(tok.type, TokenType::Identifier, "Expected identifier after goto");
+  goto_stmt->target = tok.value;
+  return goto_stmt;
 }
 
 static std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
@@ -687,7 +802,6 @@ static std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
   auto SD = std::make_unique<StructDecl>();
   SD->name = name;
   if (lexer.PeekNextToken().type == TokenType::LBrace) {
-    lexer.ConsumeNextToken();
     SD->fields = ParseCompoundStmt(lexer, context);
   } else {
     ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon);
@@ -740,25 +854,32 @@ static std::unique_ptr<EnumDecl> ParseEnumDecl(FilteredLexer &lexer,
 }
 
 static std::unique_ptr<FunctionDecl>
-ParseFunctionDecl(FilteredLexer &lexer, std::shared_ptr<TypeBase> type,
+ParseFunctionDecl(FilteredLexer &lexer, std::unique_ptr<TypeBase> type,
                   CompileContext &context) {
   auto FD = std::make_unique<FunctionDecl>();
   FD->name = type->identifier;
-  if (!context.functions.contains(FD->name)) {
-    context.functions[FD->name] = type;
-  }
-  FD->function_type = type;
+  context.AddFunction(FD->name);
+  context.PushLayer();
+  FD->function_type = std::move(type);
   if (lexer.PeekNextToken().type == TokenType::LBrace) {
-    lexer.ConsumeNextToken();
     FD->body = ParseCompoundStmt(lexer, context);
   } else
     ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon);
+  context.PopLayer();
   return FD;
 }
 
 std::unique_ptr<TranslationUnit> ParseTranslationUnit(FilteredLexer &lexer) {
   std::unique_ptr<TranslationUnit> TU = std::make_unique<TranslationUnit>();
+  TU->body = std::make_unique<CompoundStmt>();
   CompileContext context;
-  TU->body = ParseCompoundStmt(lexer, context);
+  context.PushLayer();
+  while (true) {
+    Token tok = lexer.PeekNextToken();
+    if (tok.type == TokenType::EndOfFile) {
+      break;
+    }
+    TU->body->statements.push_back(ParseStmt(lexer, context));
+  }
   return TU;
 }

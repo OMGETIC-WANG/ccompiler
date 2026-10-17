@@ -4,16 +4,7 @@
 
 class FunctionInvocation : public ASTNode {
   ASTNodeImpl(FunctionInvocation);
-
-public:
-  size_t GetChildCount() const override { return 1 + arguments.size(); }
-  ASTNode *GetChild(size_t index) const override {
-    if (index == 0)
-      return function.get();
-    else if (index - 1 < arguments.size())
-      return arguments[index - 1].get();
-    return nullptr;
-  }
+  TreeNodePrintFields(function, arguments);
 
 public:
   std::unique_ptr<ASTNode> function;
@@ -22,15 +13,9 @@ public:
 
 class SequenceEval : public ASTNode {
   ASTNodeImpl(SequenceEval);
+  TreeNodePrintFields(expressions);
 
 public:
-  size_t GetChildCount() const override { return expressions.size(); }
-  ASTNode *GetChild(size_t index) const override {
-    if (index < expressions.size())
-      return expressions[index].get();
-    return nullptr;
-  }
-
   std::vector<std::unique_ptr<ASTNode>> expressions;
 };
 
@@ -48,7 +33,8 @@ public:
   x(DecBeforeUse)\
   x(DecAfterUse)\
   x(GetField)\
-  x(Deref)
+  x(Deref)\
+  x(Eq)
 // clang-format on
 
 MAKE_ENUM(OperationType, OPERATION_TYPE_VALUES)
@@ -56,18 +42,10 @@ REGISTER_ENUM(OperationType, OPERATION_TYPE_VALUES)
 
 class BinaryOp : public ASTNode {
   ASTNodeImpl(BinaryExpr);
+  TreeNodePrintFields(left, right);
 
 public:
   virtual OperationType GetOpType() const = 0;
-
-  size_t GetChildCount() const override { return 2; }
-  ASTNode *GetChild(size_t index) const override {
-    if (index == 0)
-      return left.get();
-    else if (index == 1)
-      return right.get();
-    return nullptr;
-  }
 
   std::string ToString() const override {
     return std::string(EnumRefl<OperationType>::GetName(GetOpType()));
@@ -79,16 +57,10 @@ public:
 
 class UnaryOp : public ASTNode {
   ASTNodeImpl(UnaryExpr);
+  TreeNodePrintFields(operand);
 
 public:
   virtual OperationType GetOpType() const = 0;
-
-  size_t GetChildCount() const override { return 1; }
-  ASTNode *GetChild(size_t index) const override {
-    if (index == 0)
-      return operand.get();
-    return nullptr;
-  }
 
   std::string ToString() const override {
     return std::string(EnumRefl<OperationType>::GetName(GetOpType()));
@@ -136,6 +108,10 @@ class GetFieldOp : public BinaryOp {
   OpImpl(GetField);
 };
 
+class EqOp : public BinaryOp {
+  OpImpl(Eq);
+};
+
 inline std::unique_ptr<BinaryOp> MakeBinaryOp(OperationType op_type) {
   switch (op_type) {
   case OperationType::Assignment:
@@ -154,6 +130,8 @@ inline std::unique_ptr<BinaryOp> MakeBinaryOp(OperationType op_type) {
     return std::make_unique<SubscriptOp>();
   case OperationType::GetField:
     return std::make_unique<GetFieldOp>();
+  case OperationType::Eq:
+    return std::make_unique<EqOp>();
   default:
     return nullptr;
   }

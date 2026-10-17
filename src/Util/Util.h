@@ -87,3 +87,60 @@ inline constexpr bool is_unique_ptr_v = is_unique_ptr<T>::value;
 #define __VA_ARGS_COUNT(...)                                                   \
   __VA_ARGS_COUNT_N(__VA_ARGS__ __VA_OPT__(, ) 16, 15, 14, 13, 12, 11, 10, 9,  \
                     8, 7, 6, 5, 4, 3, 2, 1, 0)
+
+#define __FOR_EACH_IMPL_0(action)
+#define __FOR_EACH_IMPL_1(action, x) action(x)
+#define __FOR_EACH_IMPL_2(action, x, ...)                                      \
+  action(x) __FOR_EACH_IMPL_1(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_3(action, x, ...)                                      \
+  action(x) __FOR_EACH_IMPL_2(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_4(action, x, ...)                                      \
+  action(x) __FOR_EACH_IMPL_3(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_5(action, x, ...)                                      \
+  action(x) __FOR_EACH_IMPL_4(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_6(action, x, ...)                                      \
+  action(x) __FOR_EACH_IMPL_5(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_7(action, x, ...)                                      \
+  action(x) __FOR_EACH_IMPL_6(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_8(action, x, ...)                                      \
+  action(x) __FOR_EACH_IMPL_7(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_9(action, x, ...)                                      \
+  action(x) __FOR_EACH_IMPL_8(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_10(action, x, ...)                                     \
+  action(x) __FOR_EACH_IMPL_9(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_11(action, x, ...)                                     \
+  action(x) __FOR_EACH_IMPL_10(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_12(action, x, ...)                                     \
+  action(x) __FOR_EACH_IMPL_11(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_13(action, x, ...)                                     \
+  action(x) __FOR_EACH_IMPL_12(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_14(action, x, ...)                                     \
+  action(x) __FOR_EACH_IMPL_13(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_15(action, x, ...)                                     \
+  action(x) __FOR_EACH_IMPL_14(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_16(action, x, ...)                                     \
+  action(x) __FOR_EACH_IMPL_15(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_17(action, x, ...)                                     \
+  action(x) __FOR_EACH_IMPL_16(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_18(action, x, ...)                                     \
+  action(x) __FOR_EACH_IMPL_17(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_19(action, x, ...)                                     \
+  action(x) __FOR_EACH_IMPL_18(action, __VA_ARGS__)
+#define __FOR_EACH_IMPL_20(action, x, ...)                                     \
+  action(x) __FOR_EACH_IMPL_19(action, __VA_ARGS__)
+
+#define __GET_FOR_EACH_IMPL(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11,  \
+                            _12, _13, _14, _15, _16, _17, _18, _19, _20, name, \
+                            ...)                                               \
+  name
+
+#define FOR_EACH(action, ...)                                                  \
+  __GET_FOR_EACH_IMPL(                                                         \
+      _0 __VA_OPT__(, ) __VA_ARGS__, __FOR_EACH_IMPL_20, __FOR_EACH_IMPL_19,   \
+      __FOR_EACH_IMPL_18, __FOR_EACH_IMPL_17, __FOR_EACH_IMPL_16,              \
+      __FOR_EACH_IMPL_15, __FOR_EACH_IMPL_14, __FOR_EACH_IMPL_13,              \
+      __FOR_EACH_IMPL_12, __FOR_EACH_IMPL_11, __FOR_EACH_IMPL_10,              \
+      __FOR_EACH_IMPL_9, __FOR_EACH_IMPL_8, __FOR_EACH_IMPL_7,                 \
+      __FOR_EACH_IMPL_6, __FOR_EACH_IMPL_5, __FOR_EACH_IMPL_4,                 \
+      __FOR_EACH_IMPL_3, __FOR_EACH_IMPL_2, __FOR_EACH_IMPL_1,                 \
+      __FOR_EACH_IMPL_0)(action __VA_OPT__(, ) __VA_ARGS__)
