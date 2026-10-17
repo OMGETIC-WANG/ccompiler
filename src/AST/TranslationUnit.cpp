@@ -70,11 +70,11 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
     auto decl_types = ParseType(decl.get());
     auto type_spec = std::move(decl->declaration_specifier.type_spec);
 
-    auto decl_stmt = std::make_unique<DeclStmt>();
+    DeclStmtBuilder decl_stmt_builder;
 
     if (type_spec.is_typedef) {
       if (decl->declaration_specifier.anoymous_decl) {
-        decl_stmt->decls.push_back(
+        decl_stmt_builder.Add(
             std::move(decl->declaration_specifier.anoymous_decl));
       }
       for (auto &type : decl_types) {
@@ -83,7 +83,7 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
           typedef_decl->name = type->identifier;
           typedef_decl->type = std::move(type);
           context.AddTypedef(typedef_decl->name);
-          decl_stmt->decls.push_back(std::move(typedef_decl));
+          decl_stmt_builder.Add(std::move(typedef_decl));
         }
       }
     } else {
@@ -99,14 +99,14 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
             var_decl->initializer =
                 std::move(decl->init_declarators[i]->initializer);
             context.AddVariable(var_decl->name);
-            decl_stmt->decls.push_back(std::move(var_decl));
+            decl_stmt_builder.Add(std::move(var_decl));
           } else {
             if (type_spec.is_struct) {
-              decl_stmt->decls.push_back(
+              decl_stmt_builder.Add(
                   std::move(ParseStructDecl(lexer, type_spec.type, context)));
               context.AddStruct(type_spec.type);
             } else if (type_spec.is_enum) {
-              decl_stmt->decls.push_back(
+              decl_stmt_builder.Add(
                   std::move(ParseEnumDecl(lexer, type_spec.type, context)));
               context.AddEnum(type_spec.type);
             }
@@ -119,19 +119,19 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
             auto var_decl = std::make_unique<VarDecl>();
             var_decl->name = type->identifier;
             var_decl->type = std::move(type);
-            stmt = std::move(var_decl);
             context.AddVariable(var_decl->name);
+            decl_stmt_builder.Add(std::move(var_decl));
           } else {
             RAISE_ERROR("Expected an identifier");
           }
           break;
         case TypeBaseType::FunctionType:
-          decl_stmt->decls.push_back(
+          decl_stmt_builder.Add(
               std::move(ParseFunctionDecl(lexer, std::move(type), context)));
         }
       }
     }
-    stmt = std::move(decl_stmt);
+    stmt = decl_stmt_builder.Build();
   } else if (IsFlowControlKeyword(tok)) {
     if (tok.value == "if") {
       stmt = ParseIfStmt(lexer, context);
