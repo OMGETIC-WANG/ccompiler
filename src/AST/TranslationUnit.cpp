@@ -137,6 +137,8 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
       stmt = ParseIfStmt(lexer, context);
     } else if (tok.value == "return") {
       stmt = ParseReturnStmt(lexer, context);
+    } else if (tok.value == "goto") {
+      stmt = ParseGotoStmt(lexer, context);
     } else {
       RAISE_ERROR("Flow control not supported yet");
     }

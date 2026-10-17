@@ -121,9 +121,9 @@ static Token TryPeekAsLiteralString(std::string_view s) {
 
 static Token TryPeekAsKeyword(std::string_view s) {
   static const std::string_view keywords[] = {
-      "if",      "else",   "while",   "for",   "return", "void",    "static",
-      "const",   "struct", "typedef", "enum",  "switch", "case",    "break",
-      "default", "int",    "char",    "float", "double", "unsigned"};
+      "if",      "else",   "while",   "for",  "return", "void",   "static",
+      "const",   "struct", "typedef", "enum", "switch", "case",   "break",
+      "default", "goto",   "int",     "char", "float",  "double", "unsigned"};
   for (const auto &kw : keywords) {
     if (s.starts_with(kw)) {
       if (s.size() > kw.size()) {
