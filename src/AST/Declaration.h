@@ -3,6 +3,7 @@
 #include "../Lexer.h"
 #include "../Util/Tree.h"
 #include "ASTNode.h"
+#include "Context.h"
 #include "Type.h"
 #include <vector>
 
@@ -160,5 +161,7 @@ public:
   DeclarationSpecifier declaration_specifier;
   std::vector<std::unique_ptr<InitDeclarator>> init_declarators;
 };
+
+bool IsDeclarationSpecifier(Token tok, const CompileContext &context);
 
 std::unique_ptr<Declaration> ParseDeclaration(FilteredLexer &lexer);

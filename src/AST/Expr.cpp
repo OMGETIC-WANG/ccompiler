@@ -1,0 +1,302 @@
+#include "Expr.h"
+#include "Operations.h"
+
+enum class PrecLevel {
+  Primary,
+  Assign,
+  Logic,
+  AddSub,
+  MulDivMod,
+  Prefix,
+  Postfix,
+};
+
+static int GetPrecedence(TokenType type) {
+  switch (type) {
+  case TokenType::Identifier:
+    return (int)PrecLevel::Primary;
+  case TokenType::Add:
+  case TokenType::Sub:
+    return (int)PrecLevel::AddSub;
+  case TokenType::Star:
+  case TokenType::Div:
+  case TokenType::Mod:
+    return (int)PrecLevel::MulDivMod;
+  case TokenType::Equal:
+    return (int)PrecLevel::Assign;
+  case TokenType::Eq:
+  case TokenType::Ne:
+  case TokenType::Lt:
+  case TokenType::Gt:
+  case TokenType::Le:
+  case TokenType::Ge:
+    return (int)PrecLevel::Logic;
+
+  default:
+    RAISE_ERROR("Operator not supported yet");
+  }
+}
+
+static OperationType GetOperationType(TokenType type) {
+  switch (type) {
+  case TokenType::Add:
+    return OperationType::Add;
+  case TokenType::Sub:
+    return OperationType::Sub;
+  case TokenType::Star:
+    return OperationType::Mul;
+  case TokenType::Div:
+    return OperationType::Div;
+  case TokenType::Mod:
+    return OperationType::Mod;
+  case TokenType::Equal:
+    return OperationType::Assignment;
+  case TokenType::Eq:
+    return OperationType::Eq;
+  default:
+    RAISE_ERROR("Operator not supported yet");
+  }
+}
+
+static std::unique_ptr<BinaryOp>
+CombineBackTwo(std::vector<TokenType> &op_stack,
+               std::vector<std::unique_ptr<ASTNode>> &val_stack) {
+  TokenType op_type = op_stack.back();
+  op_stack.pop_back();
+  auto right = std::move(val_stack.back());
+  val_stack.pop_back();
+  auto left = std::move(val_stack.back());
+  val_stack.pop_back();
+  auto bin_op = MakeBinaryOp(GetOperationType(op_type));
+  bin_op->left = std::move(left);
+  bin_op->right = std::move(right);
+  return bin_op;
+}
+
+std::vector<std::unique_ptr<ASTNode>> ParseQuotedExpr(FilteredLexer &lexer) {
+  std::vector<std::unique_ptr<ASTNode>> results;
+  while (true) {
+    Token tok = lexer.PeekNextToken();
+    if (tok.type == TokenType::RParen || tok.type == TokenType::EndOfFile ||
+        tok.type == TokenType::Semicolon) {
+      break;
+    }
+
+    results.push_back(ParseExpr(lexer));
+
+    tok = lexer.PeekNextToken();
+    if (tok.type == TokenType::RParen || tok.type == TokenType::EndOfFile ||
+        tok.type == TokenType::Semicolon) {
+      break;
+    } else {
+      ASSERT(tok.type == TokenType::Comma, "Expected an comma");
+      lexer.ConsumeToken(tok);
+    }
+  }
+  return results;
+}
+
+std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer) {
+  Token tok = lexer.PeekNextToken();
+  switch (tok.type) {
+  case TokenType::LiteralNum: {
+    lexer.ConsumeToken(tok);
+    auto literal_num = std::make_unique<LiteralNum>();
+    literal_num->value = tok.value;
+    return literal_num;
+  }
+  case TokenType::Identifier: {
+    lexer.ConsumeToken(tok);
+    auto var_ref = std::make_unique<VarRef>();
+    var_ref->name = tok.value;
+    return var_ref;
+  }
+  case TokenType::LParen: {
+    lexer.ConsumeToken(tok);
+    auto expr = ParseQuotedExpr(lexer);
+    ASSERT(lexer.ConsumeNextToken().type == TokenType::RParen,
+           "Expected closing paren");
+    auto seq_eval = std::make_unique<SequenceEval>();
+    seq_eval->expressions = std::move(expr);
+    return seq_eval;
+  }
+  default:
+    RAISE_ERROR("Unexpected token");
+  }
+}
+
+std::unique_ptr<ASTNode> ParsePostfix(FilteredLexer &lexer,
+                                      std::unique_ptr<ASTNode> primary) {
+  while (true) {
+    Token tok = lexer.PeekNextToken();
+    switch (tok.type) {
+    case TokenType::EndOfFile:
+    case TokenType::Semicolon:
+    case TokenType::RParen:
+      return primary;
+    case TokenType::LParen: {
+      lexer.ConsumeToken(tok);
+      auto func_invoke = std::make_unique<FunctionInvocation>();
+      func_invoke->function = std::move(primary);
+      func_invoke->arguments = ParseQuotedExpr(lexer);
+      ASSERT(lexer.ConsumeNextToken().type == TokenType::RParen,
+             "Expected closing paren");
+      primary = std::move(func_invoke);
+      break;
+    }
+    case TokenType::LBracket: {
+      lexer.ConsumeToken(tok);
+      auto subscript_op = std::make_unique<SubscriptOp>();
+      subscript_op->left = std::move(primary);
+      subscript_op->right = ParseExpr(lexer);
+      ASSERT(lexer.ConsumeNextToken().type == TokenType::RBracket,
+             "Expected closing bracket");
+      primary = std::move(subscript_op);
+      break;
+    }
+    case TokenType::Dot: {
+      lexer.ConsumeToken(tok);
+      auto get_field_op = std::make_unique<GetFieldOp>();
+      get_field_op->left = std::move(primary);
+      Token field_tok = lexer.ConsumeNextToken();
+      ASSERT(field_tok.type == TokenType::Identifier, "Expected field name");
+      auto field_ref = std::make_unique<VarRef>();
+      field_ref->name = field_tok.value;
+      get_field_op->right = std::move(field_ref);
+      primary = std::move(get_field_op);
+      break;
+    }
+    case TokenType::AddAdd: {
+      lexer.ConsumeToken(tok);
+      auto inc_after_use_op = std::make_unique<IncAfterUseOp>();
+      inc_after_use_op->operand = std::move(primary);
+      primary = std::move(inc_after_use_op);
+      break;
+    }
+    case TokenType::SubSub: {
+      lexer.ConsumeToken(tok);
+      auto dec_after_use_op = std::make_unique<DecAfterUseOp>();
+      dec_after_use_op->operand = std::move(primary);
+      primary = std::move(dec_after_use_op);
+      break;
+    }
+    default:
+      return primary;
+    }
+  }
+}
+
+std::unique_ptr<ASTNode> AddPrefixes(std::unique_ptr<ASTNode> node,
+                                     const std::vector<TokenType> &prefixes) {
+  for (int i = prefixes.size() - 1; i >= 0; i--) {
+    std::unique_ptr<UnaryOp> prefix;
+    switch (prefixes[i]) {
+    case TokenType::AddAdd:
+      prefix = std::make_unique<IncBeforeUseOp>();
+      break;
+    case TokenType::SubSub:
+      prefix = std::make_unique<DecBeforeUseOp>();
+      break;
+    case TokenType::Star:
+      prefix = std::make_unique<DerefOp>();
+      break;
+    default:
+      RAISE_ERROR("Prefix operator not supported yet");
+    }
+    prefix->operand = std::move(node);
+    node = std::move(prefix);
+  }
+  return node;
+}
+
+std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(FilteredLexer &lexer) {
+  std::vector<TokenType> prefixes;
+  while (true) {
+    Token tok = lexer.PeekNextToken();
+    switch (tok.type) {
+    case TokenType::EndOfFile:
+    case TokenType::Semicolon:
+      return nullptr;
+    case TokenType::AddAdd:
+    case TokenType::SubSub:
+    case TokenType::Add:
+    case TokenType::Sub:
+    case TokenType::Star:
+      lexer.ConsumeToken(tok);
+      prefixes.push_back(tok.type);
+      break;
+    default:
+      auto primary = ParsePrimary(lexer);
+      auto postfixed = ParsePostfix(lexer, std::move(primary));
+      return AddPrefixes(std::move(postfixed), prefixes);
+    }
+  }
+}
+
+static bool IsBinaryOp(TokenType type) {
+  switch (type) {
+  case TokenType::Add:
+  case TokenType::Sub:
+  case TokenType::Div:
+  case TokenType::Mod:
+  case TokenType::Equal:
+  case TokenType::Star:
+  case TokenType::LShift:
+  case TokenType::RShift:
+  case TokenType::BitAnd:
+  case TokenType::BitOr:
+  case TokenType::BitXor:
+  case TokenType::Eq:
+  case TokenType::Ne:
+  case TokenType::Lt:
+  case TokenType::Gt:
+  case TokenType::Le:
+  case TokenType::Ge:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static bool IsRightCombineOp(TokenType op) {
+  switch (op) {
+  case TokenType::Equal:
+    return true;
+  default:
+    return false;
+  }
+}
+
+std::unique_ptr<ASTNode> ParseExpr(FilteredLexer &lexer, int min_prec) {
+  auto lhs = ParsePrefixPostfixExpr(lexer);
+  while (true) {
+    Token tok = lexer.PeekNextToken();
+    switch (tok.type) {
+    case TokenType::EndOfFile:
+    case TokenType::Semicolon:
+    case TokenType::RParen:
+    case TokenType::RBracket:
+    case TokenType::Comma:
+    case TokenType::RBrace:
+      return lhs;
+    default:
+      int op_prec = GetPrecedence(tok.type);
+      if (!IsBinaryOp(tok.type) || op_prec < min_prec) {
+        return lhs;
+      }
+
+      lexer.ConsumeToken(tok);
+
+      int next_min_prec = IsRightCombineOp(tok.type) ? op_prec : op_prec + 1;
+
+      auto rhs = ParseExpr(lexer, next_min_prec);
+
+      auto bin_op = MakeBinaryOp(GetOperationType(tok.type));
+      bin_op->left = std::move(lhs);
+      bin_op->right = std::move(rhs);
+      lhs = std::move(bin_op);
+    }
+  }
+
+  return lhs;
+}
