@@ -28,6 +28,44 @@ public:
   std::vector<std::unique_ptr<ASTNode>> decls;
 };
 
+class DeclStmtBuilder {
+public:
+  DeclStmtBuilder() = default;
+
+  void Add(std::unique_ptr<ASTNode> decl) {
+    if (std::holds_alternative<std::monostate>(_decls)) {
+      _decls = std::move(decl);
+    } else if (std::holds_alternative<std::unique_ptr<ASTNode>>(_decls)) {
+      std::vector<std::unique_ptr<ASTNode>> decls;
+      decls.push_back(std::move(std::get<std::unique_ptr<ASTNode>>(_decls)));
+      decls.push_back(std::move(decl));
+      _decls = std::move(decls);
+    } else {
+      std::get<std::vector<std::unique_ptr<ASTNode>>>(_decls).push_back(
+          std::move(decl));
+    }
+  }
+
+  std::unique_ptr<ASTNode> Build() {
+    if (std::holds_alternative<std::monostate>(_decls)) {
+      return nullptr;
+    } else if (std::holds_alternative<std::unique_ptr<ASTNode>>(_decls)) {
+      return std::move(std::get<std::unique_ptr<ASTNode>>(_decls));
+    } else {
+      auto decls =
+          std::move(std::get<std::vector<std::unique_ptr<ASTNode>>>(_decls));
+      auto decl_stmt = std::make_unique<DeclStmt>();
+      decl_stmt->decls = std::move(decls);
+      return decl_stmt;
+    }
+  }
+
+private:
+  std::variant<std::monostate, std::unique_ptr<ASTNode>,
+               std::vector<std::unique_ptr<ASTNode>>>
+      _decls;
+};
+
 class VarDecl : public ASTNode {
   ASTNodeImpl(VarDecl);
   TreeNodeFieldAsString(name);
