@@ -86,8 +86,21 @@ public:                                                                        \
     return print_fields;                                                       \
   }
 
+template <class T> std::string CastToString(const T &val) {
+  using CleanT = std::decay_t<T>;
+  if constexpr (std::is_convertible_v<CleanT, std::string_view>) {
+    return std::string(val);
+  } else if constexpr (requires { std::format("{}", val); }) {
+    return std::format("{}", val);
+  } else if constexpr (requires { std::to_string(val); }) {
+    return std::to_string(val);
+  } else {
+    return {};
+  }
+}
+
 #define TreeNodeFieldAsString(field)                                           \
-  std::string ToString() const override { return std::string(field); }
+  std::string ToString() const override { return CastToString(this->field); }
 
 template <class Node, class FnGetChildren, class FnGetString>
 void PrintTreeChildren(const Node *node, const FnGetChildren &get_children,

@@ -96,14 +96,53 @@ std::vector<std::unique_ptr<ASTNode>> ParseQuotedExpr(FilteredLexer &lexer) {
   return results;
 }
 
+static std::variant<double, uint64_t, int64_t>
+ParseLiteralNumValue(std::string_view s) {
+  ASSERT(!s.empty(), "Unexpected empty literal num");
+
+  bool is_float = false;
+  if (s.back() == 'f' || s.back() == 'F') {
+    is_float = true;
+    s.remove_suffix(1);
+    ASSERT(!s.empty(), "Unexpected empty float literal");
+  } else if (s.find_first_of(".eE") != std::string_view::npos) {
+    is_float = true;
+  }
+
+  if (is_float) {
+    double val = 0.0;
+    auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), val);
+    ASSERT(ec == std::errc{} && ptr == s.data() + s.size(),
+           "Failed to parse float literal");
+    return val;
+  }
+
+  uint64_t u_val = 0;
+  auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), u_val);
+  ASSERT(ec == std::errc{} && ptr == s.data() + s.size(),
+         "Failed to parse integer literal");
+
+  if (u_val <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+    return static_cast<int64_t>(u_val);
+  }
+  return u_val;
+}
+
 std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer) {
   Token tok = lexer.PeekNextToken();
   switch (tok.type) {
   case TokenType::LiteralNum: {
     lexer.ConsumeToken(tok);
     auto literal_num = std::make_unique<LiteralNum>();
-    literal_num->value = tok.value;
+    literal_num->value = ParseLiteralNumValue(tok.value);
     return literal_num;
+  }
+  case TokenType::LiteralString: {
+    lexer.ConsumeToken(tok);
+    auto literal_string = std::make_unique<LiteralString>();
+    literal_string->value =
+        tok.value.substr(1, tok.value.size() - 2); // remove quotes
+    return literal_string;
   }
   case TokenType::Identifier: {
     lexer.ConsumeToken(tok);

@@ -68,15 +68,26 @@ static Token TryPeekAsIdentifier(std::string_view s) {
   return Token{TokenType::Identifier, s.substr(0, pos)};
 }
 
-static bool IsLiteralNumStart(char c) { return (c >= '0' && c <= '9'); }
-
 static Token TryPeekAsLiteralNum(std::string_view s) {
-  if (s.empty() || !IsLiteralNumStart(s[0])) {
+  if (s.empty() || !isdigit(s[0])) {
     return Token{TokenType::Unknown};
   }
   size_t pos = 0;
-  while (pos < s.size() && IsLiteralNumStart(s[pos])) {
+  while (pos < s.size() && isdigit(s[pos])) {
     pos++;
+  }
+  if (pos && pos < s.size()) {
+    if (s[pos] == '.') {
+      pos++;
+      while (pos < s.size() && isdigit(s[pos])) {
+        pos++;
+      }
+      if (pos < s.size() && (s[pos] == 'f' || s[pos] == 'F')) {
+        pos++;
+      }
+    } else if (s[pos] == 'f') {
+      pos++;
+    }
   }
   return Token{TokenType::LiteralNum, s.substr(0, pos)};
 }
