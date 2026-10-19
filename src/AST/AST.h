@@ -143,10 +143,24 @@ public:
 class FunctionDecl : public ASTNode {
   ASTNodeImpl(FunctionDecl);
   TreeNodeFieldAsString(name);
-  TreeNodePrintFields(name, function_type, body);
 
 public:
+  std::vector<TreeNodePrintField> GetPrintFields() const override {
+    std::vector<TreeNodePrintField> print_fields;
+    AppendTreeNodePrintField(print_fields, "name", name);
+    AppendTreeNodePrintField(print_fields, "function_type", function_type);
+    for (std::string_view parameter_name : parameter_names) {
+      print_fields.push_back(
+          {"parameter_name", parameter_name.empty()
+                                 ? "<anonymous>"
+                                 : std::string(parameter_name)});
+    }
+    AppendTreeNodePrintField(print_fields, "body", body);
+    return print_fields;
+  }
+
   std::string_view name;
+  std::vector<std::string_view> parameter_names;
   std::unique_ptr<TypeBase> function_type;
   std::unique_ptr<CompoundStmt> body;
 };
