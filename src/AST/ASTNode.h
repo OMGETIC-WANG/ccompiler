@@ -1,5 +1,6 @@
 #pragma once
 
+#include <concepts>
 #include <string_view>
 
 #include "../Util/EnumRefl.h"
@@ -43,6 +44,23 @@ public:
   virtual ASTNodeType GetType() const = 0;
 
   std::string_view GetNodeTypeName() const override;
+
+  template <std::derived_from<ASTNode> T> T *As() {
+#ifdef ENABLE_AS_TYPE_CHECK
+    if (GetType() != T::__type) {
+      RAISE_ERROR("Invalid ASTNode type cast from ", GetType(), " to ",
+                  T::__type);
+    }
+#endif
+    return static_cast<T *>(this);
+  }
+
+  template <std::derived_from<ASTNode> T> T *DynCast() {
+    if (GetType() != T::__type) {
+      return nullptr;
+    }
+    return static_cast<T *>(this);
+  }
 };
 
 template <class T> ASTNodeType ASTNodeTypeOf() { return T::__type; }
