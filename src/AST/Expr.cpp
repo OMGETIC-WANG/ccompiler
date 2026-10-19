@@ -58,21 +58,6 @@ static OperationType GetOperationType(TokenType type) {
   }
 }
 
-static std::unique_ptr<BinaryOp>
-CombineBackTwo(std::vector<TokenType> &op_stack,
-               std::vector<std::unique_ptr<ASTNode>> &val_stack) {
-  TokenType op_type = op_stack.back();
-  op_stack.pop_back();
-  auto right = std::move(val_stack.back());
-  val_stack.pop_back();
-  auto left = std::move(val_stack.back());
-  val_stack.pop_back();
-  auto bin_op = MakeBinaryOp(GetOperationType(op_type));
-  bin_op->left = std::move(left);
-  bin_op->right = std::move(right);
-  return bin_op;
-}
-
 std::vector<std::unique_ptr<ASTNode>> ParseQuotedExpr(FilteredLexer &lexer) {
   std::vector<std::unique_ptr<ASTNode>> results;
   while (true) {
@@ -185,7 +170,7 @@ std::unique_ptr<ASTNode> ParsePostfix(FilteredLexer &lexer,
     }
     case TokenType::LBracket: {
       lexer.ConsumeToken(tok);
-      auto subscript_op = std::make_unique<SubscriptOp>();
+      auto subscript_op = std::make_unique<BinaryOp>(OperationType::Subscript);
       subscript_op->left = std::move(primary);
       subscript_op->right = ParseExpr(lexer);
       ASSERT(lexer.ConsumeNextToken().type == TokenType::RBracket,
@@ -195,7 +180,7 @@ std::unique_ptr<ASTNode> ParsePostfix(FilteredLexer &lexer,
     }
     case TokenType::Dot: {
       lexer.ConsumeToken(tok);
-      auto get_field_op = std::make_unique<GetFieldOp>();
+      auto get_field_op = std::make_unique<BinaryOp>(OperationType::GetField);
       get_field_op->left = std::move(primary);
       Token field_tok = lexer.ConsumeNextToken();
       ASSERT(field_tok.type == TokenType::Identifier, "Expected field name");
@@ -207,14 +192,16 @@ std::unique_ptr<ASTNode> ParsePostfix(FilteredLexer &lexer,
     }
     case TokenType::AddAdd: {
       lexer.ConsumeToken(tok);
-      auto inc_after_use_op = std::make_unique<IncAfterUseOp>();
+      auto inc_after_use_op =
+          std::make_unique<UnaryOp>(OperationType::IncAfterUse);
       inc_after_use_op->operand = std::move(primary);
       primary = std::move(inc_after_use_op);
       break;
     }
     case TokenType::SubSub: {
       lexer.ConsumeToken(tok);
-      auto dec_after_use_op = std::make_unique<DecAfterUseOp>();
+      auto dec_after_use_op =
+          std::make_unique<UnaryOp>(OperationType::DecAfterUse);
       dec_after_use_op->operand = std::move(primary);
       primary = std::move(dec_after_use_op);
       break;
@@ -231,13 +218,13 @@ std::unique_ptr<ASTNode> AddPrefixes(std::unique_ptr<ASTNode> node,
     std::unique_ptr<UnaryOp> prefix;
     switch (prefixes[i]) {
     case TokenType::AddAdd:
-      prefix = std::make_unique<IncBeforeUseOp>();
+      prefix = std::make_unique<UnaryOp>(OperationType::IncBeforeUse);
       break;
     case TokenType::SubSub:
-      prefix = std::make_unique<DecBeforeUseOp>();
+      prefix = std::make_unique<UnaryOp>(OperationType::DecBeforeUse);
       break;
     case TokenType::Star:
-      prefix = std::make_unique<DerefOp>();
+      prefix = std::make_unique<UnaryOp>(OperationType::Deref);
       break;
     default:
       RAISE_ERROR("Prefix operator not supported yet");
@@ -330,7 +317,7 @@ std::unique_ptr<ASTNode> ParseExpr(FilteredLexer &lexer, int min_prec) {
 
       auto rhs = ParseExpr(lexer, next_min_prec);
 
-      auto bin_op = MakeBinaryOp(GetOperationType(tok.type));
+      auto bin_op = std::make_unique<BinaryOp>(GetOperationType(tok.type));
       bin_op->left = std::move(lhs);
       bin_op->right = std::move(rhs);
       lhs = std::move(bin_op);
