@@ -53,6 +53,13 @@ public:
     return _size;
   }
 
+  size_t GetAlign() const {
+    if (_size == (size_t)-1) {
+      _align = EvalAlign();
+    }
+    return _align;
+  }
+
   template <std::derived_from<TypeBase> T> T *As() {
 #ifdef ENABLE_AS_TYPE_CHECK
     if (GetType() != T::__type) {
@@ -73,8 +80,11 @@ public:
 protected:
   virtual size_t EvalSize() const = 0;
 
+  virtual size_t EvalAlign() const = 0;
+
 private:
-  mutable size_t _size = (size_t)-1; // unevaluated
+  mutable size_t _size = (size_t)-1;  // unevaluated
+  mutable size_t _align = (size_t)-1; // unevaluated
 };
 
 #define TypeNodeImpl(type_enum)                                                \
@@ -88,8 +98,8 @@ class BuiltinType : public TypeBase {
 
 public:
   BuiltinType(std::string_view name, std::string_view ir_name,
-              std::optional<size_t> size)
-      : type_name(name), _ir_name(ir_name), _size(size) {
+              std::optional<size_t> size, size_t align)
+      : type_name(name), _ir_name(ir_name), _size(size), _align(align) {
     ASSERT(!type_name.empty(), "BuiltinType name must not be empty");
   }
 
@@ -107,9 +117,12 @@ protected:
     return *_size;
   }
 
+  size_t EvalAlign() const override { return _align; }
+
 private:
   std::string_view _ir_name;
   std::optional<size_t> _size;
+  size_t _align;
 };
 
 class StructType : public TypeBase {
@@ -126,6 +139,10 @@ public:
 protected:
   size_t EvalSize() const override {
     RAISE_ERROR("StructType size requires an external struct layout");
+  }
+
+  size_t EvalAlign() const override {
+    RAISE_ERROR("StructType alignment requires an external struct layout");
   }
 };
 
@@ -146,6 +163,13 @@ protected:
   size_t EvalSize() const override {
     RAISE_ERROR("EnumType size requires an external enum layout");
   }
+
+  size_t EvalAlign() const override {
+    if (!underlying_type) {
+      return alignof(int);
+    }
+    return underlying_type->GetAlign();
+  }
 };
 
 class FunctionType : public TypeBase {
@@ -154,6 +178,8 @@ class FunctionType : public TypeBase {
 
 protected:
   size_t EvalSize() const override { return sizeof(void *); }
+
+  size_t EvalAlign() const override { return alignof(void *); }
 
 public:
   std::unique_ptr<TypeBase> return_type;
@@ -166,6 +192,8 @@ class PointerType : public TypeBase {
 
 protected:
   size_t EvalSize() const override { return sizeof(void *); }
+
+  size_t EvalAlign() const override { return alignof(void *); }
 
 public:
   std::unique_ptr<TypeBase> pointee_type;
@@ -191,6 +219,8 @@ protected:
       return *size * element_type->GetSize();
     }
   }
+
+  size_t EvalAlign() const override { return element_type->GetAlign(); }
 };
 
 class OpaqueType : public TypeBase {
@@ -223,6 +253,10 @@ public:
 protected:
   size_t EvalSize() const override {
     RAISE_ERROR("OpaqueType size requires contextual type resolution");
+  }
+
+  size_t EvalAlign() const override {
+    RAISE_ERROR("OpaqueType alignment requires contextual type resolution");
   }
 };
 

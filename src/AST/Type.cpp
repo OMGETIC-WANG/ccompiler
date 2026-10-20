@@ -29,21 +29,23 @@ struct BuiltinTypeInfo {
   std::string_view name;
   std::string_view ir_name;
   std::optional<size_t> size;
+  size_t align;
 };
 
 static constexpr std::array BUILTIN_TYPES = {
-    BuiltinTypeInfo{"void", "void", std::nullopt},
-    BuiltinTypeInfo{"int", "i32", 4},
-    BuiltinTypeInfo{"char", "i8", 1},
-    BuiltinTypeInfo{"float", "float", 4},
-    BuiltinTypeInfo{"double", "double", 8},
-    BuiltinTypeInfo{"long", "i64", 8},
+    BuiltinTypeInfo{"void", "void", std::nullopt, (size_t)-1},
+    BuiltinTypeInfo{"int", "i32", 4, alignof(int)},
+    BuiltinTypeInfo{"char", "i8", 1, alignof(char)},
+    BuiltinTypeInfo{"float", "float", 4, alignof(float)},
+    BuiltinTypeInfo{"double", "double", 8, alignof(double)},
+    BuiltinTypeInfo{"long", "i64", 8, alignof(long)},
 };
 
 std::unique_ptr<BuiltinType> BuiltinType::Create(std::string_view name) {
   for (const auto &info : BUILTIN_TYPES) {
     if (info.name == name) {
-      return std::make_unique<BuiltinType>(info.name, info.ir_name, info.size);
+      return std::make_unique<BuiltinType>(info.name, info.ir_name, info.size,
+                                           info.align);
     }
   }
   RAISE_ERROR("Unknown builtin type ", name);
