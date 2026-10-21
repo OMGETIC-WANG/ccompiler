@@ -1,174 +1,142 @@
 #include "Type.h"
 #include "../Exception.h"
+#include "Context.h"
 #include "Declaration.h"
-#include <array>
 
-struct DeclaratorParseContext {
-  std::vector<std::pair<const TypeBase *, std::vector<std::string_view>>>
-      function_parameter_names;
+namespace {
 
-  void
-  SetFunctionParameterNames(const TypeBase *type,
-                            std::vector<std::string_view> parameter_names) {
-    function_parameter_names.emplace_back(type, std::move(parameter_names));
-  }
-
-  std::vector<std::string_view>
-  GetFunctionParameterNames(const TypeBase *type) const {
-    for (auto it = function_parameter_names.rbegin();
-         it != function_parameter_names.rend(); ++it) {
-      if (it->first == type) {
-        return it->second;
-      }
-    }
-    return {};
-  }
-};
-
-struct BuiltinTypeInfo {
-  std::string_view name;
-  std::string_view ir_name;
-  std::optional<size_t> size;
-  size_t align;
-};
-
-static constexpr std::array BUILTIN_TYPES = {
-    BuiltinTypeInfo{"void", "void", std::nullopt, (size_t)-1},
-    BuiltinTypeInfo{"int", "i32", 4, alignof(int)},
-    BuiltinTypeInfo{"char", "i8", 1, alignof(char)},
-    BuiltinTypeInfo{"float", "float", 4, alignof(float)},
-    BuiltinTypeInfo{"double", "double", 8, alignof(double)},
-    BuiltinTypeInfo{"long", "i64", 8, alignof(long)},
-};
-
-std::unique_ptr<BuiltinType> BuiltinType::Create(std::string_view name) {
-  for (const auto &info : BUILTIN_TYPES) {
-    if (info.name == name) {
-      return std::make_unique<BuiltinType>(info.name, info.ir_name, info.size,
-                                           info.align);
-    }
-  }
-  RAISE_ERROR("Unknown builtin type ", name);
-}
-
-static std::unique_ptr<TypeBase>
-CreateBaseType(const TypeSpecifier &specifier) {
+TypeRef CreateBaseType(const TypeSpecifier &specifier,
+                       CompileContext &context) {
+  TypeContext &types = context.Types();
   if (specifier.is_builtin) {
-    return BuiltinType::Create(specifier.type);
+    return types.Builtin(specifier.type);
   }
-
-  OpaqueTypeKind kind = OpaqueTypeKind::Named;
   if (specifier.is_struct) {
-    kind = OpaqueTypeKind::StructTag;
-  } else if (specifier.is_enum) {
-    kind = OpaqueTypeKind::EnumTag;
+    return types.GetOrCreateStruct(specifier.scope_id, specifier.type);
   }
-  return std::make_unique<OpaqueType>(specifier.type, kind);
+  if (specifier.is_enum) {
+    return types.GetOrCreateEnum(specifier.scope_id, specifier.type);
+  }
+  if (specifier.is_named_type) {
+    TypeRef type = context.FindType(specifier.type);
+    ASSERT(type != nullptr, "Unknown type name ", specifier.type);
+    return type;
+  }
+  RAISE_ERROR("Unable to resolve type name ", specifier.type);
 }
 
-static ParsedType ParseDeclarator(std::unique_ptr<TypeBase> curr_type,
-                                  const Declarator *D,
-                                  DeclaratorParseContext &context) {
-  size_t pointer_count = D->pointer_count;
-  for (size_t i = 0; i < pointer_count; i++) {
-    auto pointer = std::make_unique<PointerType>();
-    pointer->pointee_type = std::move(curr_type);
-    curr_type = std::move(pointer);
+static ParsedType
+ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
+                CompileContext &context,
+                std::vector<std::string_view> function_parameter_names = {}) {
+  TypeContext &types = context.Types();
+
+  if (declarator->pointer_count > 0) {
+    for (size_t i = 0; i < declarator->pointer_count; ++i) {
+      curr_type = types.Pointer(curr_type);
+    }
+    function_parameter_names.clear();
   }
 
-  const DirectDeclarator *DD = D->direct_declarator.get();
-  if (!DD) {
+  const DirectDeclarator *direct = declarator->direct_declarator.get();
+  if (!direct) {
     return {
-        .type = std::move(curr_type),
+        .type = curr_type,
         .declarator_name = {},
         .parameter_names = {},
     };
   }
 
-  for (const auto &suffix : DD->suffixes) {
+  for (const auto &suffix : direct->suffixes) {
     switch (suffix->GetType()) {
     case DeclType::ParamList: {
-      const ParamList *param_list = (const ParamList *)suffix.get();
-
-      auto func_type = std::make_unique<FunctionType>();
-      func_type->return_type = std::move(curr_type);
-      func_type->parameters.reserve(param_list->params.size());
+      const auto *param_list = suffix->As<ParamList>();
+      std::vector<TypeRef> parameter_types;
       std::vector<std::string_view> parameter_names;
+      parameter_types.reserve(param_list->params.size());
       parameter_names.reserve(param_list->params.size());
+
       for (const auto &param : param_list->params) {
-        auto param_type = CreateBaseType(param.specifier.type_spec);
-        if (!param.declarator) { // anonymous parameter
-          func_type->parameters.push_back(std::move(param_type));
+        TypeRef param_type = CreateBaseType(param.specifier.type_spec, context);
+        if (!param.declarator) {
+          parameter_types.push_back(param_type);
           parameter_names.push_back({});
           continue;
         }
-        auto parsed_param = ParseDeclarator(std::move(param_type),
-                                            param.declarator.get(), context);
-        func_type->parameters.push_back(std::move(parsed_param.type));
+
+        ParsedType parsed_param =
+            ParseDeclarator(param_type, param.declarator.get(), context);
+        parameter_types.push_back(parsed_param.type);
         parameter_names.push_back(parsed_param.declarator_name);
       }
-      context.SetFunctionParameterNames(func_type.get(),
-                                        std::move(parameter_names));
-      curr_type = std::move(func_type);
+
+      curr_type = types.Function(curr_type, parameter_types);
+      function_parameter_names = std::move(parameter_names);
       break;
     }
     case DeclType::ArraySuffix: {
-      const ArraySuffix *array_suffix = (const ArraySuffix *)suffix.get();
-
-      auto array_type = std::make_unique<ArrayType>();
-      array_type->element_type = std::move(curr_type);
+      const auto *array_suffix = suffix->As<ArraySuffix>();
+      std::optional<size_t> size;
       if (array_suffix->size != (size_t)-1) {
-        array_type->size = array_suffix->size;
+        size = array_suffix->size;
       }
-      curr_type = std::move(array_type);
+      curr_type = types.Array(curr_type, size);
+      function_parameter_names.clear();
       break;
     }
-    default: {
+    default:
       RAISE_ERROR("Unexpected suffix");
     }
-    }
   }
 
-  const DeclBase *DD_D = DD->declarator.get();
-  if (DD_D->GetType() == DeclType::IdentifierDeclarator) {
-    std::vector<std::string_view> parameter_names;
-    if (curr_type->GetType() == TypeBaseType::FunctionType) {
-      parameter_names = context.GetFunctionParameterNames(curr_type.get());
-    }
+  const DeclBase *direct_declarator = direct->declarator.get();
+  if (!direct_declarator) {
     return {
-        .type = std::move(curr_type),
-        .declarator_name = ((const IdentifierDeclarator *)DD_D)->identifier,
-        .parameter_names = std::move(parameter_names),
+        .type = curr_type,
+        .declarator_name = {},
+        .parameter_names = {},
     };
-  } else if (DD_D->GetType() == DeclType::Declarator) {
-    return ParseDeclarator(std::move(curr_type), (const Declarator *)DD_D,
-                           context);
-  } else {
-    RAISE_ERROR("Unexpected declarator type");
   }
+  if (direct_declarator->GetType() == DeclType::IdentifierDeclarator) {
+    const auto *identifier = direct_declarator->As<IdentifierDeclarator>();
+    return {
+        .type = curr_type,
+        .declarator_name = identifier->identifier,
+        .parameter_names = curr_type->Is<FunctionType>()
+                               ? std::move(function_parameter_names)
+                               : std::vector<std::string_view>{},
+    };
+  }
+  if (direct_declarator->GetType() == DeclType::Declarator) {
+    return ParseDeclarator(curr_type, direct_declarator->As<Declarator>(),
+                           context, std::move(function_parameter_names));
+  }
+  RAISE_ERROR("Unexpected declarator type");
 }
 
-static ParsedType ParseInitDeclarator(std::unique_ptr<TypeBase> curr_type,
-                                      const InitDeclarator *init_declarator) {
-  const Declarator *D = init_declarator->declarator.get();
-  // TODO: add initializer parsing
-  DeclaratorParseContext context;
-  return ParseDeclarator(std::move(curr_type), D, context);
+static ParsedType ParseInitDeclarator(TypeRef base_type,
+                                      const InitDeclarator *init_declarator,
+                                      CompileContext &context) {
+  return ParseDeclarator(base_type, init_declarator->declarator.get(), context);
 }
 
-std::vector<ParsedType> ParseType(const Declaration *decl) {
+} // namespace
+
+std::vector<ParsedType> ParseType(const Declaration *decl,
+                                  CompileContext &context) {
   std::vector<ParsedType> results;
+  TypeRef base_type =
+      CreateBaseType(decl->declaration_specifier.type_spec, context);
+
   if (decl->init_declarators.size()) {
     results.reserve(decl->init_declarators.size());
     for (const auto &init_declarator : decl->init_declarators) {
-      results.push_back(ParseInitDeclarator(
-          CreateBaseType(decl->declaration_specifier.type_spec),
-          init_declarator.get()));
+      results.push_back(
+          ParseInitDeclarator(base_type, init_declarator.get(), context));
     }
   } else {
-    results.reserve(1);
     results.push_back({
-        .type = CreateBaseType(decl->declaration_specifier.type_spec),
+        .type = base_type,
         .declarator_name = {},
         .parameter_names = {},
     });

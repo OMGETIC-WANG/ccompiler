@@ -20,6 +20,7 @@ static std::string_view GenerateAnoymousSymbol() {
 static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
                                FilteredLexer &lexer, CompileContext &context) {
   TypeSpecifier &spec = decl_spec.type_spec;
+  spec.scope_id = context.CurrentScopeId();
   while (true) {
     Token tok = lexer.PeekNextToken();
     if (tok.type == TokenType::Keyword) {
@@ -43,6 +44,7 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
       }
     } else if (tok.type == TokenType::Identifier) {
       spec.type = tok.value;
+      spec.is_named_type = true;
       lexer.ConsumeToken(tok);
       break;
     } else if (tok.type == TokenType::LBrace) {

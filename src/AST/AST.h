@@ -83,7 +83,7 @@ class VarDecl : public ASTNode {
 
 public:
   std::string_view name;
-  std::unique_ptr<TypeBase> type;
+  TypeRef type = nullptr;
   std::unique_ptr<Initializer> initializer;
 };
 
@@ -94,7 +94,7 @@ class TypedefDecl : public ASTNode {
 
 public:
   std::string_view name;
-  std::unique_ptr<TypeBase> type;
+  TypeRef type = nullptr;
 };
 
 class VarRef : public ASTNode {
@@ -119,6 +119,7 @@ class StructDecl : public ASTNode {
 
 public:
   std::string_view name;
+  TypeRef type = nullptr;
   std::unique_ptr<CompoundStmt> fields;
 };
 
@@ -161,7 +162,7 @@ public:
 
   std::string_view name;
   std::vector<std::string_view> parameter_names;
-  std::unique_ptr<TypeBase> function_type;
+  TypeRef function_type = nullptr;
   std::unique_ptr<CompoundStmt> body;
 };
 
@@ -181,6 +182,8 @@ class EnumDecl : public ASTNode {
 
 public:
   std::string_view name;
+  TypeRef type = nullptr;
+  bool is_definition = false;
   std::vector<std::unique_ptr<EnumElemDecl>> values;
 };
 

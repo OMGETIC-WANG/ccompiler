@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AST.h"
+#include "TypeContext.h"
 
 class TranslationUnit : public ASTNode {
   ASTNodeImpl(TranslationUnit);
@@ -18,4 +19,5 @@ std::unique_ptr<EnumDecl> ParseEnumDecl(FilteredLexer &lexer,
                                         std::string_view name,
                                         CompileContext &context);
 
-std::unique_ptr<TranslationUnit> ParseTranslationUnit(FilteredLexer &lexer);
+std::unique_ptr<TranslationUnit> ParseTranslationUnit(FilteredLexer &lexer,
+                                                      TypeContext &types);

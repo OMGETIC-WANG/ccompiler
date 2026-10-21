@@ -20,7 +20,7 @@ public:
 };
 
 // clang-format off
-#define OPERATION_TYPE_VALUES(x)\
+#define BINARY_OP_TYPE_VALUES(x)\
   x(Assignment)\
   x(Add)\
   x(Sub)\
@@ -28,13 +28,19 @@ public:
   x(Div)\
   x(Mod)\
   x(Subscript)\
+  x(Eq)
+
+#define UNARY_OP_TYPE_VALUES(x)\
   x(IncBeforeUse)\
   x(IncAfterUse)\
   x(DecBeforeUse)\
   x(DecAfterUse)\
   x(GetField)\
-  x(Deref)\
-  x(Eq)
+  x(Deref)
+
+#define OPERATION_TYPE_VALUES(x)\
+  BINARY_OP_TYPE_VALUES(x)\
+  UNARY_OP_TYPE_VALUES(x)
 // clang-format on
 
 MAKE_ENUM(OperationType, OPERATION_TYPE_VALUES)

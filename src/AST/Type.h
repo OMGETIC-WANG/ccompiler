@@ -1,22 +1,51 @@
 #pragma once
 
-#include <memory>
+#include <algorithm>
+#include <concepts>
+#include <cstddef>
+#include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "../Exception.h"
 #include "../Util/EnumRefl.h"
 #include "../Util/Tree.h"
 
+using ScopeId = uint64_t;
+
+class TypeBase;
+class TypeContext;
+// Non-owning. TypeContext owns the referenced object.
+using TypeRef = const TypeBase *;
+
 struct TypeSpecifier {
   std::string_view type;
+  ScopeId scope_id = 0;
   bool is_struct = false;
   bool is_typedef = false;
   bool is_builtin = false;
   bool is_enum = false;
+  bool is_named_type = false;
   bool is_static = false;
 };
+
+constexpr size_t default_align = 4;
+
+// clang-format off
+#define BUILTIN_KIND_VALUES(x)\
+  x(Void)\
+  x(Int)\
+  x(Char)\
+  x(Float)\
+  x(Double)\
+  x(Long)
+// clang-format on
+
+MAKE_ENUM(BuiltinKind, BUILTIN_KIND_VALUES)
+REGISTER_ENUM(BuiltinKind, BUILTIN_KIND_VALUES)
 
 // clang-format off
 #define TYPE_BASE_TYPE_VALUES(x)\
@@ -25,18 +54,11 @@ struct TypeSpecifier {
   x(EnumType)\
   x(FunctionType)\
   x(ArrayType)\
-  x(PointerType)\
-  x(OpaqueType)
+  x(PointerType)
 // clang-format on
 
 MAKE_ENUM(TypeBaseType, TYPE_BASE_TYPE_VALUES)
 REGISTER_ENUM(TypeBaseType, TYPE_BASE_TYPE_VALUES)
-
-enum class OpaqueTypeKind {
-  Named,
-  StructTag,
-  EnumTag,
-};
 
 class TypeBase : public TreeNode {
 public:
@@ -47,34 +69,46 @@ public:
   std::string_view GetNodeTypeName() const override;
 
   size_t GetSize() const {
-    if (_size == (size_t)-1) {
-      _size = EvalSize();
+    if (!_cached_size) {
+      _cached_size = EvalSize();
     }
-    return _size;
+    return *_cached_size;
   }
 
   size_t GetAlign() const {
-    if (_size == (size_t)-1) {
-      _align = EvalAlign();
+    if (!_cached_align) {
+      _cached_align = EvalAlign();
     }
-    return _align;
+    return *_cached_align;
   }
 
-  template <std::derived_from<TypeBase> T> T *As() {
+  template <std::derived_from<TypeBase> T> const T *As() const {
 #ifdef ENABLE_AS_TYPE_CHECK
     if (GetType() != T::__type) {
-      RAISE_ERROR("Invalid ASTNode type cast from ", GetType(), " to ",
+      RAISE_ERROR("Invalid TypeBase type cast from ", GetType(), " to ",
                   T::__type);
     }
 #endif
-    return static_cast<T *>(this);
+    return static_cast<const T *>(this);
   }
 
-  template <std::derived_from<TypeBase> T> T *DynCast() {
+  template <std::derived_from<TypeBase> T> T *As() {
+    return const_cast<T *>(std::as_const(*this).template As<T>());
+  }
+
+  template <std::derived_from<TypeBase> T> const T *DynCast() const {
     if (GetType() != T::__type) {
       return nullptr;
     }
-    return static_cast<T *>(this);
+    return static_cast<const T *>(this);
+  }
+
+  template <std::derived_from<TypeBase> T> T *DynCast() {
+    return const_cast<T *>(std::as_const(*this).template DynCast<T>());
+  }
+
+  template <std::derived_from<TypeBase> T> bool Is() const {
+    return GetType() == T::__type;
   }
 
 protected:
@@ -83,8 +117,8 @@ protected:
   virtual size_t EvalAlign() const = 0;
 
 private:
-  mutable size_t _size = (size_t)-1;  // unevaluated
-  mutable size_t _align = (size_t)-1; // unevaluated
+  mutable std::optional<size_t> _cached_size;
+  mutable std::optional<size_t> _cached_align;
 };
 
 #define TypeNodeImpl(type_enum)                                                \
@@ -96,16 +130,22 @@ class BuiltinType : public TypeBase {
   TypeNodeImpl(BuiltinType);
   TreeNodeFieldAsString(type_name);
 
-public:
-  BuiltinType(std::string_view name, std::string_view ir_name,
+private:
+  friend class TypeContext;
+
+  BuiltinType(BuiltinKind kind, std::string_view name, std::string_view ir_name,
               std::optional<size_t> size, size_t align)
-      : type_name(name), _ir_name(ir_name), _size(size), _align(align) {
+      : type_name(name), _kind(kind), _ir_name(ir_name), _size(size),
+        _align(align) {
     ASSERT(!type_name.empty(), "BuiltinType name must not be empty");
   }
 
-  static std::unique_ptr<BuiltinType> Create(std::string_view name);
+public:
+  BuiltinType(const BuiltinType &) = delete;
+  BuiltinType &operator=(const BuiltinType &) = delete;
 
   std::string_view IRName() const { return _ir_name; }
+  BuiltinKind Kind() const { return _kind; }
 
   std::string_view type_name;
 
@@ -120,48 +160,106 @@ protected:
   size_t EvalAlign() const override { return _align; }
 
 private:
+  BuiltinKind _kind;
   std::string_view _ir_name;
   std::optional<size_t> _size;
   size_t _align;
+};
+
+struct StructField {
+  std::string name;
+  TypeRef type;
 };
 
 class StructType : public TypeBase {
   TypeNodeImpl(StructType);
   TreeNodeFieldAsString(type_name);
 
-public:
-  explicit StructType(std::string_view name) : type_name(name) {
+private:
+  friend class TypeContext;
+
+  StructType(ScopeId scope_id, std::string_view name)
+      : type_name(name), scope_id(scope_id) {
     ASSERT(!type_name.empty(), "StructType name must not be empty");
   }
 
-  std::string_view type_name;
+public:
+  StructType(const StructType &) = delete;
+  StructType &operator=(const StructType &) = delete;
+
+  std::string type_name;
+  ScopeId scope_id;
+
+  std::vector<StructField> fields;
+  bool is_complete = false;
 
 protected:
   size_t EvalSize() const override {
-    RAISE_ERROR("StructType size requires an external struct layout");
+    if (!is_complete) {
+      RAISE_ERROR("Incomplete struct type has no size: ", type_name);
+    }
+
+    size_t align = GetAlign();
+    size_t size = 0;
+    for (const auto &field : fields) {
+      size_t field_align = std::min(field.type->GetAlign(), align);
+      size = (size + field_align - 1) / field_align * field_align;
+      size += field.type->GetSize();
+    }
+    if (align > 0) {
+      size = (size + align - 1) / align * align;
+    }
+    return size;
   }
 
   size_t EvalAlign() const override {
-    RAISE_ERROR("StructType alignment requires an external struct layout");
+    if (!is_complete) {
+      RAISE_ERROR("Incomplete struct type has no alignment: ", type_name);
+    }
+
+    size_t max_valid_align = 1;
+    for (const auto &field : fields) {
+      max_valid_align = std::max(field.type->GetAlign(), max_valid_align);
+    }
+    return std::min(max_valid_align, default_align);
   }
+};
+
+struct EnumValue {
+  std::string name;
+  int64_t value;
 };
 
 class EnumType : public TypeBase {
   TypeNodeImpl(EnumType);
   TreeNodeFieldAsString(enum_name);
 
-public:
-  explicit EnumType(std::string_view name) : enum_name(name) {
+private:
+  friend class TypeContext;
+
+  EnumType(ScopeId scope_id, std::string_view name)
+      : enum_name(name), scope_id(scope_id) {
     ASSERT(!enum_name.empty(), "EnumType name must not be empty");
   }
 
-  std::string_view enum_name;
+public:
+  EnumType(const EnumType &) = delete;
+  EnumType &operator=(const EnumType &) = delete;
 
-  BuiltinType *underlying_type = nullptr;
+  std::string enum_name;
+  ScopeId scope_id;
+
+  TypeRef underlying_type = nullptr;
+
+  std::vector<EnumValue> enumerators;
+  bool is_complete = false;
 
 protected:
   size_t EvalSize() const override {
-    RAISE_ERROR("EnumType size requires an external enum layout");
+    if (!underlying_type) {
+      return sizeof(int);
+    }
+    return underlying_type->GetSize();
   }
 
   size_t EvalAlign() const override {
@@ -182,8 +280,12 @@ protected:
   size_t EvalAlign() const override { return alignof(void *); }
 
 public:
-  std::unique_ptr<TypeBase> return_type;
-  std::vector<std::unique_ptr<TypeBase>> parameters;
+  TypeRef return_type = nullptr;
+  std::vector<TypeRef> parameters;
+
+private:
+  friend class TypeContext;
+  FunctionType() = default;
 };
 
 class PointerType : public TypeBase {
@@ -196,7 +298,11 @@ protected:
   size_t EvalAlign() const override { return alignof(void *); }
 
 public:
-  std::unique_ptr<TypeBase> pointee_type;
+  TypeRef pointee_type = nullptr;
+
+private:
+  friend class TypeContext;
+  PointerType() = default;
 };
 
 class ArrayType : public TypeBase {
@@ -208,7 +314,7 @@ public:
     return size ? "[" + std::to_string(*size) + "]" : "[]";
   }
 
-  std::unique_ptr<TypeBase> element_type;
+  TypeRef element_type = nullptr;
   std::optional<size_t> size;
 
 protected:
@@ -221,51 +327,21 @@ protected:
   }
 
   size_t EvalAlign() const override { return element_type->GetAlign(); }
-};
 
-class OpaqueType : public TypeBase {
-  TypeNodeImpl(OpaqueType);
-
-public:
-  OpaqueType(std::string_view name, OpaqueTypeKind kind)
-      : type_name(name), kind(kind) {
-    ASSERT(!type_name.empty(), "OpaqueType name must not be empty");
-  }
-
-  std::string ToString() const override {
-    std::string result(type_name);
-    switch (kind) {
-    case OpaqueTypeKind::Named:
-      return result;
-    case OpaqueTypeKind::StructTag:
-      result += " [struct tag]";
-      break;
-    case OpaqueTypeKind::EnumTag:
-      result += " [enum tag]";
-      break;
-    }
-    return result;
-  }
-
-  std::string_view type_name;
-  OpaqueTypeKind kind;
-
-protected:
-  size_t EvalSize() const override {
-    RAISE_ERROR("OpaqueType size requires contextual type resolution");
-  }
-
-  size_t EvalAlign() const override {
-    RAISE_ERROR("OpaqueType alignment requires contextual type resolution");
-  }
+private:
+  friend class TypeContext;
+  ArrayType() = default;
 };
 
 class Declaration;
 
 struct ParsedType {
-  std::unique_ptr<TypeBase> type;
+  TypeRef type = nullptr;
   std::string_view declarator_name;
   std::vector<std::string_view> parameter_names;
 };
 
-std::vector<ParsedType> ParseType(const Declaration *decl);
+class CompileContext;
+
+std::vector<ParsedType> ParseType(const Declaration *decl,
+                                  CompileContext &context);

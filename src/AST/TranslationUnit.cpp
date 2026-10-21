@@ -67,7 +67,7 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
   tok = lexer.PeekNextToken();
   if (IsDeclarationSpecifier(tok, context)) {
     auto decl = ParseDeclaration(lexer, context);
-    auto decl_types = ParseType(decl.get());
+    auto decl_types = ParseType(decl.get(), context);
     auto type_spec = std::move(decl->declaration_specifier.type_spec);
 
     DeclStmtBuilder decl_stmt_builder;
@@ -81,8 +81,8 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
         if (!parsed_type.declarator_name.empty()) {
           auto typedef_decl = std::make_unique<TypedefDecl>();
           typedef_decl->name = parsed_type.declarator_name;
-          typedef_decl->type = std::move(parsed_type.type);
-          context.AddTypedef(typedef_decl->name);
+          typedef_decl->type = parsed_type.type;
+          context.AddTypedef(typedef_decl->name, parsed_type.type);
           decl_stmt_builder.Add(std::move(typedef_decl));
         }
       }
@@ -94,12 +94,11 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
         switch (type->GetType()) {
         case TypeBaseType::BuiltinType:
         case TypeBaseType::StructType:
-        case TypeBaseType::EnumType:
-        case TypeBaseType::OpaqueType: {
+        case TypeBaseType::EnumType: {
           if (!parsed_type.declarator_name.empty()) {
             auto var_decl = std::make_unique<VarDecl>();
             var_decl->name = parsed_type.declarator_name;
-            var_decl->type = std::move(type);
+            var_decl->type = type;
             var_decl->initializer =
                 std::move(decl->init_declarators[i]->initializer);
             context.AddVariable(var_decl->name);
@@ -122,7 +121,7 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
           if (!parsed_type.declarator_name.empty()) {
             auto var_decl = std::make_unique<VarDecl>();
             var_decl->name = parsed_type.declarator_name;
-            var_decl->type = std::move(type);
+            var_decl->type = type;
             context.AddVariable(var_decl->name);
             decl_stmt_builder.Add(std::move(var_decl));
           } else {
@@ -224,8 +223,28 @@ std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
                                             CompileContext &context) {
   auto SD = std::make_unique<StructDecl>();
   SD->name = name;
+  SD->type = context.Types().GetOrCreateStruct(context.CurrentScopeId(), name);
   if (lexer.PeekNextToken().type == TokenType::LBrace) {
     SD->fields = ParseCompoundStmt(lexer, context);
+    std::vector<StructField> fields;
+    for (const auto &statement : SD->fields->statements) {
+      if (statement->GetType() == ASTNodeType::DeclStmt) {
+        for (const auto &decl : statement->As<DeclStmt>()->decls) {
+          ASSERT_EQ(decl->GetType(), ASTNodeType::VarDecl,
+                    "Struct fields must be variable declarations");
+          auto *field = decl->As<VarDecl>();
+          fields.push_back(
+              {.name = std::string(field->name), .type = field->type});
+        }
+      } else {
+        ASSERT_EQ(statement->GetType(), ASTNodeType::VarDecl,
+                  "Struct fields must be variable declarations");
+        auto *field = statement->As<VarDecl>();
+        fields.push_back(
+            {.name = std::string(field->name), .type = field->type});
+      }
+    }
+    context.Types().CompleteStruct(SD->type, fields);
   } else {
     ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon);
   }
@@ -267,7 +286,9 @@ std::unique_ptr<EnumDecl> ParseEnumDecl(FilteredLexer &lexer,
                                         CompileContext &context) {
   auto ED = std::make_unique<EnumDecl>();
   ED->name = name;
+  ED->type = context.Types().GetOrCreateEnum(context.CurrentScopeId(), name);
   if (lexer.PeekNextToken().type == TokenType::LBrace) {
+    ED->is_definition = true;
     lexer.ConsumeNextToken();
     ParseEnumContent(lexer, ED.get());
   } else {
@@ -284,7 +305,7 @@ ParseFunctionDecl(FilteredLexer &lexer, ParsedType type,
   FD->parameter_names = std::move(type.parameter_names);
   context.AddFunction(FD->name);
   context.PushLayer();
-  FD->function_type = std::move(type.type);
+  FD->function_type = type.type;
   if (lexer.PeekNextToken().type == TokenType::LBrace) {
     FD->body = ParseCompoundStmt(lexer, context);
   } else
@@ -293,10 +314,11 @@ ParseFunctionDecl(FilteredLexer &lexer, ParsedType type,
   return FD;
 }
 
-std::unique_ptr<TranslationUnit> ParseTranslationUnit(FilteredLexer &lexer) {
+std::unique_ptr<TranslationUnit> ParseTranslationUnit(FilteredLexer &lexer,
+                                                      TypeContext &types) {
   std::unique_ptr<TranslationUnit> TU = std::make_unique<TranslationUnit>();
   TU->body = std::make_unique<CompoundStmt>();
-  CompileContext context;
+  CompileContext context(types);
   context.PushLayer();
   while (true) {
     Token tok = lexer.PeekNextToken();

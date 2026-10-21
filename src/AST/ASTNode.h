@@ -3,6 +3,7 @@
 #include <concepts>
 #include <string_view>
 
+#include "../Exception.h"
 #include "../Util/EnumRefl.h"
 #include "../Util/Tree.h"
 
@@ -60,6 +61,10 @@ public:
       return nullptr;
     }
     return static_cast<T *>(this);
+  }
+
+  template <std::derived_from<ASTNode> T> bool Is() const {
+    return GetType() == T::__type;
   }
 };
 
