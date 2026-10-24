@@ -41,7 +41,8 @@ constexpr size_t default_align = 4;
   x(Char)\
   x(Float)\
   x(Double)\
-  x(Long)
+  x(Long)\
+  x(I1)
 // clang-format on
 
 MAKE_ENUM(BuiltinKind, BUILTIN_KIND_VALUES)

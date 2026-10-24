@@ -1,6 +1,8 @@
 #include "AST/Declaration.h"
 #include "AST/TranslationUnit.h"
 #include "AST/Type.h"
+#include "AST/TypeContext.h"
+#include "CodeGen/LLVMIR/Generator.h"
 #include "Lexer.h"
 #include <iostream>
 
@@ -27,8 +29,14 @@ int main() {
 
   Lexer lexer(source);
   FilteredLexer filtered_lexer(lexer);
-  auto TU = ParseTranslationUnit(filtered_lexer);
+  TypeContext types;
+  auto TU = ParseTranslationUnit(filtered_lexer, types);
   TU->Print(std::cout);
+
+  std::cout << "-----------------\n";
+
+  std::string ir = GenerateLLVMIR(TU.get(), types);
+  std::cout << ir;
 
   // auto declaration = ParseDeclaration(filtered_lexer);
   // declaration->Print(std::cout);

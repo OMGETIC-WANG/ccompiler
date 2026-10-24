@@ -15,6 +15,7 @@ struct BuiltinTypeInfo {
   size_t align;
 };
 
+// "i1" is only used in IR generation
 constexpr std::array BUILTIN_TYPES = {
     BuiltinTypeInfo{BuiltinKind::Void, "void", "void", std::nullopt, 1},
     BuiltinTypeInfo{BuiltinKind::Int, "int", "i32", 4, alignof(int)},
@@ -23,7 +24,7 @@ constexpr std::array BUILTIN_TYPES = {
     BuiltinTypeInfo{BuiltinKind::Double, "double", "double", 8,
                     alignof(double)},
     BuiltinTypeInfo{BuiltinKind::Long, "long", "i64", 8, alignof(long)},
-};
+    BuiltinTypeInfo{BuiltinKind::I1, "i1", "i1", 1, 1}};
 
 size_t HashCombine(size_t seed, size_t value) {
   return seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
