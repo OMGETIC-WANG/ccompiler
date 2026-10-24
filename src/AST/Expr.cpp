@@ -1,4 +1,5 @@
 #include "Expr.h"
+#include "AST.h"
 #include "Operations.h"
 
 enum class PrecLevel {
@@ -37,22 +38,22 @@ static int GetPrecedence(TokenType type) {
   }
 }
 
-static OperationType GetOperationType(TokenType type) {
+static BinaryOpType GetBinaryOpType(TokenType type) {
   switch (type) {
   case TokenType::Add:
-    return OperationType::Add;
+    return BinaryOpType::Add;
   case TokenType::Sub:
-    return OperationType::Sub;
+    return BinaryOpType::Sub;
   case TokenType::Star:
-    return OperationType::Mul;
+    return BinaryOpType::Mul;
   case TokenType::Div:
-    return OperationType::Div;
+    return BinaryOpType::Div;
   case TokenType::Mod:
-    return OperationType::Mod;
+    return BinaryOpType::Mod;
   case TokenType::Equal:
-    return OperationType::Assignment;
+    return BinaryOpType::Assignment;
   case TokenType::Eq:
-    return OperationType::Eq;
+    return BinaryOpType::Eq;
   default:
     RAISE_ERROR("Operator not supported yet");
   }
@@ -170,7 +171,7 @@ std::unique_ptr<ASTNode> ParsePostfix(FilteredLexer &lexer,
     }
     case TokenType::LBracket: {
       lexer.ConsumeToken(tok);
-      auto subscript_op = std::make_unique<BinaryOp>(OperationType::Subscript);
+      auto subscript_op = std::make_unique<BinaryOp>(BinaryOpType::Subscript);
       subscript_op->left = std::move(primary);
       subscript_op->right = ParseExpr(lexer);
       ASSERT(lexer.ConsumeNextToken().type == TokenType::RBracket,
@@ -180,7 +181,7 @@ std::unique_ptr<ASTNode> ParsePostfix(FilteredLexer &lexer,
     }
     case TokenType::Dot: {
       lexer.ConsumeToken(tok);
-      auto get_field_op = std::make_unique<BinaryOp>(OperationType::GetField);
+      auto get_field_op = std::make_unique<BinaryOp>(BinaryOpType::GetField);
       get_field_op->left = std::move(primary);
       Token field_tok = lexer.ConsumeNextToken();
       ASSERT(field_tok.type == TokenType::Identifier, "Expected field name");
@@ -193,7 +194,7 @@ std::unique_ptr<ASTNode> ParsePostfix(FilteredLexer &lexer,
     case TokenType::AddAdd: {
       lexer.ConsumeToken(tok);
       auto inc_after_use_op =
-          std::make_unique<UnaryOp>(OperationType::IncAfterUse);
+          std::make_unique<UnaryOp>(UnaryOpType::IncAfterUse);
       inc_after_use_op->operand = std::move(primary);
       primary = std::move(inc_after_use_op);
       break;
@@ -201,7 +202,7 @@ std::unique_ptr<ASTNode> ParsePostfix(FilteredLexer &lexer,
     case TokenType::SubSub: {
       lexer.ConsumeToken(tok);
       auto dec_after_use_op =
-          std::make_unique<UnaryOp>(OperationType::DecAfterUse);
+          std::make_unique<UnaryOp>(UnaryOpType::DecAfterUse);
       dec_after_use_op->operand = std::move(primary);
       primary = std::move(dec_after_use_op);
       break;
@@ -218,13 +219,13 @@ std::unique_ptr<ASTNode> AddPrefixes(std::unique_ptr<ASTNode> node,
     std::unique_ptr<UnaryOp> prefix;
     switch (prefixes[i]) {
     case TokenType::AddAdd:
-      prefix = std::make_unique<UnaryOp>(OperationType::IncBeforeUse);
+      prefix = std::make_unique<UnaryOp>(UnaryOpType::IncBeforeUse);
       break;
     case TokenType::SubSub:
-      prefix = std::make_unique<UnaryOp>(OperationType::DecBeforeUse);
+      prefix = std::make_unique<UnaryOp>(UnaryOpType::DecBeforeUse);
       break;
     case TokenType::Star:
-      prefix = std::make_unique<UnaryOp>(OperationType::Deref);
+      prefix = std::make_unique<UnaryOp>(UnaryOpType::Deref);
       break;
     default:
       RAISE_ERROR("Prefix operator not supported yet");
@@ -317,7 +318,7 @@ std::unique_ptr<ASTNode> ParseExpr(FilteredLexer &lexer, int min_prec) {
 
       auto rhs = ParseExpr(lexer, next_min_prec);
 
-      auto bin_op = std::make_unique<BinaryOp>(GetOperationType(tok.type));
+      auto bin_op = std::make_unique<BinaryOp>(GetBinaryOpType(tok.type));
       bin_op->left = std::move(lhs);
       bin_op->right = std::move(rhs);
       lhs = std::move(bin_op);
