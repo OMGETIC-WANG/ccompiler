@@ -9,67 +9,63 @@
 #include <vector>
 
 // clang-format off
-#define VALID_CONTEXT_ITEM_TYPE_VALUES(x)\
+#define TYPED_CONTEXT_ITEM_TYPE_VALUES(x)\
   x(Function)\
   x(Typedef)\
   x(Struct)\
   x(Variable)\
-  x(Enum)\
-  x(Label)
+  x(Enum)
 
-#define CONTEXT_ITEM_TYPE_VALUES(x) \
+#define CONTEXT_ITEM_TYPE_VALUES(x)\
+  TYPED_CONTEXT_ITEM_TYPE_VALUES(x)\
   x(Unknown)\
-  VALID_CONTEXT_ITEM_TYPE_VALUES(x)
+  x(Label)
 // clang-format on
 
 MAKE_ENUM(ContextItemType, CONTEXT_ITEM_TYPE_VALUES)
 REGISTER_ENUM(ContextItemType, CONTEXT_ITEM_TYPE_VALUES)
 
-#define __EXTRACT_ITEM_CONTAINER(x)                                            \
-  std::vector<std::string_view> x##s;                                          \
-  void Add##x(std::string_view name) {                                         \
-    if (!Contains(x##s, name))                                                 \
-      x##s.push_back(name);                                                    \
-  }
+#define MAKE_CompileContextLayer_DECL_AND_Add_x(x)                             \
+  std::unordered_map<std::string_view, TypeRef> x;                             \
+  void Add##x(std::string_view name, TypeRef type) { x[name] = type; }
 
-#define __EXTRACT_ADD_ITEM_FUNC_CASE(x)                                        \
-  case ContextItemType::x:                                                     \
-    if (!Contains(x##s, name))                                                 \
-      x##s.push_back(name);                                                    \
-    break;
-
-#define __EXTRACT_GET_ITEM_TYPE_FUNC_IF(x)                                     \
-  if (Contains(x##s, name))                                                    \
-    return ContextItemType::x;
-
-#define __EXTRACT_ADD_ITEM_FUNC(x)                                             \
-  void Add##x(std::string_view name) {                                         \
-    if (layers.empty()) {                                                      \
-      RAISE_ERROR("No context layer to add item");                             \
-    }                                                                          \
-    layers.back().Add##x(name);                                                \
+#define MAKE_CompileContextLayer_GetTypeOf_CASE(x)                             \
+  if (x.contains(name)) {                                                      \
+    return ContextItemType::x;                                                 \
   }
 
 struct CompileContextLayer {
   ScopeId scope_id = 0;
 
-  VALID_CONTEXT_ITEM_TYPE_VALUES(__EXTRACT_ITEM_CONTAINER)
+  TYPED_CONTEXT_ITEM_TYPE_VALUES(MAKE_CompileContextLayer_DECL_AND_Add_x)
 
-  std::unordered_map<std::string_view, TypeRef> typedef_bindings;
-
-  void AddItem(std::string_view name, ContextItemType type) {
-    switch (type) {
-      VALID_CONTEXT_ITEM_TYPE_VALUES(__EXTRACT_ADD_ITEM_FUNC_CASE)
-    default:
-      RAISE_ERROR("Unexpected ContextItemType");
-    }
-  }
+  std::vector<std::string_view> labels;
+  void AddLabel(std::string_view name) { labels.push_back(name); }
 
   ContextItemType GetTypeOf(std::string_view name) const {
-    VALID_CONTEXT_ITEM_TYPE_VALUES(__EXTRACT_GET_ITEM_TYPE_FUNC_IF)
+    TYPED_CONTEXT_ITEM_TYPE_VALUES(MAKE_CompileContextLayer_GetTypeOf_CASE);
+    if (std::find(labels.begin(), labels.end(), name) != labels.end()) {
+      return ContextItemType::Label;
+    }
     return ContextItemType::Unknown;
   }
 };
+
+#define MAKE_CompileContext_Add_x(x)                                           \
+  void Add##x(std::string_view name, TypeRef type) {                           \
+    layers.back().x[name] = type;                                              \
+  }
+
+#define MAKE_CompileContext_Find_x(x)                                          \
+  TypeRef Find##x(std::string_view name) const {                               \
+    for (auto it = layers.rbegin(); it != layers.rend(); ++it) {               \
+      auto found = it->x.find(name);                                           \
+      if (found != it->x.end()) {                                              \
+        return found->second;                                                  \
+      }                                                                        \
+    }                                                                          \
+    return nullptr;                                                            \
+  }
 
 // Lexical symbol table and name-to-type bindings used while building the AST.
 class CompileContext {
@@ -79,19 +75,8 @@ public:
 
   std::vector<CompileContextLayer> layers;
 
-  VALID_CONTEXT_ITEM_TYPE_VALUES(__EXTRACT_ADD_ITEM_FUNC)
-
-  void AddTypedef(std::string_view name, TypeRef type) {
-    AddTypedef(name);
-    layers.back().typedef_bindings[name] = type;
-  }
-
-  void AddItem(std::string_view name, ContextItemType type) {
-    if (layers.empty()) {
-      RAISE_ERROR("No context layer to add item");
-    }
-    layers.back().AddItem(name, type);
-  }
+  TYPED_CONTEXT_ITEM_TYPE_VALUES(MAKE_CompileContext_Add_x)
+  void AddLabel(std::string_view name) { layers.back().AddLabel(name); }
 
   CompileContextLayer &CurrentLayer() { return layers.back(); }
 
@@ -102,15 +87,7 @@ public:
 
   ScopeId CurrentScopeId() const { return CurrentLayer().scope_id; }
 
-  TypeRef FindType(std::string_view name) const {
-    for (auto it = layers.rbegin(); it != layers.rend(); ++it) {
-      auto found = it->typedef_bindings.find(name);
-      if (found != it->typedef_bindings.end()) {
-        return found->second;
-      }
-    }
-    return nullptr;
-  }
+  TYPED_CONTEXT_ITEM_TYPE_VALUES(MAKE_CompileContext_Find_x)
 
   void PushLayer() {
     layers.emplace_back();

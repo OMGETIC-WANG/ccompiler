@@ -38,12 +38,12 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
         lexer.ConsumeToken(tok);
       } else if (IsTypeKeyword(tok.value)) {
         spec.is_builtin = true;
-        spec.type = tok.value;
+        spec.type_name = tok.value;
         lexer.ConsumeToken(tok);
         break;
       }
     } else if (tok.type == TokenType::Identifier) {
-      spec.type = tok.value;
+      spec.type_name = tok.value;
       spec.is_named_type = true;
       lexer.ConsumeToken(tok);
       break;
@@ -51,13 +51,13 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
       if (spec.is_struct) {
         std::string_view name = GenerateAnoymousSymbol();
         decl_spec.anoymous_decl = ParseStructDecl(lexer, name, context);
-        spec.type = name;
+        spec.type_name = name;
         break;
       }
       if (spec.is_enum) {
         std::string_view name = GenerateAnoymousSymbol();
         decl_spec.anoymous_decl = ParseEnumDecl(lexer, name, context);
-        spec.type = name;
+        spec.type_name = name;
         break;
       }
     } else {
@@ -105,7 +105,7 @@ static std::unique_ptr<ParamList> ParseParamList(FilteredLexer &lexer,
     lexer.ConsumeToken(tok);
   }
   if (param_list->params.size() == 1 &&
-      param_list->params[0].specifier.type_spec.type == "void" &&
+      param_list->params[0].specifier.type_spec.type_name == "void" &&
       !param_list->params[0].declarator) {
     param_list->params.clear(); // f(void) -> f()
   }
@@ -178,14 +178,14 @@ static std::unique_ptr<Declarator> ParseDeclarator(FilteredLexer &lexer,
 }
 
 static std::unique_ptr<ValueInitializer>
-ParseValueInitializer(FilteredLexer &lexer) {
+ParseValueInitializer(FilteredLexer &lexer, CompileContext &context) {
   auto value_initializer = std::make_unique<ValueInitializer>();
-  value_initializer->value = ParseExpr(lexer);
+  value_initializer->value = ParseExpr(lexer, context);
   return value_initializer;
 }
 
 static std::unique_ptr<FieldInitializer>
-ParseFieldInitializer(FilteredLexer &lexer) {
+ParseFieldInitializer(FilteredLexer &lexer, CompileContext &context) {
   auto initializer = std::make_unique<FieldInitializer>();
   while (true) {
     Token tok = lexer.PeekNextToken();
@@ -208,14 +208,15 @@ ParseFieldInitializer(FilteredLexer &lexer) {
     ASSERT(lexer.ConsumeNextToken().type == TokenType::Equal,
            "Expected equal in field initializer");
 
-    auto value_initializer = ParseValueInitializer(lexer);
+    auto value_initializer = ParseValueInitializer(lexer, context);
     initializer->field_initializers.push_back(
         {field_name, std::move(value_initializer)});
   }
   return initializer;
 }
 
-static std::unique_ptr<Initializer> ParseInitializer(FilteredLexer &lexer) {
+static std::unique_ptr<Initializer> ParseInitializer(FilteredLexer &lexer,
+                                                     CompileContext &context) {
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::EndOfFile || tok.type == TokenType::Semicolon ||
       tok.type == TokenType::Comma) {
@@ -223,14 +224,14 @@ static std::unique_ptr<Initializer> ParseInitializer(FilteredLexer &lexer) {
   }
   if (tok.type == TokenType::LBrace) {
     lexer.ConsumeToken(tok);
-    auto res = ParseFieldInitializer(lexer);
+    auto res = ParseFieldInitializer(lexer, context);
     // ASSERT(lexer.ConsumeNextToken().type == TokenType::RBrace,
     //        "Expected closing brace");
     ASSERT_EQ(lexer.ConsumeNextToken().type, TokenType::RBrace,
               "Expected closing brace");
     return res;
   } else {
-    return ParseValueInitializer(lexer);
+    return ParseValueInitializer(lexer, context);
   }
 }
 
@@ -241,7 +242,7 @@ ParseInitDeclarator(FilteredLexer &lexer, CompileContext &context) {
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::Equal) {
     lexer.ConsumeToken(tok);
-    init_declarator->initializer = ParseInitializer(lexer);
+    init_declarator->initializer = ParseInitializer(lexer, context);
   }
   return init_declarator;
 }

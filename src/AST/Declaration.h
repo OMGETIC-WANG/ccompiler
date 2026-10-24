@@ -129,7 +129,7 @@ public:
         AppendTreeNodePrintField(print_fields, "declarator", param.declarator);
       } else {
         AppendTreeNodePrintField(print_fields, "parameter",
-                                 param.specifier.type_spec.type);
+                                 param.specifier.type_spec.type_name);
       }
     }
     return print_fields;
@@ -181,7 +181,7 @@ class Declaration : public DeclBase {
 
 public:
   std::string ToString() const override {
-    return std::string(declaration_specifier.type_spec.type);
+    return std::string(declaration_specifier.type_spec.type_name);
   }
 
   DeclarationSpecifier declaration_specifier;

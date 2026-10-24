@@ -1,4 +1,5 @@
 #include "Expr.h"
+#include "../Util/Keyword.h"
 #include "AST.h"
 #include "Operations.h"
 
@@ -59,7 +60,8 @@ static BinaryOpType GetBinaryOpType(TokenType type) {
   }
 }
 
-std::vector<std::unique_ptr<ASTNode>> ParseQuotedExpr(FilteredLexer &lexer) {
+std::vector<std::unique_ptr<ASTNode>> ParseQuotedExpr(FilteredLexer &lexer,
+                                                      CompileContext &context) {
   std::vector<std::unique_ptr<ASTNode>> results;
   while (true) {
     Token tok = lexer.PeekNextToken();
@@ -68,7 +70,7 @@ std::vector<std::unique_ptr<ASTNode>> ParseQuotedExpr(FilteredLexer &lexer) {
       break;
     }
 
-    results.push_back(ParseExpr(lexer));
+    results.push_back(ParseExpr(lexer, context));
 
     tok = lexer.PeekNextToken();
     if (tok.type == TokenType::RParen || tok.type == TokenType::EndOfFile ||
@@ -114,7 +116,8 @@ ParseLiteralNumValue(std::string_view s) {
   return u_val;
 }
 
-std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer) {
+std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer,
+                                      CompileContext &context) {
   Token tok = lexer.PeekNextToken();
   switch (tok.type) {
   case TokenType::LiteralNum: {
@@ -138,7 +141,7 @@ std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer) {
   }
   case TokenType::LParen: {
     lexer.ConsumeToken(tok);
-    auto expr = ParseQuotedExpr(lexer);
+    auto expr = ParseQuotedExpr(lexer, context);
     ASSERT(lexer.ConsumeNextToken().type == TokenType::RParen,
            "Expected closing paren");
     auto seq_eval = std::make_unique<SequenceEval>();
@@ -151,6 +154,7 @@ std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer) {
 }
 
 std::unique_ptr<ASTNode> ParsePostfix(FilteredLexer &lexer,
+                                      CompileContext &context,
                                       std::unique_ptr<ASTNode> primary) {
   while (true) {
     Token tok = lexer.PeekNextToken();
@@ -163,7 +167,7 @@ std::unique_ptr<ASTNode> ParsePostfix(FilteredLexer &lexer,
       lexer.ConsumeToken(tok);
       auto func_invoke = std::make_unique<FunctionInvocation>();
       func_invoke->function = std::move(primary);
-      func_invoke->arguments = ParseQuotedExpr(lexer);
+      func_invoke->arguments = ParseQuotedExpr(lexer, context);
       ASSERT(lexer.ConsumeNextToken().type == TokenType::RParen,
              "Expected closing paren");
       primary = std::move(func_invoke);
@@ -173,7 +177,7 @@ std::unique_ptr<ASTNode> ParsePostfix(FilteredLexer &lexer,
       lexer.ConsumeToken(tok);
       auto subscript_op = std::make_unique<BinaryOp>(BinaryOpType::Subscript);
       subscript_op->left = std::move(primary);
-      subscript_op->right = ParseExpr(lexer);
+      subscript_op->right = ParseExpr(lexer, context);
       ASSERT(lexer.ConsumeNextToken().type == TokenType::RBracket,
              "Expected closing bracket");
       primary = std::move(subscript_op);
@@ -213,31 +217,36 @@ std::unique_ptr<ASTNode> ParsePostfix(FilteredLexer &lexer,
   }
 }
 
-std::unique_ptr<ASTNode> AddPrefixes(std::unique_ptr<ASTNode> node,
-                                     const std::vector<TokenType> &prefixes) {
+std::unique_ptr<ASTNode>
+AddPrefixes(std::unique_ptr<ASTNode> node,
+            std::vector<std::unique_ptr<UnaryOp>> &prefixes) {
   for (int i = prefixes.size() - 1; i >= 0; i--) {
-    std::unique_ptr<UnaryOp> prefix;
-    switch (prefixes[i]) {
-    case TokenType::AddAdd:
-      prefix = std::make_unique<UnaryOp>(UnaryOpType::IncBeforeUse);
-      break;
-    case TokenType::SubSub:
-      prefix = std::make_unique<UnaryOp>(UnaryOpType::DecBeforeUse);
-      break;
-    case TokenType::Star:
-      prefix = std::make_unique<UnaryOp>(UnaryOpType::Deref);
-      break;
-    default:
-      RAISE_ERROR("Prefix operator not supported yet");
-    }
-    prefix->operand = std::move(node);
-    node = std::move(prefix);
+    prefixes[i]->operand = std::move(node);
+    node = std::move(prefixes[i]);
   }
   return node;
 }
 
-std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(FilteredLexer &lexer) {
-  std::vector<TokenType> prefixes;
+static std::unordered_map<TokenType, UnaryOpType> tok_to_unary_op_type = {
+    {TokenType::AddAdd, UnaryOpType::IncBeforeUse},
+    {TokenType::SubSub, UnaryOpType::DecBeforeUse},
+    {TokenType::Star, UnaryOpType::Deref},
+};
+
+std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(FilteredLexer &lexer,
+                                                CompileContext &context) {
+  std::unique_ptr<UnaryOp> prefix;
+  UnaryOp *last_prefix = nullptr;
+  auto add_prefix = [&prefix,
+                     &last_prefix](std::unique_ptr<UnaryOp> new_prefix) {
+    if (prefix) {
+      last_prefix->operand = std::move(new_prefix);
+      last_prefix = (UnaryOp *)last_prefix->operand.get();
+    } else {
+      prefix = std::move(new_prefix);
+      last_prefix = (UnaryOp *)prefix.get();
+    }
+  };
   while (true) {
     Token tok = lexer.PeekNextToken();
     switch (tok.type) {
@@ -250,12 +259,59 @@ std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(FilteredLexer &lexer) {
     case TokenType::Sub:
     case TokenType::Star:
       lexer.ConsumeToken(tok);
-      prefixes.push_back(tok.type);
+      add_prefix(std::make_unique<UnaryOp>(tok_to_unary_op_type[tok.type]));
       break;
+    case TokenType::LParen: {
+      Token tok1 = lexer.PeekNextToken(1);
+      if (tok1.type == TokenType::Keyword) {
+        if (IsTypeKeyword(tok1.value)) {
+          Token tok2 = lexer.PeekNextToken(2);
+          if (tok2.type == TokenType::RParen) {
+            lexer.ConsumeTokens(3); // (, type-keyword, )
+            auto type_cast = std::make_unique<TypeCast>();
+            type_cast->target_type = context.Types().Builtin(tok1.value);
+            add_prefix(std::move(type_cast));
+            break;
+          }
+        } else if (tok1.value == "struct") {
+          Token tok2 = lexer.PeekNextToken(2);
+          Token tok3 = lexer.PeekNextToken(3);
+          if (tok2.type == TokenType::Identifier &&
+              tok3.type == TokenType::RParen) {
+            lexer.ConsumeTokens(4); // (, struct, identifier, )
+            auto type_cast = std::make_unique<TypeCast>();
+            type_cast->target_type = context.FindStruct(tok2.value);
+            add_prefix(std::move(type_cast));
+            break;
+          }
+        }
+      } else if (tok1.type == TokenType::Identifier) {
+        ContextItemType tok1_type = context.GetTypeOf(tok1.value);
+        if (tok1_type == ContextItemType::Typedef ||
+            tok1_type == ContextItemType::Enum) {
+          lexer.ConsumeTokens(2); // (, identifier, )
+          auto type_cast = std::make_unique<TypeCast>();
+          if (tok1_type == ContextItemType::Typedef) {
+            type_cast->target_type = context.FindTypedef(tok1.value);
+          } else {
+            type_cast->target_type = context.FindEnum(tok1.value);
+          }
+          add_prefix(std::move(type_cast));
+          ASSERT(lexer.ConsumeNextToken().type == TokenType::RParen,
+                 "Expected closing paren");
+          break;
+        }
+      }
+    }
     default:
-      auto primary = ParsePrimary(lexer);
-      auto postfixed = ParsePostfix(lexer, std::move(primary));
-      return AddPrefixes(std::move(postfixed), prefixes);
+      auto primary = ParsePrimary(lexer, context);
+      auto postfixed = ParsePostfix(lexer, context, std::move(primary));
+      if (last_prefix) {
+        last_prefix->operand = std::move(postfixed);
+        return std::move(prefix);
+      } else {
+        return postfixed;
+      }
     }
   }
 }
@@ -294,8 +350,9 @@ static bool IsRightCombineOp(TokenType op) {
   }
 }
 
-std::unique_ptr<ASTNode> ParseExpr(FilteredLexer &lexer, int min_prec) {
-  auto lhs = ParsePrefixPostfixExpr(lexer);
+std::unique_ptr<ASTNode> ParseExpr(FilteredLexer &lexer,
+                                   CompileContext &context, int min_prec) {
+  auto lhs = ParsePrefixPostfixExpr(lexer, context);
   while (true) {
     Token tok = lexer.PeekNextToken();
     switch (tok.type) {
@@ -316,7 +373,7 @@ std::unique_ptr<ASTNode> ParseExpr(FilteredLexer &lexer, int min_prec) {
 
       int next_min_prec = IsRightCombineOp(tok.type) ? op_prec : op_prec + 1;
 
-      auto rhs = ParseExpr(lexer, next_min_prec);
+      auto rhs = ParseExpr(lexer, context, next_min_prec);
 
       auto bin_op = std::make_unique<BinaryOp>(GetBinaryOpType(tok.type));
       bin_op->left = std::move(lhs);

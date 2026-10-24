@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ASTNode.h"
+#include "Type.h"
 
 class FunctionInvocation : public ASTNode {
   ASTNodeImpl(FunctionInvocation);
@@ -37,7 +38,8 @@ public:
   x(DecBeforeUse)\
   x(DecAfterUse)\
   x(GetField)\
-  x(Deref)
+  x(Deref)\
+  x(TypeCast)
 // clang-format on
 
 MAKE_ENUM(BinaryOpType, BINARY_OP_TYPE_VALUES)
@@ -73,4 +75,15 @@ public:
 
   UnaryOpType op_type;
   std::unique_ptr<ASTNode> operand;
+};
+
+class TypeCast : public UnaryOp {
+  ASTNodeImpl(TypeCast);
+  TreeNodePrintFields(target_type, operand);
+
+public:
+  explicit TypeCast(TypeRef target_type = nullptr)
+      : UnaryOp(UnaryOpType::TypeCast), target_type(target_type) {}
+
+  TypeRef target_type;
 };

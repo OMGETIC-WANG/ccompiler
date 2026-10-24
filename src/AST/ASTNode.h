@@ -30,7 +30,8 @@
   x(EnumDecl)\
   x(EnumElemDecl)\
   x(LabelStmt)\
-  x(GotoStmt)
+  x(GotoStmt)\
+  x(TypeCast)
 // clang-format on
 
 MAKE_ENUM(ASTNodeType, AST_NODE_TYPE_VALUES)

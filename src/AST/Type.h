@@ -22,7 +22,7 @@ class TypeContext;
 using TypeRef = TypeBase *;
 
 struct TypeSpecifier {
-  std::string_view type;
+  std::string_view type_name;
   ScopeId scope_id = 0;
   bool is_struct = false;
   bool is_typedef = false;
@@ -169,6 +169,7 @@ private:
 struct StructField {
   std::string name;
   TypeRef type;
+  size_t index; // <index>th field of type <type>, assigned on IR building stage
 };
 
 class StructType : public TypeBase {
@@ -192,6 +193,15 @@ public:
 
   std::vector<StructField> fields;
   bool is_complete = false;
+
+  std::optional<StructField> GetField(std::string_view name) const {
+    for (const auto &field : fields) {
+      if (field.name == name) {
+        return field;
+      }
+    }
+    return std::nullopt;
+  }
 
 protected:
   size_t EvalSize() const override {

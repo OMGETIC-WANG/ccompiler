@@ -9,20 +9,20 @@ TypeRef CreateBaseType(const TypeSpecifier &specifier,
                        CompileContext &context) {
   TypeContext &types = context.Types();
   if (specifier.is_builtin) {
-    return types.Builtin(specifier.type);
+    return types.Builtin(specifier.type_name);
   }
   if (specifier.is_struct) {
-    return types.GetOrCreateStruct(specifier.scope_id, specifier.type);
+    return types.GetOrCreateStruct(specifier.scope_id, specifier.type_name);
   }
   if (specifier.is_enum) {
-    return types.GetOrCreateEnum(specifier.scope_id, specifier.type);
+    return types.GetOrCreateEnum(specifier.scope_id, specifier.type_name);
   }
   if (specifier.is_named_type) {
-    TypeRef type = context.FindType(specifier.type);
-    ASSERT(type != nullptr, "Unknown type name ", specifier.type);
+    TypeRef type = context.FindTypedef(specifier.type_name);
+    ASSERT(type != nullptr, "Unknown type name ", specifier.type_name);
     return type;
   }
-  RAISE_ERROR("Unable to resolve type name ", specifier.type);
+  RAISE_ERROR("Unable to resolve type name ", specifier.type_name);
 }
 
 static ParsedType
