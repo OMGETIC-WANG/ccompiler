@@ -66,7 +66,14 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
   std::unique_ptr<ASTNode> stmt;
 
   tok = lexer.PeekNextToken();
-  if (IsDeclarationSpecifier(tok, context)) {
+  if (tok.type == TokenType::RawLLVMIR) {
+    lexer.ConsumeToken(tok);
+    auto raw_ir = std::make_unique<RawLLVMIR>();
+    size_t start = tok.value.find('{');
+    size_t end = tok.value.rfind('}');
+    raw_ir->ir = tok.value.substr(start + 1, end - start - 1);
+    stmt = std::move(raw_ir);
+  } else if (IsDeclarationSpecifier(tok, context)) {
     auto decl = ParseDeclaration(lexer, context);
     auto decl_types = ParseType(decl.get(), context);
     auto type_spec = std::move(decl->declaration_specifier.type_spec);

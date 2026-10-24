@@ -82,6 +82,12 @@ std::string GenerateLLVMIR(const TranslationUnit *TU, TypeContext &types) {
   IRBuilder builder(ir, context);
   for (const auto &child : TU->body->statements) {
     switch (child->GetType()) {
+    case ASTNodeType::RawLLVMIR: {
+      ir += "\n; raw LLVM IR begin\n";
+      ir += child->As<RawLLVMIR>()->ir;
+      ir += "\n; raw LLVM IR end\n";
+      break;
+    }
     case ASTNodeType::FunctionDecl: {
       GenFunction(child->As<FunctionDecl>(), builder, context);
       break;

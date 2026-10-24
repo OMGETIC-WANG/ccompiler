@@ -19,6 +19,7 @@
 
 #define TOKEN_TYPE_VALUES(x)\
   x(Unknown)\
+  x(RawLLVMIR)\
   x(EndOfFile)\
   x(Identifier)\
   x(Keyword)\

@@ -486,6 +486,15 @@ Token Lexer::PeekNextToken() {
 
   tok = TryPeekAsIdentifier(rest);
   if (tok.type != TokenType::Unknown) {
+    if (tok.value == "__llvm_ir__") {
+      if (rest.size() <= tok.value.size() || rest[tok.value.size()] != '{') {
+        return tok;
+      }
+      size_t end = rest.find('}', tok.value.size() + 1);
+      std::string_view ir = rest.substr(0, end + 1);
+      return Token{TokenType::RawLLVMIR, ir};
+    }
+
     auto macro_it = _macros->find(tok.value);
     if (macro_it != _macros->end()) {
       InitMacroExpansionLexer(tok, macro_it->second);

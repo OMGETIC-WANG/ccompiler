@@ -108,6 +108,12 @@ IRValue ExprEmitter::EmitRValue(ASTNode *node) {
 }
 
 void ExprEmitter::EmitStmt(ASTNode *node) {
+  if (auto raw_ir = node->DynCast<RawLLVMIR>()) {
+    builder.Buffer() += "\n; raw LLVM IR begin\n";
+    builder.Buffer() += raw_ir->ir;
+    builder.Buffer() += "\n; raw LLVM IR end\n";
+    return;
+  }
   if (auto var_decl = node->DynCast<VarDecl>()) {
     auto val_lhs = detail::GenVarDecl(var_decl, *this);
     return;
