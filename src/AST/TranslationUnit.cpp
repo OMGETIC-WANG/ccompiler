@@ -130,6 +130,8 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
             auto var_decl = std::make_unique<VarDecl>();
             var_decl->name = parsed_type.declarator_name;
             var_decl->type = type;
+            var_decl->initializer =
+                std::move(decl->init_declarators[i]->initializer);
             context.AddVariable(var_decl->name, type);
             decl_stmt_builder.Add(std::move(var_decl));
           } else {
