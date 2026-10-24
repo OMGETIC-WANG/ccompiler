@@ -78,7 +78,7 @@ TypeRef TypeContext::Builtin(std::string_view name) const {
 
 TypeRef TypeContext::Builtin(BuiltinKind kind) const {
   for (const auto &storage : storage_) {
-    const auto *type = storage->DynCast<BuiltinType>();
+    auto *type = storage->DynCast<BuiltinType>();
     if (type && type->Kind() == kind) {
       return type;
     }

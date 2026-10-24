@@ -19,7 +19,7 @@ using ScopeId = uint64_t;
 class TypeBase;
 class TypeContext;
 // Non-owning. TypeContext owns the referenced object.
-using TypeRef = const TypeBase *;
+using TypeRef = TypeBase *;
 
 struct TypeSpecifier {
   std::string_view type;
