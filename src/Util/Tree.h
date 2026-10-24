@@ -2,6 +2,7 @@
 
 #include "Util.h"
 
+#include <format>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -30,31 +31,27 @@ public:
   void Print(std::ostream &out) const;
 };
 
-template <class Node, class Deleter>
-  requires std::is_base_of_v<TreeNode, Node>
+template <typename Ptr>
+concept _TreeNodePtrLike =
+    std::is_convertible_v<Ptr, const TreeNode *> || requires(const Ptr &ptr) {
+      { ptr.operator->() } -> std::convertible_to<const TreeNode *>;
+    };
+
+template <_TreeNodePtrLike Ptr>
 void AppendTreeNodePrintField(std::vector<TreeNodePrintField> &fields,
-                              std::string_view name,
-                              const std::unique_ptr<Node, Deleter> &node) {
-  if (node)
-    fields.push_back({name, node.get()});
+                              std::string_view name, const Ptr &node) {
+  if (auto ptr = std::to_address(node)) {
+    fields.push_back({name, ptr});
+  }
 }
 
-template <class Node>
-  requires std::is_base_of_v<TreeNode, Node>
+template <std::ranges::input_range Range>
+  requires _TreeNodePtrLike<std::ranges::range_value_t<Range>>
 void AppendTreeNodePrintField(std::vector<TreeNodePrintField> &fields,
-                              std::string_view name,
-                              const std::shared_ptr<Node> &node) {
-  if (node)
-    fields.push_back({name, node.get()});
-}
-
-template <class Node, class Deleter, class Allocator>
-  requires std::is_base_of_v<TreeNode, Node>
-void AppendTreeNodePrintField(
-    std::vector<TreeNodePrintField> &fields, std::string_view name,
-    const std::vector<std::unique_ptr<Node, Deleter>, Allocator> &nodes) {
-  for (const auto &node : nodes)
+                              std::string_view name, const Range &nodes) {
+  for (const auto &node : nodes) {
     AppendTreeNodePrintField(fields, name, node);
+  }
 }
 
 inline void AppendTreeNodePrintField(std::vector<TreeNodePrintField> &fields,
