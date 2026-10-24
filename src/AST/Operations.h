@@ -39,7 +39,8 @@ public:
   x(DecAfterUse)\
   x(GetField)\
   x(Deref)\
-  x(TypeCast)
+  x(TypeCast)\
+  x(GetAddress)
 // clang-format on
 
 MAKE_ENUM(BinaryOpType, BINARY_OP_TYPE_VALUES)
@@ -86,4 +87,15 @@ public:
       : UnaryOp(UnaryOpType::TypeCast), target_type(target_type) {}
 
   TypeRef target_type;
+};
+
+class GetField : public UnaryOp {
+  ASTNodeImpl(GetField);
+  TreeNodePrintFields(field_name, operand);
+
+public:
+  explicit GetField(std::string_view field_name = "")
+      : UnaryOp(UnaryOpType::GetField), field_name(field_name) {}
+
+  std::string_view field_name;
 };

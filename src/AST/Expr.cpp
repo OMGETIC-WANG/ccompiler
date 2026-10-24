@@ -185,13 +185,11 @@ std::unique_ptr<ASTNode> ParsePostfix(FilteredLexer &lexer,
     }
     case TokenType::Dot: {
       lexer.ConsumeToken(tok);
-      auto get_field_op = std::make_unique<BinaryOp>(BinaryOpType::GetField);
-      get_field_op->left = std::move(primary);
+      auto get_field_op = std::make_unique<GetField>();
+      get_field_op->operand = std::move(primary);
       Token field_tok = lexer.ConsumeNextToken();
       ASSERT(field_tok.type == TokenType::Identifier, "Expected field name");
-      auto field_ref = std::make_unique<VarRef>();
-      field_ref->name = field_tok.value;
-      get_field_op->right = std::move(field_ref);
+      get_field_op->field_name = field_tok.value;
       primary = std::move(get_field_op);
       break;
     }
@@ -231,7 +229,7 @@ static std::unordered_map<TokenType, UnaryOpType> tok_to_unary_op_type = {
     {TokenType::AddAdd, UnaryOpType::IncBeforeUse},
     {TokenType::SubSub, UnaryOpType::DecBeforeUse},
     {TokenType::Star, UnaryOpType::Deref},
-};
+    {TokenType::Et, UnaryOpType::GetAddress}};
 
 std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(FilteredLexer &lexer,
                                                 CompileContext &context) {
@@ -258,6 +256,7 @@ std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(FilteredLexer &lexer,
     case TokenType::Add:
     case TokenType::Sub:
     case TokenType::Star:
+    case TokenType::Et:
       lexer.ConsumeToken(tok);
       add_prefix(std::make_unique<UnaryOp>(tok_to_unary_op_type[tok.type]));
       break;
