@@ -5,24 +5,47 @@
 
 namespace {
 
+TypeRef ApplyConstQualifier(TypeRef type, TypeContext &types) {
+  if (auto *array_type = type->DynCast<ArrayType>()) {
+    TypeRef element_type = ApplyConstQualifier(array_type->element_type, types);
+    return types.Array(element_type, array_type->size);
+  }
+  return ApplyTypeTag(type, TypeTag::Const);
+}
+
 TypeRef CreateBaseType(const TypeSpecifier &specifier,
                        CompileContext &context) {
   TypeContext &types = context.Types();
+  TypeRef type;
   if (specifier.is_builtin) {
-    return types.Builtin(specifier.type_name);
-  }
-  if (specifier.is_struct) {
-    return types.GetOrCreateStruct(specifier.scope_id, specifier.type_name);
-  }
-  if (specifier.is_enum) {
-    return types.GetOrCreateEnum(specifier.scope_id, specifier.type_name);
-  }
-  if (specifier.is_named_type) {
-    TypeRef type = context.FindTypedef(specifier.type_name);
+    type = types.Builtin(specifier.type_name);
+    if (specifier.is_unsigned) {
+      const auto *builtin = type->As<BuiltinType>();
+      ASSERT(builtin->Kind() == BuiltinKind::Int ||
+                 builtin->Kind() == BuiltinKind::Char ||
+                 builtin->Kind() == BuiltinKind::Long,
+             "unsigned is only valid for integer types");
+      type = ApplyTypeTag(type, TypeTag::Unsigned);
+    }
+  } else if (specifier.is_struct) {
+    ASSERT(!specifier.is_unsigned, "unsigned cannot qualify a struct type");
+    type = types.GetOrCreateStruct(specifier.scope_id, specifier.type_name);
+  } else if (specifier.is_enum) {
+    ASSERT(!specifier.is_unsigned, "unsigned cannot qualify an enum type");
+    type = types.GetOrCreateEnum(specifier.scope_id, specifier.type_name);
+  } else if (specifier.is_named_type) {
+    ASSERT(!specifier.is_unsigned,
+           "unsigned cannot qualify a typedef in a type specifier");
+    type = context.FindTypedef(specifier.type_name);
     ASSERT(type != nullptr, "Unknown type name ", specifier.type_name);
-    return type;
+  } else {
+    RAISE_ERROR("Unable to resolve type name ", specifier.type_name);
   }
-  RAISE_ERROR("Unable to resolve type name ", specifier.type_name);
+
+  if (specifier.is_const) {
+    type = ApplyConstQualifier(type, types);
+  }
+  return type;
 }
 
 static ParsedType
@@ -31,9 +54,12 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
                 std::vector<std::string_view> function_parameter_names = {}) {
   TypeContext &types = context.Types();
 
-  if (declarator->pointer_count > 0) {
-    for (size_t i = 0; i < declarator->pointer_count; ++i) {
+  if (!declarator->pointers.empty()) {
+    for (const Declarator::PointerQualifier &pointer : declarator->pointers) {
       curr_type = types.Pointer(curr_type);
+      if (pointer.is_const) {
+        curr_type = ApplyTypeTag(curr_type, TypeTag::Const);
+      }
     }
     function_parameter_names.clear();
   }
@@ -121,6 +147,11 @@ static ParsedType ParseInitDeclarator(TypeRef base_type,
 }
 
 } // namespace
+
+TypeRef ResolveTypeSpecifier(const TypeSpecifier &specifier,
+                             CompileContext &context) {
+  return CreateBaseType(specifier, context);
+}
 
 std::vector<ParsedType> ParseType(const Declaration *decl,
                                   CompileContext &context) {

@@ -104,6 +104,7 @@ class VarDecl : public ASTNode {
 public:
   std::string_view name;
   TypeRef type = nullptr;
+  StorageClass storage_class = StorageClass::None;
   std::unique_ptr<Initializer> initializer;
 };
 
@@ -183,6 +184,7 @@ public:
   std::string_view name;
   std::vector<std::string_view> parameter_names;
   TypeRef function_type = nullptr;
+  StorageClass storage_class = StorageClass::None;
   std::unique_ptr<CompoundStmt> body;
 };
 

@@ -21,54 +21,169 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
                                FilteredLexer &lexer, CompileContext &context) {
   TypeSpecifier &spec = decl_spec.type_spec;
   spec.scope_id = context.CurrentScopeId();
+
+  enum class IntrinsicType { None, Int, Char, Float, Double, Void, Long };
+
+  IntrinsicType intrinsic_type = IntrinsicType::None;
+  bool saw_signed = false;
+  bool saw_unsigned = false;
+
+  auto has_nominal_type = [&] {
+    return spec.is_struct || spec.is_enum || spec.is_named_type;
+  };
+
   while (true) {
     Token tok = lexer.PeekNextToken();
     if (tok.type == TokenType::Keyword) {
-      if (tok.value == "struct") {
-        spec.is_struct = true;
-        lexer.ConsumeToken(tok);
-      } else if (tok.value == "typedef") {
+      if (tok.value == "typedef") {
         spec.is_typedef = true;
         lexer.ConsumeToken(tok);
       } else if (tok.value == "static") {
-        spec.is_static = true;
+        ASSERT(decl_spec.storage_class == StorageClass::None,
+               "Multiple storage classes are not supported");
+        decl_spec.storage_class = StorageClass::Static;
         lexer.ConsumeToken(tok);
+      } else if (tok.value == "const") {
+        spec.is_const = true;
+        lexer.ConsumeToken(tok);
+      } else if (tok.value == "volatile") {
+        RAISE_ERROR("volatile types are not supported yet");
+      } else if (tok.value == "signed" || tok.value == "unsigned") {
+        const bool is_unsigned = tok.value == "unsigned";
+        ASSERT(!(saw_signed && is_unsigned) && !(saw_unsigned && !is_unsigned),
+               "signed and unsigned cannot be used together");
+        saw_signed |= !is_unsigned;
+        saw_unsigned |= is_unsigned;
+        lexer.ConsumeToken(tok);
+      } else if (tok.value == "struct") {
+        ASSERT(!has_nominal_type() && intrinsic_type == IntrinsicType::None,
+               "Multiple base types in declaration specifier");
+        spec.is_struct = true;
+        lexer.ConsumeToken(tok);
+        tok = lexer.PeekNextToken();
+        if (tok.type == TokenType::Identifier) {
+          spec.type_name = tok.value;
+          lexer.ConsumeToken(tok);
+        } else if (tok.type == TokenType::LBrace) {
+          std::string_view name = GenerateAnoymousSymbol();
+          decl_spec.anoymous_decl = ParseStructDecl(lexer, name, context);
+          spec.type_name = name;
+        } else {
+          RAISE_ERROR("Expected struct name or definition");
+        }
       } else if (tok.value == "enum") {
+        ASSERT(!has_nominal_type() && intrinsic_type == IntrinsicType::None,
+               "Multiple base types in declaration specifier");
         spec.is_enum = true;
         lexer.ConsumeToken(tok);
+        tok = lexer.PeekNextToken();
+        if (tok.type == TokenType::Identifier) {
+          spec.type_name = tok.value;
+          lexer.ConsumeToken(tok);
+        } else if (tok.type == TokenType::LBrace) {
+          std::string_view name = GenerateAnoymousSymbol();
+          decl_spec.anoymous_decl = ParseEnumDecl(lexer, name, context);
+          spec.type_name = name;
+        } else {
+          RAISE_ERROR("Expected enum name or definition");
+        }
       } else if (IsTypeKeyword(tok.value)) {
-        spec.is_builtin = true;
-        spec.type_name = tok.value;
+        ASSERT(!has_nominal_type(),
+               "Multiple base types in declaration specifier");
+        if (tok.value == "int") {
+          ASSERT(intrinsic_type == IntrinsicType::None ||
+                     intrinsic_type == IntrinsicType::Long,
+                 "Multiple integer types in declaration specifier");
+          if (intrinsic_type == IntrinsicType::None) {
+            intrinsic_type = IntrinsicType::Int;
+          }
+        } else if (tok.value == "char") {
+          ASSERT(intrinsic_type == IntrinsicType::None,
+                 "Multiple integer types in declaration specifier");
+          intrinsic_type = IntrinsicType::Char;
+        } else if (tok.value == "float") {
+          ASSERT(intrinsic_type == IntrinsicType::None,
+                 "Multiple base types in declaration specifier");
+          intrinsic_type = IntrinsicType::Float;
+        } else if (tok.value == "double") {
+          ASSERT(intrinsic_type == IntrinsicType::None,
+                 "Multiple base types in declaration specifier");
+          intrinsic_type = IntrinsicType::Double;
+        } else if (tok.value == "void") {
+          ASSERT(intrinsic_type == IntrinsicType::None,
+                 "Multiple base types in declaration specifier");
+          intrinsic_type = IntrinsicType::Void;
+        } else if (tok.value == "long") {
+          ASSERT(intrinsic_type == IntrinsicType::None,
+                 "long long is not supported");
+          intrinsic_type = IntrinsicType::Long;
+        }
         lexer.ConsumeToken(tok);
+        spec.is_builtin = true;
+      } else if (tok.value == "extern" || tok.value == "register") {
+        RAISE_ERROR("Unsupported storage class ", tok.value);
+      } else {
         break;
       }
     } else if (tok.type == TokenType::Identifier) {
+      if (has_nominal_type() || intrinsic_type != IntrinsicType::None ||
+          saw_signed || saw_unsigned) {
+        break;
+      }
       spec.type_name = tok.value;
       spec.is_named_type = true;
       lexer.ConsumeToken(tok);
-      break;
-    } else if (tok.type == TokenType::LBrace) {
-      if (spec.is_struct) {
-        std::string_view name = GenerateAnoymousSymbol();
-        decl_spec.anoymous_decl = ParseStructDecl(lexer, name, context);
-        spec.type_name = name;
-        break;
-      }
-      if (spec.is_enum) {
-        std::string_view name = GenerateAnoymousSymbol();
-        decl_spec.anoymous_decl = ParseEnumDecl(lexer, name, context);
-        spec.type_name = name;
-        break;
-      }
     } else {
-      RAISE_ERROR("Unexpected token");
       break;
     }
   }
+
+  ASSERT(!saw_signed || !saw_unsigned,
+         "signed and unsigned cannot be used together");
+  ASSERT(!has_nominal_type() || (!saw_signed && !saw_unsigned),
+         "signedness cannot qualify a struct, enum, or typedef type");
+
+  if (intrinsic_type == IntrinsicType::None) {
+    if (saw_signed || saw_unsigned) {
+      intrinsic_type = IntrinsicType::Int;
+      spec.is_builtin = true;
+    } else {
+      return;
+    }
+  }
+
+  switch (intrinsic_type) {
+  case IntrinsicType::Int:
+    spec.type_name = "int";
+    break;
+  case IntrinsicType::Char:
+    spec.type_name = "char";
+    break;
+  case IntrinsicType::Float:
+    spec.type_name = "float";
+    break;
+  case IntrinsicType::Double:
+    spec.type_name = "double";
+    break;
+  case IntrinsicType::Void:
+    spec.type_name = "void";
+    break;
+  case IntrinsicType::Long:
+    spec.type_name = "long";
+    break;
+  case IntrinsicType::None:
+    break;
+  }
+  ASSERT(intrinsic_type == IntrinsicType::Int ||
+             intrinsic_type == IntrinsicType::Char ||
+             intrinsic_type == IntrinsicType::Long ||
+             (!saw_signed && !saw_unsigned),
+         "signedness is only valid for integer types");
+  spec.is_unsigned = saw_unsigned;
 }
 
-static DeclarationSpecifier ParseDeclarationSpecifier(FilteredLexer &lexer,
-                                                      CompileContext &context) {
+DeclarationSpecifier ParseDeclarationSpecifier(FilteredLexer &lexer,
+                                               CompileContext &context) {
   DeclarationSpecifier decl_spec;
   ParseTypeSpecifier(decl_spec, lexer, context);
   return decl_spec;
@@ -81,6 +196,10 @@ static ParamListItem ParseParamListItem(FilteredLexer &lexer,
                                         CompileContext &context) {
   ParamListItem item;
   item.specifier = ParseDeclarationSpecifier(lexer, context);
+  ASSERT(item.specifier.storage_class == StorageClass::None,
+         "A parameter cannot have a storage class");
+  ASSERT(!item.specifier.type_spec.is_typedef,
+         "A parameter cannot be a typedef declaration");
   Token tok = lexer.PeekNextToken();
   if (tok.type != TokenType::RParen && tok.type != TokenType::Comma) {
     item.declarator = ParseDeclarator(lexer, context);
@@ -168,7 +287,17 @@ static std::unique_ptr<Declarator> ParseDeclarator(FilteredLexer &lexer,
     Token tok = lexer.PeekNextToken();
     if (tok.type == TokenType::Star) {
       lexer.ConsumeToken(tok);
-      declarator->pointer_count++;
+      Declarator::PointerQualifier qualifier;
+      while (lexer.PeekNextToken().type == TokenType::Keyword &&
+             lexer.PeekNextToken().value == "const") {
+        lexer.ConsumeNextToken();
+        qualifier.is_const = true;
+      }
+      if (lexer.PeekNextToken().type == TokenType::Keyword &&
+          lexer.PeekNextToken().value == "volatile") {
+        RAISE_ERROR("volatile pointer qualifiers are not supported yet");
+      }
+      declarator->pointers.push_back(qualifier);
     } else {
       break;
     }
@@ -250,7 +379,9 @@ ParseInitDeclarator(FilteredLexer &lexer, CompileContext &context) {
 bool IsDeclarationSpecifier(Token tok, const CompileContext &context) {
   switch (tok.type) {
   case TokenType::Keyword:
-    if (IsTypeKeyword(tok.value) || IsStorageSpecifierKeyword(tok.value)) {
+    if (IsTypeKeyword(tok.value) || IsStorageSpecifierKeyword(tok.value) ||
+        IsTypeQualifierKeyword(tok.value) || tok.value == "signed" ||
+        tok.value == "unsigned") {
       return true;
     }
     if (tok.value == "struct" || tok.value == "enum" ||

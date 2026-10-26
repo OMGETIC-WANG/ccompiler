@@ -13,9 +13,9 @@ static bool IsFlowControlKeyword(Token tok) {
   return Contains(flow_control_keywords, tok.value);
 }
 
-static std::unique_ptr<FunctionDecl> ParseFunctionDecl(FilteredLexer &lexer,
-                                                       ParsedType type,
-                                                       CompileContext &context);
+static std::unique_ptr<FunctionDecl>
+ParseFunctionDecl(FilteredLexer &lexer, ParsedType type,
+                  StorageClass storage_class, CompileContext &context);
 
 std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
                                             std::string_view name,
@@ -77,10 +77,14 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
     auto decl = ParseDeclaration(lexer, context);
     auto decl_types = ParseType(decl.get(), context);
     auto type_spec = std::move(decl->declaration_specifier.type_spec);
+    const StorageClass storage_class =
+        decl->declaration_specifier.storage_class;
 
     DeclStmtBuilder decl_stmt_builder;
 
     if (type_spec.is_typedef) {
+      ASSERT(storage_class == StorageClass::None,
+             "A typedef cannot have a storage class");
       if (decl->declaration_specifier.anoymous_decl) {
         decl_stmt_builder.Add(
             std::move(decl->declaration_specifier.anoymous_decl));
@@ -95,6 +99,9 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
         }
       }
     } else {
+      ASSERT(storage_class == StorageClass::None ||
+                 !decl->init_declarators.empty(),
+             "A storage class requires a declared object or function");
       for (size_t i = 0; i < decl_types.size(); i++) {
         auto &parsed_type = decl_types[i];
         auto &type = parsed_type.type;
@@ -107,6 +114,7 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
             auto var_decl = std::make_unique<VarDecl>();
             var_decl->name = parsed_type.declarator_name;
             var_decl->type = type;
+            var_decl->storage_class = storage_class;
             var_decl->initializer =
                 std::move(decl->init_declarators[i]->initializer);
             context.AddVariable(var_decl->name, type);
@@ -130,6 +138,7 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
             auto var_decl = std::make_unique<VarDecl>();
             var_decl->name = parsed_type.declarator_name;
             var_decl->type = type;
+            var_decl->storage_class = storage_class;
             var_decl->initializer =
                 std::move(decl->init_declarators[i]->initializer);
             context.AddVariable(var_decl->name, type);
@@ -140,8 +149,8 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
           break;
         case TypeBaseType::FunctionType:
           context.AddFunction(parsed_type.declarator_name, type);
-          decl_stmt_builder.Add(
-              ParseFunctionDecl(lexer, std::move(parsed_type), context));
+          decl_stmt_builder.Add(ParseFunctionDecl(lexer, std::move(parsed_type),
+                                                  storage_class, context));
           break;
         }
       }
@@ -244,6 +253,8 @@ std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
           ASSERT_EQ(decl->GetType(), ASTNodeType::VarDecl,
                     "Struct fields must be variable declarations");
           auto *field = decl->As<VarDecl>();
+          ASSERT(field->storage_class == StorageClass::None,
+                 "A struct field cannot have a storage class");
           fields.push_back(
               {.name = std::string(field->name), .type = field->type});
         }
@@ -251,6 +262,8 @@ std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
         ASSERT_EQ(statement->GetType(), ASTNodeType::VarDecl,
                   "Struct fields must be variable declarations");
         auto *field = statement->As<VarDecl>();
+        ASSERT(field->storage_class == StorageClass::None,
+               "A struct field cannot have a storage class");
         fields.push_back(
             {.name = std::string(field->name), .type = field->type});
       }
@@ -311,10 +324,11 @@ std::unique_ptr<EnumDecl> ParseEnumDecl(FilteredLexer &lexer,
 
 static std::unique_ptr<FunctionDecl>
 ParseFunctionDecl(FilteredLexer &lexer, ParsedType type,
-                  CompileContext &context) {
+                  StorageClass storage_class, CompileContext &context) {
   auto FD = std::make_unique<FunctionDecl>();
   FD->name = type.declarator_name;
   FD->parameter_names = std::move(type.parameter_names);
+  FD->storage_class = storage_class;
   context.PushLayer();
   FD->function_type = type.type;
   if (lexer.PeekNextToken().type == TokenType::LBrace) {

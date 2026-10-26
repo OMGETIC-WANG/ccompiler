@@ -7,8 +7,11 @@
 #include "Type.h"
 #include <vector>
 
+enum class StorageClass { None, Static };
+
 struct DeclarationSpecifier {
   TypeSpecifier type_spec;
+  StorageClass storage_class = StorageClass::None;
   std::unique_ptr<ASTNode> anoymous_decl;
 };
 
@@ -84,10 +87,14 @@ class Declarator : public DeclBase {
 
 public:
   std::string ToString() const override {
-    return "pointers=" + std::to_string(pointer_count);
+    return "pointers=" + std::to_string(pointers.size());
   }
 
-  size_t pointer_count = 0;
+  struct PointerQualifier {
+    bool is_const = false;
+  };
+
+  std::vector<PointerQualifier> pointers;
   std::unique_ptr<DirectDeclarator> direct_declarator;
 };
 
@@ -189,6 +196,9 @@ public:
 };
 
 bool IsDeclarationSpecifier(Token tok, const CompileContext &context);
+
+DeclarationSpecifier ParseDeclarationSpecifier(FilteredLexer &lexer,
+                                               CompileContext &context);
 
 std::unique_ptr<Declaration> ParseDeclaration(FilteredLexer &lexer,
                                               CompileContext &context);

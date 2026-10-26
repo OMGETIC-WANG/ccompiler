@@ -231,6 +231,35 @@ static std::unordered_map<TokenType, UnaryOpType> tok_to_unary_op_type = {
     {TokenType::Star, UnaryOpType::Deref},
     {TokenType::Et, UnaryOpType::GetAddress}};
 
+static TypeRef ParseCastTypeName(FilteredLexer &lexer,
+                                 CompileContext &context) {
+  DeclarationSpecifier specifier = ParseDeclarationSpecifier(lexer, context);
+  ASSERT(specifier.storage_class == StorageClass::None,
+         "A cast type cannot have a storage class");
+  ASSERT(!specifier.type_spec.is_typedef,
+         "A cast type cannot be a typedef declaration");
+
+  TypeRef type = ResolveTypeSpecifier(specifier.type_spec, context);
+  while (lexer.PeekNextToken().type == TokenType::Star) {
+    lexer.ConsumeNextToken();
+    bool is_const = false;
+    while (lexer.PeekNextToken().type == TokenType::Keyword &&
+           lexer.PeekNextToken().value == "const") {
+      lexer.ConsumeNextToken();
+      is_const = true;
+    }
+    if (lexer.PeekNextToken().type == TokenType::Keyword &&
+        lexer.PeekNextToken().value == "volatile") {
+      RAISE_ERROR("volatile pointer qualifiers are not supported yet");
+    }
+    type = context.Types().Pointer(type);
+    if (is_const) {
+      type = ApplyTypeTag(type, TypeTag::Const);
+    }
+  }
+  return type;
+}
+
 std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(FilteredLexer &lexer,
                                                 CompileContext &context) {
   std::unique_ptr<UnaryOp> prefix;
@@ -261,45 +290,15 @@ std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(FilteredLexer &lexer,
       add_prefix(std::make_unique<UnaryOp>(tok_to_unary_op_type[tok.type]));
       break;
     case TokenType::LParen: {
-      Token tok1 = lexer.PeekNextToken(1);
-      if (tok1.type == TokenType::Keyword) {
-        if (IsTypeKeyword(tok1.value)) {
-          Token tok2 = lexer.PeekNextToken(2);
-          if (tok2.type == TokenType::RParen) {
-            lexer.ConsumeTokens(3); // (, type-keyword, )
-            auto type_cast = std::make_unique<TypeCast>();
-            type_cast->target_type = context.Types().Builtin(tok1.value);
-            add_prefix(std::move(type_cast));
-            break;
-          }
-        } else if (tok1.value == "struct") {
-          Token tok2 = lexer.PeekNextToken(2);
-          Token tok3 = lexer.PeekNextToken(3);
-          if (tok2.type == TokenType::Identifier &&
-              tok3.type == TokenType::RParen) {
-            lexer.ConsumeTokens(4); // (, struct, identifier, )
-            auto type_cast = std::make_unique<TypeCast>();
-            type_cast->target_type = context.FindStruct(tok2.value);
-            add_prefix(std::move(type_cast));
-            break;
-          }
-        }
-      } else if (tok1.type == TokenType::Identifier) {
-        ContextItemType tok1_type = context.GetTypeOf(tok1.value);
-        if (tok1_type == ContextItemType::Typedef ||
-            tok1_type == ContextItemType::Enum) {
-          lexer.ConsumeTokens(2); // (, identifier, )
-          auto type_cast = std::make_unique<TypeCast>();
-          if (tok1_type == ContextItemType::Typedef) {
-            type_cast->target_type = context.FindTypedef(tok1.value);
-          } else {
-            type_cast->target_type = context.FindEnum(tok1.value);
-          }
-          add_prefix(std::move(type_cast));
-          ASSERT(lexer.ConsumeNextToken().type == TokenType::RParen,
-                 "Expected closing paren");
-          break;
-        }
+      Token type_start = lexer.PeekNextToken(1);
+      if (IsDeclarationSpecifier(type_start, context)) {
+        lexer.ConsumeToken(tok);
+        auto type_cast = std::make_unique<TypeCast>();
+        type_cast->target_type = ParseCastTypeName(lexer, context);
+        add_prefix(std::move(type_cast));
+        ASSERT(lexer.ConsumeNextToken().type == TokenType::RParen,
+               "Expected closing paren");
+        break;
       }
     }
     default:

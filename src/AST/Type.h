@@ -12,14 +12,13 @@
 
 #include "../Exception.h"
 #include "../Util/EnumRefl.h"
+#include "../Util/TaggedPointer.h"
 #include "../Util/Tree.h"
 
 using ScopeId = uint64_t;
 
 class TypeBase;
 class TypeContext;
-// Non-owning. TypeContext owns the referenced object.
-using TypeRef = TypeBase *;
 
 struct TypeSpecifier {
   std::string_view type_name;
@@ -29,7 +28,8 @@ struct TypeSpecifier {
   bool is_builtin = false;
   bool is_enum = false;
   bool is_named_type = false;
-  bool is_static = false;
+  bool is_const = false;
+  bool is_unsigned = false;
 };
 
 constexpr size_t default_align = 4;
@@ -61,7 +61,7 @@ REGISTER_ENUM(BuiltinKind, BUILTIN_KIND_VALUES)
 MAKE_ENUM(TypeBaseType, TYPE_BASE_TYPE_VALUES)
 REGISTER_ENUM(TypeBaseType, TYPE_BASE_TYPE_VALUES)
 
-class TypeBase : public TreeNode {
+class alignas(16) TypeBase : public TreeNode {
 public:
   virtual ~TypeBase() = default;
 
@@ -121,6 +121,48 @@ private:
   mutable std::optional<size_t> _cached_size;
   mutable std::optional<size_t> _cached_align;
 };
+
+// Non-owning. TypeContext owns the referenced object. The tag stores type
+// attributes without duplicating TypeBase nodes.
+using TypeRef = TaggedPointer<TypeBase, 16>;
+
+enum class TypeTag : TypeRef::TagType {
+  None = 0,
+  Const = 1 << 0,
+  Unsigned = 1 << 1,
+};
+
+constexpr TypeRef::TagType TypeTagValue(TypeTag tag) {
+  return static_cast<TypeRef::TagType>(tag);
+}
+
+constexpr TypeRef::TagType SupportedTypeTags =
+    TypeTagValue(TypeTag::Const) | TypeTagValue(TypeTag::Unsigned);
+
+static_assert(SupportedTypeTags <= TypeRef::tag_mask,
+              "TypeTag does not fit in TypeRef");
+
+inline TypeRef ApplyTypeTag(TypeRef type, TypeTag tag) {
+  const TypeRef::TagType value = TypeTagValue(tag);
+  ASSERT((value & static_cast<TypeRef::TagType>(~SupportedTypeTags)) == 0,
+         "TypeTag uses reserved bits");
+  ASSERT(type != nullptr || value == 0, "A null TypeRef cannot carry a tag");
+  type.SetTag(static_cast<TypeRef::TagType>(type.GetTag() | value));
+  return type;
+}
+
+inline TypeRef StripTypeTag(TypeRef type, TypeTag tag) {
+  const TypeRef::TagType value = TypeTagValue(tag);
+  ASSERT((value & static_cast<TypeRef::TagType>(~SupportedTypeTags)) == 0,
+         "TypeTag uses reserved bits");
+  type.SetTag(static_cast<TypeRef::TagType>(type.GetTag() & ~value));
+  return type;
+}
+
+inline bool HasTypeTag(TypeRef type, TypeTag tag) {
+  const TypeRef::TagType value = TypeTagValue(tag);
+  return (type.GetTag() & value) == value;
+}
 
 #define TypeNodeImpl(type_enum)                                                \
 public:                                                                        \
@@ -353,6 +395,9 @@ struct ParsedType {
 };
 
 class CompileContext;
+
+TypeRef ResolveTypeSpecifier(const TypeSpecifier &specifier,
+                             CompileContext &context);
 
 std::vector<ParsedType> ParseType(const Declaration *decl,
                                   CompileContext &context);
