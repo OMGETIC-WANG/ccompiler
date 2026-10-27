@@ -424,6 +424,7 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     return;
   }
   if (auto label_stmt = node->DynCast<LabelStmt>()) {
+    builder.CreateJmp(label_stmt->name);
     builder.CreateLabel(label_stmt->name);
     return;
   }

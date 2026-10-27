@@ -172,8 +172,8 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
       lexer.ConsumeTokens(2);
       auto label_stmt = std::make_unique<LabelStmt>();
       label_stmt->name = tok.value;
-      stmt = std::move(label_stmt);
       context.AddLabel(label_stmt->name);
+      stmt = std::move(label_stmt);
     } else {
       stmt = ParseExpr(lexer, context);
     }
