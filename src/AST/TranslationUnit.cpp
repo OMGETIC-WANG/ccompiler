@@ -69,8 +69,8 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
   if (tok.type == TokenType::RawLLVMIR) {
     lexer.ConsumeToken(tok);
     auto raw_ir = std::make_unique<RawLLVMIR>();
-    size_t start = tok.value.find('{');
-    size_t end = tok.value.rfind('}');
+    size_t start = begin_raw_ir_label.size();
+    size_t end = tok.value.size() - end_raw_ir_label.size();
     raw_ir->ir = tok.value.substr(start + 1, end - start - 1);
     stmt = std::move(raw_ir);
   } else if (IsDeclarationSpecifier(tok, context)) {

@@ -79,6 +79,9 @@ inline bool IsPreprocessorToken(TokenType type) {
 
 #pragma pop_macro("__EXTRACT_AS_IF")
 
+constexpr inline std::string_view begin_raw_ir_label = "__llvm_ir_begin__";
+constexpr inline std::string_view end_raw_ir_label = "__llvm_ir_end__";
+
 struct Token {
   TokenType type;
   std::string_view value;
