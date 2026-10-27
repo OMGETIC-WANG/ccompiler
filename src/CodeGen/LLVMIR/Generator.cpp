@@ -10,11 +10,18 @@ std::string GenFunctionParamsIR(FunctionDecl *decl, const FunctionType *type,
                                 GenContext &context) {
   std::string res;
   for (size_t i = 0; i < type->parameters.size(); i++) {
-    auto type_s = GetTypeIRName(type->parameters[i]);
-    auto name_s = decl->parameter_names[i];
-    res += std::format("{} {} %{}", (i > 0 ? "," : ""), type_s, name_s);
-    context.CurrLayer().variables[name_s] =
-        IRValue::LocalReg(type->parameters[i], std::string(name_s));
+    auto param_type = type->parameters[i];
+    if (auto array_param_t = param_type->DynCast<ArrayType>()) {
+      param_type = context.Types().Pointer(array_param_t->element_type);
+    }
+    auto param_type_s = GetTypeIRName(param_type);
+    auto param_name = decl->parameter_names[i];
+    if (param_name.empty()) {
+      res += std::format("{} {}", (i > 0 ? "," : ""), param_type_s);
+    } else {
+      res += std::format("{} {} %{}", (i > 0 ? "," : ""), param_type_s,
+                         param_name);
+    }
   }
   return res;
 }
@@ -34,21 +41,41 @@ void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
   TypeRef resolved = decl->function_type;
   ASSERT(resolved->Is<FunctionType>());
   auto *func_type = resolved->As<FunctionType>();
-  context.CurrLayer().functions[decl->name] = func_type;
+  std::string func_symbol = std::format("@{}", decl->name);
+  context.AddFunction(decl->name, IRValue::Constant(func_type, func_symbol));
   GenContextLayerGuard guard(context);
 
   auto ret_s = GetTypeIRName(func_type->return_type);
   auto params_s = GenFunctionParamsIR(decl, func_type, context);
-  if (!decl->body->statements.empty()) {
-    builder.Buffer() +=
-        std::format("define {} @{}({}){{\n", ret_s, decl->name, params_s);
+  const std::string_view linkage =
+      decl->storage_class == StorageClass::Static ? "internal " : "";
+  if (decl->body) {
+    builder.Buffer() += std::format("{}define {} @{}({}){{\n", linkage, ret_s,
+                                    decl->name, params_s);
     ExprEmitter emitter(builder, context);
     builder.CreateLabel("entry");
+
+    for (size_t i = 0; i < func_type->parameters.size(); i++) {
+      auto param_type = func_type->parameters[i];
+      if (auto array_param_t = param_type->DynCast<ArrayType>()) {
+        param_type = context.Types().Pointer(array_param_t->element_type);
+      }
+      auto param_name = decl->parameter_names[i];
+      if (param_name.empty())
+        continue;
+
+      IRValue param_val = builder.CreateAlloca(param_type);
+      context.CurrLayer().variables[param_name] = param_val;
+      builder.CreateStore(
+          IRValue::LocalReg(param_type, std::format("%{}", param_name)),
+          param_val);
+    }
+
     GenFunctionBodyIR(decl->body.get(), emitter);
     builder.Buffer() += "}\n";
   } else {
-    builder.Buffer() +=
-        std::format("declare {} @{}({})\n", ret_s, decl->name, params_s);
+    builder.Buffer() += std::format("{}declare {} @{}({})\n", linkage, ret_s,
+                                    decl->name, params_s);
   }
 }
 
@@ -100,11 +127,26 @@ std::string GenerateLLVMIR(const TranslationUnit *TU, TypeContext &types) {
       ir += GenEnumDecl(child->As<EnumDecl>(), context);
       break;
     }
+    case ASTNodeType::VarDecl: {
+      auto *var_decl = child->As<VarDecl>();
+      std::string symbol = std::format("@{}", var_decl->name);
+      context.CurrLayer().variables[var_decl->name] =
+          IRValue::Global(var_decl->type, symbol);
+      ir += std::format("{}=dso_local global {},align {}\n", symbol,
+                        GenGlobalVarInit(var_decl->type.Get(),
+                                         var_decl->initializer.get(), context),
+                        var_decl->type->GetAlign());
+      break;
+    }
     default: {
       RAISE_ERROR("Unsupported yet");
     }
     }
   }
-  ir = GenLiteralStrings(context) + ir;
+
+  for (const auto &struct_decl : context.struct_decls) {
+    ir += struct_decl;
+  }
+  ir += GenLiteralStrings(context);
   return ir;
 }

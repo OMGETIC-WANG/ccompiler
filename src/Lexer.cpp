@@ -353,11 +353,12 @@ static Token TryPeekAsSingleCharToken(std::string_view s) {
 static Token TryPeekAsPrefixToken(std::string_view s) {
   // TODO: add +=, -=, ...
   static std::pair<std::string_view, TokenType> prefix_tokens[] = {
-      {"==", TokenType::Eq},     {"!=", TokenType::Ne},
-      {"<=", TokenType::Le},     {">=", TokenType::Ge},
-      {"<<", TokenType::LShift}, {">>", TokenType::RShift},
-      {"&&", TokenType::And},    {"||", TokenType::Or},
-      {"++", TokenType::AddAdd}, {"--", TokenType::SubSub},
+      {"==", TokenType::Eq},         {"!=", TokenType::Ne},
+      {"<=", TokenType::Le},         {">=", TokenType::Ge},
+      {"<<", TokenType::LShift},     {">>", TokenType::RShift},
+      {"&&", TokenType::And},        {"||", TokenType::Or},
+      {"++", TokenType::AddAdd},     {"--", TokenType::SubSub},
+      {"...", TokenType::DotDotDot},
   };
 
   for (const auto &p : prefix_tokens) {
@@ -491,7 +492,7 @@ Token Lexer::PeekNextToken() {
       size_t end = rest.find(end_raw_ir_label, tok.value.size());
       if (end != rest.npos) {
         std::string_view ir = rest.substr(0, end + end_raw_ir_label.size());
-      return Token{TokenType::RawLLVMIR, ir};
+        return Token{TokenType::RawLLVMIR, ir};
       }
     }
 

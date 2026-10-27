@@ -19,7 +19,7 @@ inline StringVariant GetTypeIRName(TypeRef type) {
   case TypeBaseType::BuiltinType:
     return type->As<BuiltinType>()->IRName();
   case TypeBaseType::StructType:
-    return std::format("%{}", type->As<StructType>()->type_name);
+    return type->As<StructType>()->IRName();
   case TypeBaseType::EnumType: {
     const auto *enum_type = type->As<EnumType>();
     if (enum_type->underlying_type) {

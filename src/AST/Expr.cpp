@@ -6,7 +6,10 @@
 enum class PrecLevel {
   Primary,
   Assign,
-  Logic,
+  LogicOr,
+  LogicAnd,
+  LogicEqNe,
+  LogicLessGreater,
   AddSub,
   MulDivMod,
   Prefix,
@@ -28,11 +31,16 @@ static int GetPrecedence(TokenType type) {
     return (int)PrecLevel::Assign;
   case TokenType::Eq:
   case TokenType::Ne:
+    return (int)PrecLevel::LogicEqNe;
+  case TokenType::And:
+    return (int)PrecLevel::LogicAnd;
+  case TokenType::Or:
+    return (int)PrecLevel::LogicOr;
   case TokenType::Lt:
   case TokenType::Gt:
   case TokenType::Le:
   case TokenType::Ge:
-    return (int)PrecLevel::Logic;
+    return (int)PrecLevel::LogicLessGreater;
 
   default:
     RAISE_ERROR("Operator not supported yet");
@@ -55,6 +63,20 @@ static BinaryOpType GetBinaryOpType(TokenType type) {
     return BinaryOpType::Assignment;
   case TokenType::Eq:
     return BinaryOpType::Eq;
+  case TokenType::Ne:
+    return BinaryOpType::Ne;
+  case TokenType::And:
+    return BinaryOpType::And;
+  case TokenType::Or:
+    return BinaryOpType::Or;
+  case TokenType::Lt:
+    return BinaryOpType::Lt;
+  case TokenType::Gt:
+    return BinaryOpType::Gt;
+  case TokenType::Le:
+    return BinaryOpType::Le;
+  case TokenType::Ge:
+    return BinaryOpType::Ge;
   default:
     RAISE_ERROR("Operator not supported yet");
   }
@@ -229,7 +251,8 @@ static std::unordered_map<TokenType, UnaryOpType> tok_to_unary_op_type = {
     {TokenType::AddAdd, UnaryOpType::IncBeforeUse},
     {TokenType::SubSub, UnaryOpType::DecBeforeUse},
     {TokenType::Star, UnaryOpType::Deref},
-    {TokenType::Et, UnaryOpType::GetAddress}};
+    {TokenType::Et, UnaryOpType::GetAddress},
+    {TokenType::Ne, UnaryOpType::Not}};
 
 static TypeRef ParseCastTypeName(FilteredLexer &lexer,
                                  CompileContext &context) {
@@ -314,25 +337,11 @@ std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(FilteredLexer &lexer,
   }
 }
 
+#define MAKE_BINARY_OP_CASE(op) case TokenType::op:
+
 static bool IsBinaryOp(TokenType type) {
   switch (type) {
-  case TokenType::Add:
-  case TokenType::Sub:
-  case TokenType::Div:
-  case TokenType::Mod:
-  case TokenType::Equal:
-  case TokenType::Star:
-  case TokenType::LShift:
-  case TokenType::RShift:
-  case TokenType::BitAnd:
-  case TokenType::BitOr:
-  case TokenType::BitXor:
-  case TokenType::Eq:
-  case TokenType::Ne:
-  case TokenType::Lt:
-  case TokenType::Gt:
-  case TokenType::Le:
-  case TokenType::Ge:
+    BINARY_OP_TOKEN_VALUES(MAKE_BINARY_OP_CASE)
     return true;
   default:
     return false;

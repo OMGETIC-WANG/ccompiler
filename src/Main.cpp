@@ -4,6 +4,8 @@
 #include "AST/TypeContext.h"
 #include "CodeGen/LLVMIR/Generator.h"
 #include "Lexer.h"
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 
 int main() {
@@ -17,16 +19,6 @@ int main() {
     source += '\n';
   }
 
-  // {
-  //   Lexer lexer(source);
-  //   while (lexer.PeekNextToken().type != TokenType::EndOfFile) {
-  //     Token tok = lexer.ConsumeNextToken();
-  //     std::cout << EnumRefl<TokenType>::GetName(tok.type) << " " << tok.value
-  //               << "\n";
-  //   }
-  // }
-  // std::cout << "------\n";
-
   Lexer lexer(source);
   FilteredLexer filtered_lexer(lexer);
   TypeContext types;
@@ -38,13 +30,17 @@ int main() {
   std::string ir = GenerateLLVMIR(TU.get(), types);
   std::cout << ir;
 
-  // auto declaration = ParseDeclaration(filtered_lexer);
-  // declaration->Print(std::cout);
-  // auto types = ParseType(declaration.get());
-  // for (const auto &type : types) {
-  //   type->Print(std::cout);
-  // }
-  // auto expr = ParseExpr(filtered_lexer);
-  // expr->Print(std::cout);
+  auto out_path = std::filesystem::current_path() / "out.ll";
+
+  std::ofstream out(out_path);
+  out << ir;
+  out.close();
+
+  std::cout << "-----------------\n" << std::flush;
+
+  system(std::format("lli {}; echo -e \"\\nReturn: $?\\n\"",
+                     std::filesystem::absolute(out_path).string())
+             .c_str());
+
   return 0;
 }

@@ -56,14 +56,18 @@ public:
   TypeContext &operator=(const TypeContext &) = delete;
 
   TypeRef Builtin(std::string_view name) const;
-  TypeRef Builtin(BuiltinKind kind) const;
+  TypeRef Builtin(BuiltinKind kind, TypeTag tag = TypeTag::None) const;
 
-  TypeRef Pointer(TypeRef pointee);
-  TypeRef Array(TypeRef element, std::optional<size_t> size);
-  TypeRef Function(TypeRef return_type, std::span<const TypeRef> parameters);
+  TypeRef Pointer(TypeRef pointee, TypeTag tag = TypeTag::None);
+  TypeRef Array(TypeRef element, std::optional<size_t> size,
+                TypeTag tag = TypeTag::None);
+  TypeRef Function(TypeRef return_type, std::span<const TypeRef> parameters,
+                   TypeTag tag = TypeTag::None);
 
-  TypeRef GetOrCreateStruct(ScopeId scope_id, std::string_view name);
-  TypeRef GetOrCreateEnum(ScopeId scope_id, std::string_view name);
+  TypeRef GetOrCreateStruct(ScopeId scope_id, std::string_view name,
+                            TypeTag tag = TypeTag::None);
+  TypeRef GetOrCreateEnum(ScopeId scope_id, std::string_view name,
+                          TypeTag tag = TypeTag::None);
 
   void CompleteStruct(TypeRef type, std::span<const StructField> fields);
   void CompleteEnum(TypeRef type, TypeRef underlying_type,

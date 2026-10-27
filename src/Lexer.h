@@ -17,15 +17,8 @@
   x(MacroContent)\
   x(IncludeFile)
 
-#define TOKEN_TYPE_VALUES(x)\
-  x(Unknown)\
-  x(RawLLVMIR)\
-  x(EndOfFile)\
-  x(Identifier)\
-  x(Keyword)\
-  x(LiteralNum)\
-  x(LiteralString)\
-  x(LiteralChar)\
+#define BINARY_OP_TOKEN_VALUES(x)\
+  x(Equal)\
   x(Add)\
   x(Sub)\
   x(Div)\
@@ -45,9 +38,18 @@
   x(Gt)\
   x(Le)\
   x(Ge)\
+
+#define TOKEN_TYPE_VALUES(x)\
+  x(Unknown)\
+  x(RawLLVMIR)\
+  x(EndOfFile)\
+  x(Identifier)\
+  x(Keyword)\
+  x(LiteralNum)\
+  x(LiteralString)\
+  x(LiteralChar)\
   x(AddAdd)\
   x(SubSub)\
-  x(Equal)\
   x(Star)\
   x(Dot)\
   x(Et)\
@@ -60,6 +62,9 @@
   x(RBracket)\
   x(LBrace)\
   x(RBrace)\
+  x(DotDotDot)\
+  x(RightArrow)\
+  BINARY_OP_TOKEN_VALUES(x)\
   PREPROCESSOR_TOKEN_VALUES(x)
 // clang-format on
 

@@ -20,7 +20,7 @@ private:
   Integer _curr;
 };
 
-enum class IRValueKind { Null, Constant, LocalReg, Global };
+enum class IRValueKind { Null, Constant, LocalReg, Global, Literal };
 
 struct IRValue {
   IRValueKind kind = IRValueKind::Null;
@@ -29,6 +29,10 @@ struct IRValue {
 
   static IRValue Constant(TypeRef type, std::string value) {
     return IRValue{IRValueKind::Constant, std::move(value), type};
+  }
+
+  static IRValue Literal(TypeRef type, std::string value) {
+    return IRValue{IRValueKind::Literal, std::move(value), type};
   }
 
   static IRValue LocalReg(TypeRef type, std::string name) {
@@ -46,7 +50,6 @@ struct IRValue {
 
 class GenContextLayer {
 public:
-  std::unordered_map<std::string_view, TypeRef> functions;
   std::unordered_map<std::string_view, IRValue> variables;
 };
 
@@ -59,6 +62,9 @@ public:
 
   std::vector<GenContextLayer> layers;
 
+  std::unordered_map<std::string_view, IRValue> functions;
+  IRValue last_function;
+
   GenContextLayer &CurrLayer() { return layers.back(); }
 
   void PushLayer() { layers.emplace_back(); }
@@ -69,19 +75,36 @@ public:
     }
   }
 
-  IRValue *FindVariable(std::string_view name) {
+  template <auto field> IRValue *ReverseFind(std::string_view name) {
     for (auto it = layers.rbegin(); it != layers.rend(); ++it) {
       auto &layer = *it;
-      auto var_it = layer.variables.find(name);
-      if (var_it != layer.variables.end()) {
+      auto var_it = (layer.*field).find(name);
+      if (var_it != (layer.*field).end()) {
         return &var_it->second;
       }
     }
     return nullptr;
   }
 
+  IRValue *FindVariable(std::string_view name) {
+    return ReverseFind<&GenContextLayer::variables>(name);
+  }
+
+  void AddFunction(std::string_view name, IRValue value) {
+    functions[name] = value;
+    last_function = value;
+  }
+
+  IRValue *FindFunction(std::string_view name) {
+    if (auto it = functions.find(name); it != functions.end()) {
+      return &it->second;
+    }
+    return nullptr;
+  }
+
   Counter<> counter;
   std::vector<std::pair<std::string, std::string_view>> literal_strings;
+  std::vector<std::string> struct_decls;
 
   TypeContext &types;
 };

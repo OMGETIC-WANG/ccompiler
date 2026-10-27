@@ -15,15 +15,19 @@ struct BuiltinTypeInfo {
   size_t align;
 };
 
+#define MakeBuiltinTypeInfo(kind, type, ir_name)                               \
+  BuiltinTypeInfo {                                                            \
+    BuiltinKind::kind, #type, ir_name, sizeof(type), alignof(type)             \
+  }
+
 // "i1" is only used in IR generation
 constexpr std::array BUILTIN_TYPES = {
     BuiltinTypeInfo{BuiltinKind::Void, "void", "void", std::nullopt, 1},
-    BuiltinTypeInfo{BuiltinKind::Int, "int", "i32", 4, alignof(int)},
-    BuiltinTypeInfo{BuiltinKind::Char, "char", "i8", 1, alignof(char)},
-    BuiltinTypeInfo{BuiltinKind::Float, "float", "float", 4, alignof(float)},
-    BuiltinTypeInfo{BuiltinKind::Double, "double", "double", 8,
-                    alignof(double)},
-    BuiltinTypeInfo{BuiltinKind::Long, "long", "i64", 8, alignof(long)},
+    MakeBuiltinTypeInfo(Int, int, "i32"),
+    MakeBuiltinTypeInfo(Char, char, "i8"),
+    MakeBuiltinTypeInfo(Float, float, "float"),
+    MakeBuiltinTypeInfo(Double, double, "double"),
+    MakeBuiltinTypeInfo(Long, long, "i64"),
     BuiltinTypeInfo{BuiltinKind::I1, "i1", "i1", 1, 1}};
 
 size_t HashCombine(size_t seed, size_t value) {
@@ -77,42 +81,44 @@ TypeRef TypeContext::Builtin(std::string_view name) const {
   RAISE_ERROR("Unknown builtin type ", name);
 }
 
-TypeRef TypeContext::Builtin(BuiltinKind kind) const {
+TypeRef TypeContext::Builtin(BuiltinKind kind, TypeTag tag) const {
   for (const auto &storage : storage_) {
     auto *type = storage->DynCast<BuiltinType>();
     if (type && type->Kind() == kind) {
-      return type;
+      return TypeRef(type, (TypeRef::TagType)tag);
     }
   }
   RAISE_ERROR("Builtin type is not registered: ", kind);
 }
 
-TypeRef TypeContext::Pointer(TypeRef pointee) {
+TypeRef TypeContext::Pointer(TypeRef pointee, TypeTag tag) {
   ASSERT(pointee != nullptr, "Pointer pointee must not be null");
   if (auto found = pointers_.find(pointee); found != pointers_.end()) {
-    return found->second;
+    return TypeRef(found->second, (TypeRef::TagType)tag);
   }
   auto *pointer = Make<PointerType>();
   pointer->pointee_type = pointee;
   pointers_.emplace(pointee, pointer);
-  return pointer;
+  return TypeRef(pointer, (TypeRef::TagType)tag);
 }
 
-TypeRef TypeContext::Array(TypeRef element, std::optional<size_t> size) {
+TypeRef TypeContext::Array(TypeRef element, std::optional<size_t> size,
+                           TypeTag tag) {
   ASSERT(element != nullptr, "Array element type must not be null");
   type_context_detail::ArrayKey key{.element = element, .size = size};
   if (auto found = arrays_.find(key); found != arrays_.end()) {
-    return found->second;
+    return TypeRef(found->second, (TypeRef::TagType)tag);
   }
   auto *array = Make<ArrayType>();
   array->element_type = element;
   array->size = size;
   arrays_.emplace(key, array);
-  return array;
+  return TypeRef(array, (TypeRef::TagType)tag);
 }
 
 TypeRef TypeContext::Function(TypeRef return_type,
-                              std::span<const TypeRef> parameters) {
+                              std::span<const TypeRef> parameters,
+                              TypeTag tag) {
   ASSERT(return_type != nullptr, "Function return type must not be null");
   for (TypeRef parameter : parameters) {
     ASSERT(parameter != nullptr, "Function parameter type must not be null");
@@ -122,38 +128,39 @@ TypeRef TypeContext::Function(TypeRef return_type,
       .parameters = std::vector<TypeRef>(parameters.begin(), parameters.end()),
   };
   if (auto found = functions_.find(key); found != functions_.end()) {
-    return found->second;
+    return TypeRef(found->second, (TypeRef::TagType)tag);
   }
   auto *function = Make<FunctionType>();
   function->return_type = return_type;
   function->parameters.assign(parameters.begin(), parameters.end());
   functions_.emplace(key, function);
-  return function;
+  return TypeRef(function, (TypeRef::TagType)tag);
 }
 
-TypeRef TypeContext::GetOrCreateStruct(ScopeId scope_id,
-                                       std::string_view name) {
+TypeRef TypeContext::GetOrCreateStruct(ScopeId scope_id, std::string_view name,
+                                       TypeTag tag) {
   ASSERT(!name.empty(), "Struct type name must not be empty");
   type_context_detail::NominalKey key{.scope_id = scope_id,
                                       .name = std::string(name)};
   if (auto found = structs_.find(key); found != structs_.end()) {
-    return found->second;
+    return TypeRef(found->second, (TypeRef::TagType)tag);
   }
   auto *type = Make<StructType>(scope_id, name);
   structs_.emplace(key, type);
-  return type;
+  return TypeRef(type, (TypeRef::TagType)tag);
 }
 
-TypeRef TypeContext::GetOrCreateEnum(ScopeId scope_id, std::string_view name) {
+TypeRef TypeContext::GetOrCreateEnum(ScopeId scope_id, std::string_view name,
+                                     TypeTag tag) {
   ASSERT(!name.empty(), "Enum type name must not be empty");
   type_context_detail::NominalKey key{.scope_id = scope_id,
                                       .name = std::string(name)};
   if (auto found = enums_.find(key); found != enums_.end()) {
-    return found->second;
+    return TypeRef(found->second, (TypeRef::TagType)tag);
   }
   auto *type = Make<EnumType>(scope_id, name);
   enums_.emplace(key, type);
-  return type;
+  return TypeRef(type, (TypeRef::TagType)tag);
 }
 
 void TypeContext::CompleteStruct(TypeRef type,

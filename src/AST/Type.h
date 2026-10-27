@@ -209,6 +209,69 @@ private:
   size_t _align;
 };
 
+inline bool IsIntegerKind(BuiltinKind kind) {
+  return kind == BuiltinKind::Char || kind == BuiltinKind::Int ||
+         kind == BuiltinKind::Long || kind == BuiltinKind::I1;
+}
+
+inline bool IsIntegerType(TypeRef type) {
+  if (auto builtin = type->DynCast<BuiltinType>()) {
+    BuiltinKind kind = builtin->Kind();
+    return IsIntegerKind(kind);
+  }
+  return false;
+}
+
+inline bool IsFloatingKind(BuiltinKind kind) {
+  return kind == BuiltinKind::Float || kind == BuiltinKind::Double;
+}
+
+inline bool IsFloatingType(TypeRef type) {
+  if (auto builtin = type->DynCast<BuiltinType>()) {
+    BuiltinKind kind = builtin->Kind();
+    return IsFloatingKind(kind);
+  }
+  return false;
+}
+
+inline bool IsNumericType(TypeRef type) {
+  return IsIntegerType(type) || IsFloatingType(type);
+}
+
+// Return: -1: not needed; 0: left; 1:right
+inline int GetPromote(TypeRef left, TypeRef right) {
+  if (left == right || !IsNumericType(left) || !IsNumericType(right)) {
+    return -1;
+  }
+
+  BuiltinType *left_t = left->As<BuiltinType>();
+  BuiltinType *right_t = right->As<BuiltinType>();
+
+  if (IsIntegerKind(left_t->Kind()) && IsIntegerKind(right_t->Kind())) {
+    // shorter->longer
+    if (left_t->GetSize() != right_t->GetSize()) {
+      return left_t->GetSize() > right_t->GetSize() ? 0 : 1;
+    }
+    // signed->unsigned
+    if (HasTypeTag(left, TypeTag::Unsigned) &&
+        !HasTypeTag(right, TypeTag::Unsigned)) {
+      return 1;
+    } else {
+      return 0;
+    }
+  }
+  if (IsFloatingKind(left_t->Kind()) && IsFloatingKind(right_t->Kind())) {
+    // shorter->longer
+    return left_t->GetSize() > right_t->GetSize() ? 1 : 0;
+  }
+  // integer->floating point
+  if (IsFloatingKind(left_t->Kind())) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
 struct StructField {
   std::string name;
   TypeRef type;
@@ -246,6 +309,8 @@ public:
     return std::nullopt;
   }
 
+  std::string &IRName() { return _ir_name; }
+
 protected:
   size_t EvalSize() const override {
     if (!is_complete) {
@@ -276,6 +341,9 @@ protected:
     }
     return std::min(max_valid_align, default_align);
   }
+
+private:
+  std::string _ir_name;
 };
 
 struct EnumValue {

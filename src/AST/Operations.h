@@ -21,16 +21,28 @@ public:
 };
 
 // clang-format off
-#define BINARY_OP_TYPE_VALUES(x)\
-  x(Assignment)\
+#define BINARY_ARITHMETIC_OP_VALUES(x)\
   x(Add)\
   x(Sub)\
   x(Mul)\
   x(Div)\
-  x(Mod)\
-  x(Subscript)\
+  x(Mod)
+
+#define BINARY_COMP_OP_VALUES(x)\
   x(Eq)\
-  x(GetField)
+  x(Ne)\
+  x(Lt)\
+  x(Gt)\
+  x(Le)\
+  x(Ge)
+
+#define BINARY_OP_TYPE_VALUES(x)\
+  x(Assignment)\
+  BINARY_ARITHMETIC_OP_VALUES(x)\
+  BINARY_COMP_OP_VALUES(x)\
+  x(Subscript)\
+  x(And)\
+  x(Or)
 
 #define UNARY_OP_TYPE_VALUES(x)\
   x(IncBeforeUse)\
@@ -40,7 +52,8 @@ public:
   x(GetField)\
   x(Deref)\
   x(TypeCast)\
-  x(GetAddress)
+  x(GetAddress)\
+  x(Not)
 // clang-format on
 
 MAKE_ENUM(BinaryOpType, BINARY_OP_TYPE_VALUES)

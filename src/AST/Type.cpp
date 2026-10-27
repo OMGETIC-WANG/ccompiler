@@ -29,7 +29,11 @@ TypeRef CreateBaseType(const TypeSpecifier &specifier,
     }
   } else if (specifier.is_struct) {
     ASSERT(!specifier.is_unsigned, "unsigned cannot qualify a struct type");
-    type = types.GetOrCreateStruct(specifier.scope_id, specifier.type_name);
+    if (auto existed = context.FindStruct(specifier.type_name)) {
+      type = existed;
+    } else {
+      type = types.GetOrCreateStruct(specifier.scope_id, specifier.type_name);
+    }
   } else if (specifier.is_enum) {
     ASSERT(!specifier.is_unsigned, "unsigned cannot qualify an enum type");
     type = types.GetOrCreateEnum(specifier.scope_id, specifier.type_name);
