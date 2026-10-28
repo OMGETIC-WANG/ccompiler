@@ -50,38 +50,41 @@ public:
     _ptr = p | (static_cast<uintptr_t>(tag) & tag_mask);
   }
 
-  void *Get() const noexcept {
+  void *get() const noexcept {
     return reinterpret_cast<void *>(_ptr & pointer_mask);
   }
 
-  TagType GetTag() const noexcept {
+  TagType get_tag() const noexcept {
     return static_cast<TagType>(_ptr & tag_mask);
   }
 
-  void SetTag(TagType tag) noexcept {
+  TaggedVoidPointer &set_tag(TagType tag) noexcept {
     ASSERT((static_cast<uintptr_t>(tag) & pointer_mask) == 0,
            "Tag out of range");
     ASSERT(_ptr != 0 || tag == 0, "Null pointer cannot carry a tag");
     _ptr = (_ptr & pointer_mask) | (static_cast<uintptr_t>(tag) & tag_mask);
+    return *this;
   }
 
-  void Set(void *ptr) {
+  TaggedVoidPointer &set(void *ptr) {
     uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
     ASSERT((p & tag_mask) == 0, "Pointer is not aligned");
     ASSERT(p != 0 || (_ptr & tag_mask) == 0, "Null pointer cannot carry a tag");
     _ptr = p | (_ptr & tag_mask);
+    return *this;
   }
 
-  void Reset(void *ptr = nullptr, TagType tag = 0) {
+  TaggedVoidPointer &reset(void *ptr = nullptr, TagType tag = 0) {
     uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
     ASSERT((p & tag_mask) == 0, "Pointer is not aligned");
     ASSERT((static_cast<uintptr_t>(tag) & pointer_mask) == 0,
            "Tag out of range");
     ASSERT(p != 0 || tag == 0, "Null pointer cannot carry a tag");
     _ptr = p | (static_cast<uintptr_t>(tag) & tag_mask);
+    return *this;
   }
 
-  uintptr_t GetRaw() const noexcept { return _ptr; }
+  uintptr_t raw() const noexcept { return _ptr; }
 
 protected:
   uintptr_t _ptr = 0;
@@ -110,35 +113,42 @@ public:
   TaggedPointer(pointer ptr, TagType tag = 0)
       : Base(const_cast<std::remove_cv_t<T> *>(ptr), tag) {}
 
-  pointer Get() const noexcept { return static_cast<pointer>(Base::Get()); }
+  pointer get() const noexcept { return static_cast<pointer>(Base::get()); }
 
   template <typename U = T, typename = std::enable_if_t<!std::is_void_v<U>>>
   U &operator*() const noexcept {
-    ASSERT(Get() != nullptr, "Dereferencing null TaggedPointer");
-    return *Get();
+    ASSERT(get() != nullptr, "Dereferencing null TaggedPointer");
+    return *get();
   }
 
   pointer operator->() const noexcept {
-    ASSERT(Get() != nullptr, "Accessing member of null TaggedPointer");
-    return Get();
+    ASSERT(get() != nullptr, "Accessing member of null TaggedPointer");
+    return get();
   }
 
-  TagType GetTag() const noexcept { return Base::GetTag(); }
-  void SetTag(TagType tag) noexcept { Base::SetTag(tag); }
-
-  void Set(pointer ptr) { Base::Set(const_cast<std::remove_cv_t<T> *>(ptr)); }
-
-  void reset(pointer ptr = nullptr, TagType tag = 0) {
-    Base::Reset(const_cast<std::remove_cv_t<T> *>(ptr), tag);
+  TagType get_tag() const noexcept { return Base::get_tag(); }
+  TaggedPointer &set_tag(TagType tag) noexcept {
+    Base::set_tag(tag);
+    return *this;
   }
 
-  explicit operator bool() const noexcept { return Get() != nullptr; }
+  TaggedPointer &set(pointer ptr) {
+    Base::set(const_cast<std::remove_cv_t<T> *>(ptr));
+    return *this;
+  }
 
-  uintptr_t GetRaw() const noexcept { return Base::GetRaw(); }
+  TaggedPointer &reset(pointer ptr = nullptr, TagType tag = 0) {
+    Base::reset(const_cast<std::remove_cv_t<T> *>(ptr), tag);
+    return *this;
+  }
+
+  explicit operator bool() const noexcept { return get() != nullptr; }
+
+  uintptr_t raw() const noexcept { return Base::raw(); }
 
   friend bool operator==(const TaggedPointer &lhs,
                          const TaggedPointer &rhs) noexcept {
-    return lhs.GetRaw() == rhs.GetRaw();
+    return lhs.raw() == rhs.raw();
   }
 
   friend bool operator!=(const TaggedPointer &lhs,
@@ -147,11 +157,11 @@ public:
   }
 
   friend bool operator==(const TaggedPointer &lhs, std::nullptr_t) noexcept {
-    return lhs.Get() == nullptr;
+    return lhs.get() == nullptr;
   }
 
   friend bool operator==(std::nullptr_t, const TaggedPointer &rhs) noexcept {
-    return rhs.Get() == nullptr;
+    return rhs.get() == nullptr;
   }
 
   friend bool operator!=(const TaggedPointer &lhs, std::nullptr_t) noexcept {
@@ -163,19 +173,19 @@ public:
   }
 
   friend bool operator==(const TaggedPointer &lhs, const pointer rhs) noexcept {
-    return lhs.Get() == rhs;
+    return lhs.get() == rhs;
   }
 
   friend bool operator==(const pointer lhs, const TaggedPointer &rhs) noexcept {
-    return lhs == rhs.Get();
+    return lhs == rhs.get();
   }
 
   friend bool operator!=(const TaggedPointer &lhs, const pointer rhs) noexcept {
-    return lhs.Get() != rhs;
+    return lhs.get() != rhs;
   }
 
   friend bool operator!=(const pointer lhs, const TaggedPointer &rhs) noexcept {
-    return lhs != rhs.Get();
+    return lhs != rhs.get();
   }
 };
 
@@ -184,7 +194,7 @@ namespace std {
 template <typename T, size_t pointer_align>
 struct hash<TaggedPointer<T, pointer_align>> {
   size_t operator()(const TaggedPointer<T, pointer_align> &ptr) const noexcept {
-    return std::hash<uintptr_t>{}(ptr.GetRaw());
+    return std::hash<uintptr_t>{}(ptr.raw());
   }
 };
 

@@ -26,9 +26,9 @@ std::string GenStructDecl(StructDecl *decl, GenContext &context) {
 
   for (size_t i = 0; i < type->fields.size(); i++) {
     type->fields[i].index = i;
-    }
+  }
 
-    type->IRName() = std::format("%{}.{}", decl->name, context.counter());
+  type->IRName() = std::format("%{}.{}", decl->name, context.counter());
 
   std::string result = std::format("{}=type{{", type->IRName());
   for (size_t i = 0; i < type->fields.size(); ++i) {
@@ -85,7 +85,7 @@ static std::string GenGlobalVarZeroInit(TypeBase *type, GenContext &context) {
       if (i > 0) {
         res += ",";
       }
-      res += GenGlobalVarZeroInit(struct_t->fields[i].type.Get(), context);
+      res += GenGlobalVarZeroInit(struct_t->fields[i].type.get(), context);
     }
     res += "}";
     return res;
@@ -121,7 +121,7 @@ std::string GenGlobalVarInit(TypeBase *type, Initializer *initializer,
       auto field = struct_t->GetField(name);
       ASSERT(field.has_value(), "Unknown field name: ", name);
       std::string field_init_ir =
-          GenGlobalVarInit(field->type.Get(), init.get(), context);
+          GenGlobalVarInit(field->type.get(), init.get(), context);
       field_inits.emplace_back(field->index, field_init_ir);
     }
     auto get_init_ir = [&](int index) -> std::string {
@@ -130,7 +130,7 @@ std::string GenGlobalVarInit(TypeBase *type, Initializer *initializer,
           return field_init_ir;
         }
       }
-      return GenGlobalVarZeroInit(struct_t->fields[index].type.Get(), context);
+      return GenGlobalVarZeroInit(struct_t->fields[index].type.get(), context);
     };
     std::string res = std::format("{} {{", GetTypeIRName(struct_t));
     for (size_t i = 0; i < struct_t->fields.size(); ++i) {

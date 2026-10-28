@@ -95,7 +95,7 @@ struct ExprEmitter::detail {
         if (field_.has_value()) {
           const auto &field = field_.value();
           IRValue field_lhs = self.builder.GetElementPtr(value, field);
-          GenVarInitializer(field_lhs, field.type.Get(), initializer.get(),
+          GenVarInitializer(field_lhs, field.type.get(), initializer.get(),
                             self);
         } else {
           RAISE_ERROR("Unknown field: ", name);
@@ -110,7 +110,7 @@ struct ExprEmitter::detail {
            "Local static storage is not supported yet");
     IRValue val = self.builder.CreateAlloca(decl->type);
     self.context.CurrLayer().variables[decl->name] = val;
-    GenVarInitializer(val, val.type.Get(), decl->initializer.get(), self);
+    GenVarInitializer(val, val.type.get(), decl->initializer.get(), self);
     return val;
   }
 

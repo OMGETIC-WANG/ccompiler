@@ -147,7 +147,7 @@ inline TypeRef ApplyTypeTag(TypeRef type, TypeTag tag) {
   ASSERT((value & static_cast<TypeRef::TagType>(~SupportedTypeTags)) == 0,
          "TypeTag uses reserved bits");
   ASSERT(type != nullptr || value == 0, "A null TypeRef cannot carry a tag");
-  type.SetTag(static_cast<TypeRef::TagType>(type.GetTag() | value));
+  type.set_tag(static_cast<TypeRef::TagType>(type.get_tag() | value));
   return type;
 }
 
@@ -155,13 +155,13 @@ inline TypeRef StripTypeTag(TypeRef type, TypeTag tag) {
   const TypeRef::TagType value = TypeTagValue(tag);
   ASSERT((value & static_cast<TypeRef::TagType>(~SupportedTypeTags)) == 0,
          "TypeTag uses reserved bits");
-  type.SetTag(static_cast<TypeRef::TagType>(type.GetTag() & ~value));
+  type.set_tag(static_cast<TypeRef::TagType>(type.get_tag() & ~value));
   return type;
 }
 
 inline bool HasTypeTag(TypeRef type, TypeTag tag) {
   const TypeRef::TagType value = TypeTagValue(tag);
-  return (type.GetTag() & value) == value;
+  return (type.get_tag() & value) == value;
 }
 
 #define TypeNodeImpl(type_enum)                                                \

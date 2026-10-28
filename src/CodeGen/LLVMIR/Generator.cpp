@@ -133,7 +133,7 @@ std::string GenerateLLVMIR(const TranslationUnit *TU, TypeContext &types) {
       context.CurrLayer().variables[var_decl->name] =
           IRValue::Global(var_decl->type, symbol);
       ir += std::format("{}=dso_local global {},align {}\n", symbol,
-                        GenGlobalVarInit(var_decl->type.Get(),
+                        GenGlobalVarInit(var_decl->type.get(),
                                          var_decl->initializer.get(), context),
                         var_decl->type->GetAlign());
       break;

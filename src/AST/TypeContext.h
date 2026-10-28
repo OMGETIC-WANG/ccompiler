@@ -85,7 +85,7 @@ private:
 
   template <typename T> T *Mutable(TypeRef type) const {
     ASSERT(type != nullptr, "Cannot mutate a null type");
-    ASSERT(type.GetTag() == 0, "Cannot mutate a tagged type reference");
+    ASSERT(type.get_tag() == 0, "Cannot mutate a tagged type reference");
     ASSERT(type->Is<T>(), "TypeContext mutation used with the wrong type");
     return const_cast<T *>(type->As<T>());
   }
