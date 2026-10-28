@@ -24,14 +24,11 @@ std::string GenStructDecl(StructDecl *decl, GenContext &context) {
   auto *type = decl->type->As<StructType>();
   ASSERT(type->is_complete, "Defined struct must be complete");
 
-  {
-    std::unordered_map<TypeRef, size_t> map;
-    for (auto &field : type->fields) {
-      field.index = map[field.type]++;
+  for (size_t i = 0; i < type->fields.size(); i++) {
+    type->fields[i].index = i;
     }
 
     type->IRName() = std::format("%{}.{}", decl->name, context.counter());
-  }
 
   std::string result = std::format("{}=type{{", type->IRName());
   for (size_t i = 0; i < type->fields.size(); ++i) {

@@ -77,9 +77,9 @@ public:
 
   IRValue GetElementPtr(const IRValue &val, const StructField &field) {
     size_t out_reg = GetCounter();
-    _buffer += std::format("%{}=getelementptr inbounds {},ptr {},i64 0,{} {}\n",
-                           out_reg, GetTypeIRName(val.type->As<StructType>()),
-                           val.name, GetTypeIRName(field.type), field.index);
+    _buffer += std::format(
+        "%{}=getelementptr inbounds {},ptr {},i64 0,i32 {}\n", out_reg,
+        GetTypeIRName(val.type->As<StructType>()), val.name, field.index);
     return IRValue::LocalReg(field.type, out_reg);
   }
 
