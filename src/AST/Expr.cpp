@@ -166,9 +166,13 @@ std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer,
     auto expr = ParseQuotedExpr(lexer, context);
     ASSERT(lexer.ConsumeNextToken().type == TokenType::RParen,
            "Expected closing paren");
-    auto seq_eval = std::make_unique<SequenceEval>();
-    seq_eval->expressions = std::move(expr);
-    return seq_eval;
+    if (expr.size() == 1) {
+      return std::move(expr[0]);
+    } else {
+      auto seq_eval = std::make_unique<SequenceEval>();
+      seq_eval->expressions = std::move(expr);
+      return seq_eval;
+    }
   }
   default:
     RAISE_ERROR("Unexpected token");
