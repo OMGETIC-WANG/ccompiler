@@ -317,6 +317,19 @@ IRValue ExprEmitter::EmitRValue(ASTNode *node) {
     case BinaryOpType::Mod: {
       IRValue left = EmitRValue(bin_expr->left.get());
       IRValue right = EmitRValue(bin_expr->right.get());
+      if (left.type->Is<PointerType>()) {
+        ASSERT(IsIntegerType(right.type),
+               "Pointer arithmetic only supports integer type");
+        ASSERT(bin_expr->op_type == BinaryOpType::Add ||
+                   bin_expr->op_type == BinaryOpType::Sub,
+               "Pointer arithmetic only supports addition and subtraction");
+        if (bin_expr->op_type == BinaryOpType::Sub) {
+          right = builder.CreateInv(right);
+        }
+        IRValue subscripted = builder.CreateSubscript(left, right);
+        subscripted.type = left.type;
+        return subscripted;
+      }
       int promote = GetPromote(left, right);
       switch (promote) {
       case 0:

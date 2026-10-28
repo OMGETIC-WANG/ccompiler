@@ -119,8 +119,13 @@ public:
 
   IRValue CreateBoolCond(const IRValue &val) {
     size_t out_reg = GetCounter();
-    _buffer += std::format("%{}=icmp ne {} {},0\n", out_reg,
-                           GetTypeIRName(val.type), val.name);
+    if (val.type->Is<PointerType>()) {
+      _buffer += std::format("%{}=icmp ne {} {},null\n", out_reg,
+                             GetTypeIRName(val.type), val.name);
+    } else {
+      _buffer += std::format("%{}=icmp ne {} {},0\n", out_reg,
+                             GetTypeIRName(val.type), val.name);
+    }
     return IRValue::LocalReg(
         _context.Types().Builtin(BuiltinKind::I1, TypeTag::None), out_reg);
   }
@@ -192,6 +197,20 @@ public:
       val = CreateNumericCast(val, ptr.type);
     }
     return CreateStore(val, ptr);
+  }
+
+  IRValue CreateInv(const IRValue &value) {
+    if (IsIntegerType(value.type)) {
+      size_t out_reg = GetCounter();
+      _buffer += std::format("%{}=sub {} 0,{}\n", out_reg,
+                             GetTypeIRName(value.type), value.name);
+      return IRValue::LocalReg(value.type, out_reg);
+    } else {
+      size_t out_reg = GetCounter();
+      _buffer += std::format("%{}=fneg {} 0.0,{}\n", out_reg,
+                             GetTypeIRName(value.type), value.name);
+      return IRValue::LocalReg(value.type, out_reg);
+    }
   }
 
   bool IsTerminated() const { return _is_terminated; }
