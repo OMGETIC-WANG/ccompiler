@@ -4,15 +4,6 @@
 #include "Declaration.h"
 #include "Expr.h"
 
-static bool IsFlowControlKeyword(Token tok) {
-  if (tok.type != TokenType::Keyword) {
-    return false;
-  }
-  static const std::string_view flow_control_keywords[] = {
-      "if", "else", "while", "for", "return", "break", "continue", "goto"};
-  return Contains(flow_control_keywords, tok.value);
-}
-
 static std::unique_ptr<FunctionDecl>
 ParseFunctionDecl(FilteredLexer &lexer, ParsedType type,
                   StorageClass storage_class, CompileContext &context);
@@ -156,26 +147,36 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
       }
     }
     stmt = decl_stmt_builder.Build();
-  } else if (IsFlowControlKeyword(tok)) {
-    if (tok.value == "if") {
-      stmt = ParseIfStmt(lexer, context);
-    } else if (tok.value == "return") {
-      stmt = ParseReturnStmt(lexer, context);
-    } else if (tok.value == "goto") {
-      stmt = ParseGotoStmt(lexer, context);
-    } else {
-      RAISE_ERROR("Flow control not supported yet");
-    }
   } else {
-    Token next_tok = lexer.PeekNextToken(1);
-    if (next_tok.type == TokenType::Colon) {
-      lexer.ConsumeTokens(2);
-      auto label_stmt = std::make_unique<LabelStmt>();
-      label_stmt->name = tok.value;
-      context.AddLabel(label_stmt->name);
-      stmt = std::move(label_stmt);
-    } else {
-      stmt = ParseExpr(lexer, context);
+    switch (tok.type) {
+    case TokenType::KwIf:
+      stmt = ParseIfStmt(lexer, context);
+      break;
+    case TokenType::KwReturn:
+      stmt = ParseReturnStmt(lexer, context);
+      break;
+    case TokenType::KwGoto:
+      stmt = ParseGotoStmt(lexer, context);
+      break;
+    case TokenType::KwElse:
+    case TokenType::KwWhile:
+    case TokenType::KwFor:
+    case TokenType::KwBreak:
+    case TokenType::KwContinue:
+      RAISE_ERROR("Flow control not supported yet");
+    default: {
+      Token next_tok = lexer.PeekNextToken(1);
+      if (next_tok.type == TokenType::Colon) {
+        lexer.ConsumeTokens(2);
+        auto label_stmt = std::make_unique<LabelStmt>();
+        label_stmt->name = tok.value;
+        context.AddLabel(label_stmt->name);
+        stmt = std::move(label_stmt);
+      } else {
+        stmt = ParseExpr(lexer, context);
+      }
+      break;
+    }
     }
   }
 
@@ -213,7 +214,7 @@ static std::unique_ptr<ASTNode> ParseIfStmt(FilteredLexer &lexer,
   if_stmt->condition = ParseControlCondExpr(lexer, context);
   if_stmt->then_branch = ParseStmt(lexer, context);
   Token tok = lexer.PeekNextToken();
-  if (tok.type == TokenType::Keyword && tok.value == "else") {
+  if (tok.type == TokenType::KwElse) {
     lexer.ConsumeToken(tok);
     if_stmt->else_branch = ParseStmt(lexer, context);
   }

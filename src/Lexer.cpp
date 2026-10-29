@@ -131,20 +131,44 @@ static Token TryPeekAsLiteralString(std::string_view s) {
 }
 
 static Token TryPeekAsKeyword(std::string_view s) {
-  static const std::string_view keywords[] = {
-      "if",       "else",   "while",    "for",    "return",  "void",   "static",
-      "const",    "struct", "typedef",  "enum",   "switch",  "case",   "break",
-      "default",  "goto",   "int",      "char",   "float",   "double", "signed",
-      "unsigned", "long",   "volatile", "extern", "register"};
-  for (const auto &kw : keywords) {
-    if (s.starts_with(kw)) {
-      if (s.size() > kw.size()) {
-        char next = s[kw.size()];
+  static const std::pair<std::string_view, TokenType> keywords[] = {
+      {"if", TokenType::KwIf},
+      {"else", TokenType::KwElse},
+      {"while", TokenType::KwWhile},
+      {"for", TokenType::KwFor},
+      {"return", TokenType::KwReturn},
+      {"continue", TokenType::KwContinue},
+      {"void", TokenType::KwVoid},
+      {"static", TokenType::KwStatic},
+      {"const", TokenType::KwConst},
+      {"struct", TokenType::KwStruct},
+      {"typedef", TokenType::KwTypedef},
+      {"enum", TokenType::KwEnum},
+      {"switch", TokenType::KwSwitch},
+      {"case", TokenType::KwCase},
+      {"break", TokenType::KwBreak},
+      {"default", TokenType::KwDefault},
+      {"goto", TokenType::KwGoto},
+      {"int", TokenType::KwInt},
+      {"char", TokenType::KwChar},
+      {"float", TokenType::KwFloat},
+      {"double", TokenType::KwDouble},
+      {"signed", TokenType::KwSigned},
+      {"unsigned", TokenType::KwUnsigned},
+      {"long", TokenType::KwLong},
+      {"volatile", TokenType::KwVolatile},
+      {"extern", TokenType::KwExtern},
+      {"register", TokenType::KwRegister},
+  };
+  for (const auto &[keyword, type] : keywords) {
+    if (s.starts_with(keyword)) {
+      if (s.size() > keyword.size()) {
+        char next = s[keyword.size()];
         if (IsIdentifierPart(next)) {
           continue;
         }
       }
-      return Token{TokenType::Keyword, kw};
+      return Token{type, keyword};
     }
   }
   return Token{TokenType::Unknown};

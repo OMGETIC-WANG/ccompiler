@@ -39,12 +39,41 @@
   x(Le)\
   x(Ge)\
 
+#define KEYWORD_TOKEN_VALUES(x)\
+  x(KwIf)\
+  x(KwElse)\
+  x(KwWhile)\
+  x(KwFor)\
+  x(KwReturn)\
+  x(KwContinue)\
+  x(KwVoid)\
+  x(KwStatic)\
+  x(KwConst)\
+  x(KwStruct)\
+  x(KwTypedef)\
+  x(KwEnum)\
+  x(KwSwitch)\
+  x(KwCase)\
+  x(KwBreak)\
+  x(KwDefault)\
+  x(KwGoto)\
+  x(KwInt)\
+  x(KwChar)\
+  x(KwFloat)\
+  x(KwDouble)\
+  x(KwSigned)\
+  x(KwUnsigned)\
+  x(KwLong)\
+  x(KwVolatile)\
+  x(KwExtern)\
+  x(KwRegister)\
+
 #define TOKEN_TYPE_VALUES(x)\
   x(Unknown)\
   x(RawLLVMIR)\
   x(EndOfFile)\
   x(Identifier)\
-  x(Keyword)\
+  KEYWORD_TOKEN_VALUES(x)\
   x(LiteralNum)\
   x(LiteralString)\
   x(LiteralChar)\
@@ -83,6 +112,42 @@ inline bool IsPreprocessorToken(TokenType type) {
 }
 
 #pragma pop_macro("__EXTRACT_AS_IF")
+
+inline bool IsTypeKeyword(TokenType type) {
+  switch (type) {
+  case TokenType::KwVoid:
+  case TokenType::KwInt:
+  case TokenType::KwChar:
+  case TokenType::KwFloat:
+  case TokenType::KwDouble:
+  case TokenType::KwLong:
+    return true;
+  default:
+    return false;
+  }
+}
+
+inline bool IsStorageSpecifierKeyword(TokenType type) {
+  switch (type) {
+  case TokenType::KwStatic:
+  case TokenType::KwExtern:
+  case TokenType::KwRegister:
+    return true;
+  default:
+    return false;
+  }
+}
+
+inline bool IsTypeQualifierKeyword(TokenType type) {
+  return type == TokenType::KwConst || type == TokenType::KwVolatile;
+}
+
+inline bool IsDeclarationSpecifierKeyword(TokenType type) {
+  return IsTypeKeyword(type) || IsStorageSpecifierKeyword(type) ||
+         IsTypeQualifierKeyword(type) || type == TokenType::KwSigned ||
+         type == TokenType::KwUnsigned || type == TokenType::KwStruct ||
+         type == TokenType::KwEnum || type == TokenType::KwTypedef;
+}
 
 constexpr inline std::string_view begin_raw_ir_label = "__llvm_ir_begin__";
 constexpr inline std::string_view end_raw_ir_label = "__llvm_ir_end__";

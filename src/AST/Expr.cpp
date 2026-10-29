@@ -1,5 +1,4 @@
 #include "Expr.h"
-#include "../Util/Keyword.h"
 #include "AST.h"
 #include "Operations.h"
 
@@ -270,13 +269,11 @@ static TypeRef ParseCastTypeName(FilteredLexer &lexer,
   while (lexer.PeekNextToken().type == TokenType::Star) {
     lexer.ConsumeNextToken();
     bool is_const = false;
-    while (lexer.PeekNextToken().type == TokenType::Keyword &&
-           lexer.PeekNextToken().value == "const") {
+    while (lexer.PeekNextToken().type == TokenType::KwConst) {
       lexer.ConsumeNextToken();
       is_const = true;
     }
-    if (lexer.PeekNextToken().type == TokenType::Keyword &&
-        lexer.PeekNextToken().value == "volatile") {
+    if (lexer.PeekNextToken().type == TokenType::KwVolatile) {
       RAISE_ERROR("volatile pointer qualifiers are not supported yet");
     }
     type = context.Types().Pointer(type);
