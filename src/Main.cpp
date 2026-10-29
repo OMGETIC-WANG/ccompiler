@@ -4,6 +4,7 @@
 #include "AST/TypeContext.h"
 #include "CodeGen/LLVMIR/Generator.h"
 #include "Lexer.h"
+#include "Util/CmdLine.h"
 #include "Util/File.h"
 #include <filesystem>
 #include <fstream>
@@ -21,10 +22,25 @@ static std::string PrintModule(llvm::Module &module) {
   return output;
 }
 
+CMDLINE_ARG(bool, show_ast, false);
+CMDLINE_ARG(std::string, output_file, "o", "");
+
 int main(int argc, char **argv) {
+  std::vector<std::string_view> rest_args;
+  try {
+    rest_args = CmdLine::Parse(argc, argv);
+  } catch (const CmdLineArgParseError &e) {
+    std::println(std::cerr, "Failed to parse command line arguments: {}",
+                 e.what());
+    return 1;
+  } catch (const std::exception &e) {
+    std::println(std::cerr, "Error: {}", e.what());
+    return 1;
+  }
+
   std::string source;
-  if (argc == 3) {
-    source = ReadFileContent(argv[1]);
+  if (rest_args.size()) {
+    source = ReadFileContent(std::string(rest_args[0]));
   } else {
     std::string line;
     while (std::getline(std::cin, line)) {
@@ -40,32 +56,27 @@ int main(int argc, char **argv) {
   FilteredLexer filtered_lexer(lexer);
   TypeContext types;
   auto TU = ParseTranslationUnit(filtered_lexer, types);
+
+  if (show_ast) {
+    TU->Print(std::cout);
+  }
+
   llvm::LLVMContext llvm_context;
   auto module = GenerateLLVMModule(TU.get(), types, llvm_context);
   std::string ir = PrintModule(*module);
 
-  if (argc == 3) {
-    auto out_path = std::filesystem::path(argv[2]);
+  if (output_file_declared) {
+    auto out_path = std::filesystem::path(output_file);
+    if (!std::filesystem::exists(out_path.parent_path())) {
+      std::cerr << "Invalid output path: " << out_path.parent_path()
+                << std::endl;
+      return 1;
+    }
     std::ofstream out(out_path);
     out << ir;
     out.close();
   } else {
-    TU->Print(std::cout);
-
-    std::cout << "-----------------\n";
-
     std::cout << ir;
-
-    auto out_path = std::filesystem::current_path() / "out.ll";
-    std::ofstream out(out_path);
-    out << ir;
-    out.close();
-
-    std::cout << "-----------------\n" << std::flush;
-
-    system(std::format("lli {}; echo -e \"\\nReturn: $?\\n\"",
-                       std::filesystem::absolute(out_path).string())
-               .c_str());
   }
 
   return 0;

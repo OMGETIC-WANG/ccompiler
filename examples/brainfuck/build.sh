@@ -9,7 +9,7 @@ host_cc="${HOST_CC:-${CC:-clang}}"
 
 mkdir -p "$build_dir"
 
-"$ccompiler" "$case_dir/main.c" "$build_dir/main.ll"
+"$ccompiler" "$case_dir/main.c" "-o" "$build_dir/main.ll"
 llvm-as "$build_dir/main.ll" -o "$build_dir/main.bc"
 llc "$build_dir/main.bc" -filetype=obj -o "$build_dir/main.o"
 "$host_cc" -std=c11 -O2 -Wall -Wextra -c "$case_dir/host.c" \
