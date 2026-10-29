@@ -66,17 +66,18 @@ template <class... MsgChunk>
 #define __STRINGIFY(x) __STRINGIFY_IMPL(x)
 #define __LINE_STR __STRINGIFY(__LINE__)
 
+#define __FILE_LINE __FILE__ ":" __LINE_STR
+
 #define ASSERT(cond, ...)                                                      \
-  _Assert(cond, #cond, " ", __FILE__, ":", __LINE_STR,                         \
-          " failed: " __VA_OPT__(, ) __VA_ARGS__)
+  _Assert(cond, __FILE_LINE ": " #cond, " failed: " __VA_OPT__(, ) __VA_ARGS__)
 
 #define __ASSERT_COND(cond, a, b, ...)                                         \
   do {                                                                         \
     auto a_val = (a);                                                          \
     auto b_val = (b);                                                          \
-    _Assert(a_val cond b_val, #a, " " #cond " ", #b, " ", __FILE__, ":",       \
-            __LINE_STR, " failed: Expected ", b_val, " got ", a_val,           \
-            " " __VA_OPT__(, ) __VA_ARGS__);                                   \
+    _Assert(a_val cond b_val,                                                  \
+            __FILE_LINE ": Expected " #a " " #cond " " #b " failed: got ",     \
+            a_val, " " __VA_OPT__(, ) __VA_ARGS__);                            \
   } while (0)
 
 #define ASSERT_EQ(a, b, ...) __ASSERT_COND(==, a, b, __VA_ARGS__)
@@ -86,5 +87,4 @@ template <class... MsgChunk>
 #define ASSERT_GT(a, b, ...) __ASSERT_COND(>, a, b, __VA_ARGS__)
 #define ASSERT_GE(a, b, ...) __ASSERT_COND(>=, a, b, __VA_ARGS__)
 
-#define RAISE_ERROR(...)                                                       \
-  _RaiseError(__FILE__, ":", __LINE_STR, " failed: ", __VA_ARGS__)
+#define RAISE_ERROR(...) _RaiseError(__FILE_LINE " failed: ", __VA_ARGS__)
