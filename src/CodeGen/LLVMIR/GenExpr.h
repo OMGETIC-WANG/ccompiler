@@ -4,14 +4,21 @@
 #include "GenContext.h"
 #include "IRBuilder.h"
 
+#include <string_view>
+#include <unordered_map>
+
+namespace llvm {
+class BasicBlock;
+} // namespace llvm
+
 class ExprEmitter {
 public:
   ExprEmitter(IRBuilder &builder_, GenContext &context_)
       : builder(builder_), context(context_) {}
 
-  IRValue EmitLValue(ASTNode *node);
+  LValue EmitLValue(ASTNode *node);
 
-  IRValue EmitRValue(ASTNode *node);
+  RValue EmitRValue(ASTNode *node);
 
   void EmitStmt(ASTNode *node);
 
@@ -19,6 +26,9 @@ public:
   GenContext &context;
 
   struct detail;
-};
 
-std::string GenExpr(ASTNode *node, GenContext &context);
+private:
+  llvm::BasicBlock *GetOrCreateLabelBlock(std::string_view name);
+
+  std::unordered_map<std::string_view, llvm::BasicBlock *> label_blocks;
+};

@@ -1,22 +1,18 @@
 #include "GenDecl.h"
-#include "Naming.h"
 
-std::string GenVariableDecl(VarDecl *decl, GenContext &context) {
-  TypeRef resolved = decl->type;
-  std::string_view name = decl->name;
+#include "Value.h"
 
-  IRValue val = IRValue::LocalReg(resolved, context.counter());
-  context.CurrLayer().variables[name] = val;
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/GlobalVariable.h>
+#include <llvm/IR/Module.h>
 
-  auto type_s = GetTypeIRName(resolved);
-  size_t align = resolved->GetAlign();
+#include <string>
+#include <vector>
 
-  return std::format("{}=alloca {},align {}\n", val.name, type_s, align);
-}
-
-std::string GenStructDecl(StructDecl *decl, GenContext &context) {
+void GenStructDecl(StructDecl *decl, GenContext &context) {
   if (!decl->fields) {
-    return {};
+    return;
   }
 
   ASSERT(decl->type != nullptr && decl->type->Is<StructType>(),
@@ -24,21 +20,7 @@ std::string GenStructDecl(StructDecl *decl, GenContext &context) {
   auto *type = decl->type->As<StructType>();
   ASSERT(type->is_complete, "Defined struct must be complete");
 
-  for (size_t i = 0; i < type->fields.size(); i++) {
-    type->fields[i].index = i;
-  }
-
-  type->IRName() = std::format("%{}.{}", decl->name, context.counter());
-
-  std::string result = std::format("{}=type{{", type->IRName());
-  for (size_t i = 0; i < type->fields.size(); ++i) {
-    if (i > 0) {
-      result += ",";
-    }
-    result += GetTypeIRName(type->fields[i].type);
-  }
-  result += "}\n";
-  return result;
+  context.LLVMStructType(decl->type);
 }
 
 int64_t GetEnumValue(decltype(LiteralNum::value) val) {
@@ -48,16 +30,16 @@ int64_t GetEnumValue(decltype(LiteralNum::value) val) {
   return std::get<uint64_t>(val);
 }
 
-std::string GenEnumDecl(EnumDecl *decl, GenContext &context) {
+void GenEnumDecl(EnumDecl *decl, GenContext &context) {
   if (!decl->is_definition) {
-    return {};
+    return;
   }
 
   ASSERT(decl->type != nullptr && decl->type->Is<EnumType>(),
          "Enum declaration has no canonical type");
   const auto *enum_type = decl->type->As<EnumType>();
   if (enum_type->is_complete) {
-    return {};
+    return;
   }
 
   std::vector<EnumValue> values;
@@ -72,75 +54,86 @@ std::string GenEnumDecl(EnumDecl *decl, GenContext &context) {
 
   TypeRef underlying = context.Types().Builtin(BuiltinKind::Int);
   context.Types().CompleteEnum(decl->type, underlying, values);
-  return {};
 }
 
-static std::string GenGlobalVarZeroInit(TypeBase *type, GenContext &context) {
-  if (type->Is<BuiltinType>() || type->Is<PointerType>()) {
-    return std::format("{} 0", GetTypeIRName(type));
+static llvm::Constant *GenNumericConstant(TypeRef type, LiteralNum *literal,
+                                          GenContext &context) {
+  llvm::Type *llvm_type = context.LLVMType(type);
+  if (std::holds_alternative<int64_t>(literal->value)) {
+    ASSERT(llvm_type->isIntegerTy(), "Integer initializer type mismatch");
+    return llvm::ConstantInt::get(llvm_type, std::get<int64_t>(literal->value),
+                                  true);
   }
-  if (auto struct_t = type->DynCast<StructType>()) {
-    std::string res = std::format("{} {{", GetTypeIRName(struct_t));
-    for (size_t i = 0; i < struct_t->fields.size(); ++i) {
-      if (i > 0) {
-        res += ",";
-      }
-      res += GenGlobalVarZeroInit(struct_t->fields[i].type.get(), context);
-    }
-    res += "}";
-    return res;
+  if (std::holds_alternative<uint64_t>(literal->value)) {
+    ASSERT(llvm_type->isIntegerTy(), "Integer initializer type mismatch");
+    return llvm::ConstantInt::get(llvm_type, std::get<uint64_t>(literal->value),
+                                  false);
   }
-  RAISE_ERROR("Unexpected type ", type->GetType());
+  ASSERT(llvm_type->isFloatingPointTy(), "Floating initializer type mismatch");
+  return llvm::ConstantFP::get(llvm_type, std::get<double>(literal->value));
 }
 
-std::string GenGlobalVarInit(TypeBase *type, Initializer *initializer,
-                             GenContext &context) {
+llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
+                                    GenContext &context) {
   if (!initializer) {
-    return GenGlobalVarZeroInit(type, context);
+    return llvm::Constant::getNullValue(context.LLVMType(type));
   }
-  if (auto val_init = initializer->DynCast<ValueInitializer>()) {
-    if (auto literal_num = val_init->value->DynCast<LiteralNum>()) {
-      return std::format(
-          "{} {}", GetTypeIRName(type),
-          std::visit([](auto &&arg) { return std::to_string(arg); },
-                     literal_num->value));
+
+  if (auto *value_init = initializer->DynCast<ValueInitializer>()) {
+    if (auto *literal = value_init->value->DynCast<LiteralNum>()) {
+      return GenNumericConstant(type, literal, context);
     }
-    if (auto literal_str = val_init->value->DynCast<LiteralString>()) {
-      std::string symbol =
-          std::format("@.literal_string_{}", context.counter());
-      context.literal_strings.emplace_back(symbol, literal_str->value);
-      return std::format("ptr {}", symbol);
+    if (auto *literal = value_init->value->DynCast<LiteralString>()) {
+      ASSERT(type->Is<PointerType>(),
+             "String initializer requires a pointer type");
+      return llvm::cast<llvm::Constant>(
+          context.CreateStringConstant(literal->value));
     }
-    RAISE_ERROR("Global variable init don't support non-literal value");
+    RAISE_ERROR("Global variable init doesn't support non-literal value");
   }
-  if (auto field_init = initializer->DynCast<FieldInitializer>()) {
-    auto struct_t = type->DynCast<StructType>();
-    ASSERT(struct_t, "FieldInitializer only support struct type");
-    std::vector<std::pair<int, std::string>> field_inits;
+
+  if (auto *field_init = initializer->DynCast<FieldInitializer>()) {
+    auto *struct_type = type->DynCast<StructType>();
+    ASSERT(struct_type, "FieldInitializer only supports struct type");
+    std::vector<llvm::Constant *> fields;
+    fields.reserve(struct_type->fields.size());
+    for (const auto &field : struct_type->fields) {
+      fields.push_back(
+          llvm::Constant::getNullValue(context.LLVMType(field.type)));
+    }
     for (const auto &[name, init] : field_init->field_initializers) {
-      auto field = struct_t->GetField(name);
+      auto field = struct_type->GetField(name);
       ASSERT(field.has_value(), "Unknown field name: ", name);
-      std::string field_init_ir =
-          GenGlobalVarInit(field->type.get(), init.get(), context);
-      field_inits.emplace_back(field->index, field_init_ir);
-    }
-    auto get_init_ir = [&](int index) -> std::string {
-      for (const auto &[field_index, field_init_ir] : field_inits) {
-        if (field_index == index) {
-          return field_init_ir;
+      size_t field_index = 0;
+      bool found = false;
+      for (size_t i = 0; i < struct_type->fields.size(); ++i) {
+        if (struct_type->fields[i].name == name) {
+          field_index = i;
+          found = true;
+          break;
         }
       }
-      return GenGlobalVarZeroInit(struct_t->fields[index].type.get(), context);
-    };
-    std::string res = std::format("{} {{", GetTypeIRName(struct_t));
-    for (size_t i = 0; i < struct_t->fields.size(); ++i) {
-      if (i > 0) {
-        res += ",";
-      }
-      res += get_init_ir(i);
+      ASSERT(found, "Unknown field name: ", name);
+      fields[field_index] =
+          GenConstInitializer(field->type, init.get(), context);
     }
-    res += "}";
-    return res;
+    return llvm::ConstantStruct::get(context.LLVMStructType(type), fields);
   }
-  RAISE_ERROR("Unexpected type", initializer->GetType());
+
+  RAISE_ERROR("Unexpected initializer type");
+}
+
+LValue GenGlobalVarDecl(VarDecl *decl, GenContext &context) {
+  auto *llvm_type = context.LLVMType(decl->type);
+  llvm::Constant *initializer =
+      GenConstInitializer(decl->type, decl->initializer.get(), context);
+  auto *global = new llvm::GlobalVariable(
+      context.Module(), llvm_type, HasTypeTag(decl->type, TypeTag::Const),
+      llvm::GlobalValue::ExternalLinkage, initializer, decl->name);
+  global->setDSOLocal(true);
+  global->setAlignment(llvm::Align(decl->type->GetAlign()));
+
+  LValue value{decl->type, global};
+  context.CurrLayer().variables[decl->name] = value;
+  return value;
 }

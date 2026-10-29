@@ -1,38 +1,56 @@
 #include "Generator.h"
-#include "../../Util/StringVariant.h"
-#include "GenContext.h"
+
 #include "GenDecl.h"
 #include "GenExpr.h"
-#include "Generator.h"
-#include "Naming.h"
+#include "IRBuilder.h"
 
-std::string GenFunctionParamsIR(FunctionDecl *decl, const FunctionType *type,
-                                GenContext &context) {
-  std::string res;
-  for (size_t i = 0; i < type->parameters.size(); i++) {
-    auto param_type = type->parameters[i];
-    if (auto array_param_t = param_type->DynCast<ArrayType>()) {
-      param_type = context.Types().Pointer(array_param_t->element_type);
-    }
-    auto param_type_s = GetTypeIRName(param_type);
-    auto param_name = decl->parameter_names[i];
-    if (param_name.empty()) {
-      res += std::format("{} {}", (i > 0 ? "," : ""), param_type_s);
-    } else {
-      res += std::format("{} {} %{}", (i > 0 ? "," : ""), param_type_s,
-                         param_name);
-    }
-  }
-  return res;
-}
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/Function.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Verifier.h>
+#include <llvm/MC/TargetRegistry.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/Target/TargetOptions.h>
+#include <llvm/TargetParser/Host.h>
+
+#include <string>
+#include <vector>
 
 void GenFunctionBodyIR(CompoundStmt *stmts, ExprEmitter &emitter) {
   for (const auto &statement : stmts->statements) {
-    if (auto compound_stmt = statement->DynCast<CompoundStmt>()) {
-      GenContextLayerGuard guard(emitter.context);
-      GenFunctionBodyIR(compound_stmt, emitter);
+    emitter.EmitStmt(statement.get());
+  }
+}
+
+static TypeRef GetParameterType(TypeRef type, TypeContext &types) {
+  if (auto *array = type->DynCast<ArrayType>()) {
+    return types.Pointer(array->element_type);
+  }
+  return type;
+}
+
+static void FinalizeFunctionBlocks(llvm::Function *function,
+                                   GenContext &context, IRBuilder &builder) {
+  TypeRef return_type =
+      context.current_function_type->As<FunctionType>()->return_type;
+  for (auto &block : *function) {
+    if (block.hasTerminator()) {
+      continue;
+    }
+    builder.SetInsertPoint(&block);
+    if (return_type->Is<BuiltinType>() &&
+        return_type->As<BuiltinType>()->Kind() == BuiltinKind::Void) {
+      builder.CreateVoidRet();
+    } else if (function->getName() == "main" &&
+               context.LLVMType(return_type)->isIntegerTy(32)) {
+      builder.CreateRet(RValue{
+          return_type,
+          llvm::ConstantInt::get(context.LLVMType(return_type), 0, true)});
     } else {
-      emitter.EmitStmt(statement.get());
+      builder.LLVM().CreateUnreachable();
     }
   }
 }
@@ -40,113 +58,110 @@ void GenFunctionBodyIR(CompoundStmt *stmts, ExprEmitter &emitter) {
 void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
   TypeRef resolved = decl->function_type;
   ASSERT(resolved->Is<FunctionType>());
-  auto *func_type = resolved->As<FunctionType>();
-  std::string func_symbol = std::format("@{}", decl->name);
-  context.AddFunction(decl->name, IRValue::Constant(func_type, func_symbol));
-  GenContextLayerGuard guard(context);
+  auto *function_type = resolved->As<FunctionType>();
+  auto *llvm_function_type = context.LLVMFunctionType(resolved);
+  auto linkage = decl->storage_class == StorageClass::Static
+                     ? llvm::GlobalValue::InternalLinkage
+                     : llvm::GlobalValue::ExternalLinkage;
 
-  auto ret_s = GetTypeIRName(func_type->return_type);
-  auto params_s = GenFunctionParamsIR(decl, func_type, context);
-  const std::string_view linkage =
-      decl->storage_class == StorageClass::Static ? "internal " : "";
-  if (decl->body) {
-    builder.Buffer() += std::format("{}define {} @{}({}){{\n", linkage, ret_s,
-                                    decl->name, params_s);
-    ExprEmitter emitter(builder, context);
-    builder.CreateLabel("entry");
-
-    for (size_t i = 0; i < func_type->parameters.size(); i++) {
-      auto param_type = func_type->parameters[i];
-      if (auto array_param_t = param_type->DynCast<ArrayType>()) {
-        param_type = context.Types().Pointer(array_param_t->element_type);
-      }
-      auto param_name = decl->parameter_names[i];
-      if (param_name.empty())
-        continue;
-
-      IRValue param_val = builder.CreateAlloca(param_type);
-      context.CurrLayer().variables[param_name] = param_val;
-      builder.CreateStore(
-          IRValue::LocalReg(param_type, std::format("%{}", param_name)),
-          param_val);
-    }
-
-    GenFunctionBodyIR(decl->body.get(), emitter);
-    builder.Buffer() += "}\n";
+  llvm::Function *function = context.Module().getFunction(decl->name);
+  if (function) {
+    ASSERT(function->getFunctionType() == llvm_function_type,
+           "Conflicting declaration for function ", decl->name);
   } else {
-    builder.Buffer() += std::format("{}declare {} @{}({})\n", linkage, ret_s,
-                                    decl->name, params_s);
+    function = llvm::Function::Create(llvm_function_type, linkage, decl->name,
+                                      context.Module());
   }
-}
+  function->setLinkage(linkage);
+  context.AddFunction(decl->name, FunctionValue{resolved, function});
 
-std::string StrToLLVMLiteralStr(std::string_view s) {
-  std::string res;
-  res.reserve(s.size() * 3);
-  for (char c : s) {
-    res.push_back('\\');
-    uint8_t h0 = c / 16, h1 = c % 16;
-    res.push_back(h0 >= 10 ? h0 - 10 + 'a' : h0 + '0');
-    res.push_back(h1 >= 10 ? h1 - 10 + 'a' : h1 + '0');
+  if (!decl->body) {
+    return;
   }
-  return res;
-}
+  ASSERT(function->empty(), "Multiple definitions of function ", decl->name);
 
-std::string GenLiteralStrings(GenContext &context) {
-  std::string ir;
-  for (const auto &[symbol, value] : context.literal_strings) {
-    ir +=
-        std::format("{}=private unnamed addr constant [{} x i8] c\"{}\\00\"\n",
-                    symbol, value.size() + 1, StrToLLVMLiteralStr(value));
-  }
-  return ir;
-}
+  GenContextLayerGuard guard(context);
+  context.current_function = function;
+  context.current_function_type = resolved;
 
-std::string GenerateLLVMIR(const TranslationUnit *TU, TypeContext &types) {
-  std::string ir;
-  ir.reserve(16 * 1024);
-  GenContext context(types);
-  context.PushLayer();
-  IRBuilder builder(ir, context);
-  for (const auto &child : TU->body->statements) {
-    switch (child->GetType()) {
-    case ASTNodeType::RawLLVMIR: {
-      ir += "\n; raw LLVM IR begin\n";
-      ir += child->As<RawLLVMIR>()->ir;
-      ir += "\n; raw LLVM IR end\n";
-      break;
+  auto *entry =
+      llvm::BasicBlock::Create(context.LLVMContext(), "entry", function);
+  builder.SetInsertPoint(entry);
+
+  for (size_t i = 0; i < function_type->parameters.size(); ++i) {
+    std::string_view parameter_name = decl->parameter_names[i];
+    if (parameter_name.empty()) {
+      continue;
     }
-    case ASTNodeType::FunctionDecl: {
+    TypeRef parameter_type =
+        GetParameterType(function_type->parameters[i], context.Types());
+    LValue slot = builder.CreateAlloca(parameter_type);
+    context.CurrLayer().variables[parameter_name] = slot;
+    builder.CreateStore(
+        RValue{parameter_type, function->getArg(static_cast<unsigned>(i))},
+        slot);
+  }
+
+  ExprEmitter emitter(builder, context);
+  GenFunctionBodyIR(decl->body.get(), emitter);
+  FinalizeFunctionBlocks(function, context, builder);
+}
+
+std::unique_ptr<llvm::Module>
+GenerateLLVMModule(const TranslationUnit *tu, TypeContext &types,
+                   llvm::LLVMContext &llvm_context) {
+  ASSERT(tu != nullptr && tu->body, "Translation unit must have a body");
+
+  auto module = std::make_unique<llvm::Module>("ccompiler", llvm_context);
+
+  if (llvm::InitializeNativeTarget()) {
+    RAISE_ERROR("Failed to initialize the native LLVM target");
+  }
+  std::string target_error;
+  std::string triple_name = llvm::sys::getDefaultTargetTriple();
+  llvm::Triple triple(triple_name);
+  const llvm::Target *target =
+      llvm::TargetRegistry::lookupTarget(triple, target_error);
+  ASSERT(target, "Unable to look up LLVM target: ", target_error);
+  llvm::TargetOptions target_options;
+  std::unique_ptr<llvm::TargetMachine> target_machine(
+      target->createTargetMachine(triple, "", "", target_options,
+                                  std::nullopt));
+  ASSERT(target_machine != nullptr, "Unable to create LLVM target machine");
+  module->setTargetTriple(triple);
+  module->setDataLayout(target_machine->createDataLayout());
+
+  GenContext context(llvm_context, *module, types);
+  context.PushLayer();
+  IRBuilder builder(context);
+
+  for (const auto &child : tu->body->statements) {
+    switch (child->GetType()) {
+    case ASTNodeType::RawLLVMIR:
+      RAISE_ERROR("RawLLVMIR is no longer supported by LLVM API code "
+                  "generation");
+    case ASTNodeType::FunctionDecl:
       GenFunction(child->As<FunctionDecl>(), builder, context);
       break;
-    }
-    case ASTNodeType::StructDecl: {
-      ir += GenStructDecl(child->As<StructDecl>(), context);
+    case ASTNodeType::StructDecl:
+      GenStructDecl(child->As<StructDecl>(), context);
       break;
-    }
-    case ASTNodeType::EnumDecl: {
-      ir += GenEnumDecl(child->As<EnumDecl>(), context);
+    case ASTNodeType::EnumDecl:
+      GenEnumDecl(child->As<EnumDecl>(), context);
       break;
-    }
-    case ASTNodeType::VarDecl: {
-      auto *var_decl = child->As<VarDecl>();
-      std::string symbol = std::format("@{}", var_decl->name);
-      context.CurrLayer().variables[var_decl->name] =
-          IRValue::Global(var_decl->type, symbol);
-      ir += std::format("{}=dso_local global {},align {}\n", symbol,
-                        GenGlobalVarInit(var_decl->type.get(),
-                                         var_decl->initializer.get(), context),
-                        var_decl->type->GetAlign());
+    case ASTNodeType::VarDecl:
+      GenGlobalVarDecl(child->As<VarDecl>(), context);
       break;
-    }
-    default: {
-      RAISE_ERROR("Unsupported yet");
-    }
+    default:
+      RAISE_ERROR("Unsupported top-level AST node: ", child->GetType());
     }
   }
 
-  for (const auto &struct_decl : context.struct_decls) {
-    ir += struct_decl;
+  std::string verification_error;
+  llvm::raw_string_ostream error_stream(verification_error);
+  if (llvm::verifyModule(*module, &error_stream)) {
+    error_stream.flush();
+    RAISE_ERROR("Invalid LLVM module:\n", verification_error);
   }
-  ir += GenLiteralStrings(context);
-  return ir;
+  return module;
 }

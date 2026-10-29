@@ -1,7 +1,14 @@
 #pragma once
 
 #include "../../AST/TranslationUnit.h"
-#include "GenContext.h"
-#include "IRBuilder.h"
 
-std::string GenerateLLVMIR(const TranslationUnit *TU, TypeContext &types);
+#include <memory>
+
+namespace llvm {
+class LLVMContext;
+class Module;
+} // namespace llvm
+
+std::unique_ptr<llvm::Module> GenerateLLVMModule(const TranslationUnit *tu,
+                                                 TypeContext &types,
+                                                 llvm::LLVMContext &context);

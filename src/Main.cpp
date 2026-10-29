@@ -8,6 +8,18 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/Support/raw_ostream.h>
+#include <string>
+
+static std::string PrintModule(llvm::Module &module) {
+  std::string output;
+  llvm::raw_string_ostream stream(output);
+  module.print(stream, nullptr);
+  stream.flush();
+  return output;
+}
 
 int main(int argc, char **argv) {
   std::string source;
@@ -28,9 +40,11 @@ int main(int argc, char **argv) {
   FilteredLexer filtered_lexer(lexer);
   TypeContext types;
   auto TU = ParseTranslationUnit(filtered_lexer, types);
+  llvm::LLVMContext llvm_context;
+  auto module = GenerateLLVMModule(TU.get(), types, llvm_context);
+  std::string ir = PrintModule(*module);
 
   if (argc == 3) {
-    std::string ir = GenerateLLVMIR(TU.get(), types);
     auto out_path = std::filesystem::path(argv[2]);
     std::ofstream out(out_path);
     out << ir;
@@ -40,7 +54,6 @@ int main(int argc, char **argv) {
 
     std::cout << "-----------------\n";
 
-    std::string ir = GenerateLLVMIR(TU.get(), types);
     std::cout << ir;
 
     auto out_path = std::filesystem::current_path() / "out.ll";
