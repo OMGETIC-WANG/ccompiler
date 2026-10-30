@@ -493,12 +493,15 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     auto *body_block = llvm::BasicBlock::Create(
         context.LLVMContext(), std::format("for.body.{}", label_id),
         context.current_function);
+    auto *inc_block = llvm::BasicBlock::Create(
+        context.LLVMContext(), std::format("for.inc.{}", label_id),
+        context.current_function);
     auto *end_block = llvm::BasicBlock::Create(
         context.LLVMContext(), std::format("for.end.{}", label_id),
         context.current_function);
 
     GenContextLoopLayerGuard loop_guard(context);
-    context.CurrLoopLayer().continue_block = start_block;
+    context.CurrLoopLayer().continue_block = inc_block;
     context.CurrLoopLayer().break_block = end_block;
 
     builder.CreateBr(start_block);
@@ -513,6 +516,8 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     {
       GenContextLayerGuard guard(context);
       EmitStmt(for_stmt->body.get());
+      builder.CreateBr(inc_block);
+      builder.SetInsertPoint(inc_block);
       if (for_stmt->increment) {
         EmitStmt(for_stmt->increment.get());
       }
