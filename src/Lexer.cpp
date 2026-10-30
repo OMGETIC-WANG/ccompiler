@@ -375,22 +375,26 @@ static Token TryPeekAsSingleCharToken(std::string_view s) {
 }
 
 static Token TryPeekAsPrefixToken(std::string_view s) {
-  // TODO: add +=, -=, ...
   static std::pair<std::string_view, TokenType> prefix_tokens[] = {
-      {"==", TokenType::Eq},         {"!=", TokenType::Ne},
-      {"<=", TokenType::Le},         {">=", TokenType::Ge},
-      {"<<", TokenType::LShift},     {">>", TokenType::RShift},
-      {"&&", TokenType::And},        {"||", TokenType::Or},
-      {"++", TokenType::AddAdd},     {"--", TokenType::SubSub},
-      {"...", TokenType::DotDotDot},
-  };
+      {"==", TokenType::Eq},          {"!=", TokenType::Ne},
+      {"<=", TokenType::Le},          {">=", TokenType::Ge},
+      {"<<", TokenType::LShift},      {">>", TokenType::RShift},
+      {"&&", TokenType::And},         {"||", TokenType::Or},
+      {"++", TokenType::AddAdd},      {"--", TokenType::SubSub},
+      {"...", TokenType::DotDotDot},  {"+=", TokenType::AddEqual},
+      {"-=", TokenType::SubEqual},    {"*=", TokenType::MulEqual},
+      {"/=", TokenType::DivEqual},    {"%=", TokenType::ModEqual},
+      {"&=", TokenType::BitAndEqual}, {"|=", TokenType::BitOrEqual},
+      {"^=", TokenType::BitXorEqual}, {"<<=", TokenType::LShiftEqual},
+      {">>=", TokenType::RShiftEqual}};
 
+  Token result{TokenType::Unknown};
   for (const auto &p : prefix_tokens) {
-    if (s.starts_with(p.first)) {
-      return Token{p.second, p.first};
+    if (s.starts_with(p.first) && p.first.size() > result.value.size()) {
+      result = Token{p.second, p.first};
     }
   }
-  return Token{TokenType::Unknown};
+  return result;
 }
 
 Token Lexer::PeekNextToken() {

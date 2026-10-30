@@ -28,10 +28,18 @@
   x(BitAnd)\
   x(BitOr)\
   x(BitXor)\
-  x(BitNot)\
+  x(AddEqual)\
+  x(SubEqual)\
+  x(MulEqual)\
+  x(DivEqual)\
+  x(ModEqual)\
+  x(LShiftEqual)\
+  x(RShiftEqual)\
+  x(BitAndEqual)\
+  x(BitOrEqual)\
+  x(BitXorEqual)\
   x(And)\
   x(Or)\
-  x(Not)\
   x(Eq)\
   x(Ne)\
   x(Lt)\
@@ -82,6 +90,8 @@
   x(Star)\
   x(Dot)\
   x(Et)\
+  x(BitNot)\
+  x(Not)\
   x(Comma)\
   x(Semicolon)\
   x(Colon)\

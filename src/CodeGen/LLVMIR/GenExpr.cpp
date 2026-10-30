@@ -155,7 +155,91 @@ struct ExprEmitter::detail {
   static RValue EvalLogicOr(ASTNode *left, ASTNode *right, ExprEmitter &self) {
     return EvalAndOr<EvalAndOr::Or>(left, right, self);
   }
+
+  static void PromoteNumericOperands(RValue &left, RValue &right,
+                                     ExprEmitter &self) {
+    int promote = GetPromote(left.c_type, right.c_type);
+    if (promote == 0) {
+      left = self.builder.CreateNumericCast(left, right.c_type);
+    } else if (promote == 1) {
+      right = self.builder.CreateNumericCast(right, left.c_type);
+    }
+  }
+
+  static RValue EvalBinaryOp(BinaryOpType op_type, RValue left, RValue right,
+                             ExprEmitter &self) {
+    if (op_type == BinaryOpType::BitAnd || op_type == BinaryOpType::BitOr ||
+        op_type == BinaryOpType::BitXor) {
+      ASSERT(IsIntegerType(left.c_type),
+             "Bitwise operators require an integer left operand");
+      ASSERT(IsIntegerType(right.c_type),
+             "Bitwise operators require an integer right operand");
+      PromoteNumericOperands(left, right, self);
+      return self.builder.CreateBinaryOp(op_type, left, right, left.c_type);
+    }
+
+    if (op_type == BinaryOpType::LShift || op_type == BinaryOpType::RShift) {
+      ASSERT(IsIntegerType(left.c_type),
+             "Shift operators require an integer left operand");
+      ASSERT(IsIntegerType(right.c_type),
+             "Shift operators require an integer right operand");
+      if (right.c_type != left.c_type) {
+        right = self.builder.CreateNumericCast(right, left.c_type);
+      }
+      return self.builder.CreateBinaryOp(op_type, left, right, left.c_type);
+    }
+
+    if (left.c_type->Is<PointerType>()) {
+      ASSERT(IsIntegerType(right.c_type),
+             "Pointer arithmetic only supports integer type");
+      ASSERT(op_type == BinaryOpType::Add || op_type == BinaryOpType::Sub,
+             "Pointer arithmetic only supports addition and subtraction");
+      if (op_type == BinaryOpType::Sub) {
+        right = self.builder.CreateInv(right);
+      }
+      LValue subscripted = self.builder.CreateSubscript(left, right);
+      return RValue{left.c_type, subscripted.address};
+    }
+
+    PromoteNumericOperands(left, right, self);
+    bool is_comparison =
+        op_type == BinaryOpType::Eq || op_type == BinaryOpType::Ne ||
+        op_type == BinaryOpType::Lt || op_type == BinaryOpType::Gt ||
+        op_type == BinaryOpType::Le || op_type == BinaryOpType::Ge;
+    TypeRef out_type =
+        is_comparison
+            ? self.context.Types().Builtin(BuiltinKind::I1, TypeTag::Unsigned)
+            : left.c_type;
+    return self.builder.CreateBinaryOp(op_type, left, right, out_type);
+  }
 };
+
+static BinaryOpType OpAssignToOp(BinaryOpType op_assign_op) {
+  switch (op_assign_op) {
+  case BinaryOpType::AddAssign:
+    return BinaryOpType::Add;
+  case BinaryOpType::SubAssign:
+    return BinaryOpType::Sub;
+  case BinaryOpType::MulAssign:
+    return BinaryOpType::Mul;
+  case BinaryOpType::DivAssign:
+    return BinaryOpType::Div;
+  case BinaryOpType::ModAssign:
+    return BinaryOpType::Mod;
+  case BinaryOpType::BitAndAssign:
+    return BinaryOpType::BitAnd;
+  case BinaryOpType::BitOrAssign:
+    return BinaryOpType::BitOr;
+  case BinaryOpType::BitXorAssign:
+    return BinaryOpType::BitXor;
+  case BinaryOpType::LShiftAssign:
+    return BinaryOpType::LShift;
+  case BinaryOpType::RShiftAssign:
+    return BinaryOpType::RShift;
+  default:
+    RAISE_ERROR("Unsupported assignment operator");
+  }
+}
 
 LValue ExprEmitter::EmitLValue(ASTNode *node) {
   if (auto *var_ref = node->DynCast<VarRef>()) {
@@ -224,13 +308,7 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
       ASSERT(left.address, "Assignment requires an lvalue");
       RValue right = EmitRValue(bin_expr->right.get());
       CheckConstAssignment(left.c_type, right.c_type);
-      int promote = GetPromote(left.c_type, right.c_type);
-      ASSERT(promote == -1 || promote == 1, "Failed to cast assignment");
-      if (promote == 1) {
-        right = builder.CreateNumericCast(right, left.c_type);
-      } else {
-        right = TryCastTo(left.c_type, right, builder);
-      }
+      right = TryCastTo(left.c_type, right, builder);
       builder.CreateStore(right, left);
       return right;
     }
@@ -250,38 +328,39 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     case BinaryOpType::Sub:
     case BinaryOpType::Mul:
     case BinaryOpType::Div:
-    case BinaryOpType::Mod: {
+    case BinaryOpType::Mod:
+    case BinaryOpType::BitAnd:
+    case BinaryOpType::BitOr:
+    case BinaryOpType::BitXor:
+    case BinaryOpType::LShift:
+    case BinaryOpType::RShift: {
       RValue left = EmitRValue(bin_expr->left.get());
       RValue right = EmitRValue(bin_expr->right.get());
-      if (left.c_type->Is<PointerType>()) {
-        ASSERT(IsIntegerType(right.c_type),
-               "Pointer arithmetic only supports integer type");
-        ASSERT(bin_expr->op_type == BinaryOpType::Add ||
-                   bin_expr->op_type == BinaryOpType::Sub,
-               "Pointer arithmetic only supports addition and subtraction");
-        if (bin_expr->op_type == BinaryOpType::Sub) {
-          right = builder.CreateInv(right);
-        }
-        LValue subscripted = builder.CreateSubscript(left, right);
-        return RValue{left.c_type, subscripted.address};
-      }
+      return detail::EvalBinaryOp(bin_expr->op_type, left, right, *this);
+    }
+    case BinaryOpType::AddAssign:
+    case BinaryOpType::SubAssign:
+    case BinaryOpType::MulAssign:
+    case BinaryOpType::DivAssign:
+    case BinaryOpType::ModAssign:
+    case BinaryOpType::BitAndAssign:
+    case BinaryOpType::BitOrAssign:
+    case BinaryOpType::BitXorAssign:
+    case BinaryOpType::LShiftAssign:
+    case BinaryOpType::RShiftAssign: {
+      LValue left_lhs = EmitLValue(bin_expr->left.get());
+      ASSERT(left_lhs.address, "Assignment requires an lvalue");
+      RValue left = detail::LoadAsRValue(left_lhs, *this);
+      RValue right = EmitRValue(bin_expr->right.get());
 
-      int promote = GetPromote(left.c_type, right.c_type);
-      if (promote == 0) {
-        left = builder.CreateNumericCast(left, right.c_type);
-      } else if (promote == 1) {
-        right = builder.CreateNumericCast(right, left.c_type);
+      RValue res = detail::EvalBinaryOp(OpAssignToOp(bin_expr->op_type), left,
+                                        right, *this);
+      CheckConstAssignment(left_lhs.c_type, res.c_type);
+      if (res.c_type != left_lhs.c_type) {
+        res = builder.CreateNumericCast(res, left_lhs.c_type);
       }
-      bool is_arithmetic = bin_expr->op_type == BinaryOpType::Add ||
-                           bin_expr->op_type == BinaryOpType::Sub ||
-                           bin_expr->op_type == BinaryOpType::Mul ||
-                           bin_expr->op_type == BinaryOpType::Div ||
-                           bin_expr->op_type == BinaryOpType::Mod;
-      TypeRef out_type =
-          is_arithmetic
-              ? left.c_type
-              : context.Types().Builtin(BuiltinKind::I1, TypeTag::Unsigned);
-      return builder.CreateBinaryOp(bin_expr->op_type, left, right, out_type);
+      builder.CreateStore(res, left_lhs);
+      return res;
     }
     default:
       break;
@@ -320,6 +399,24 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
       ASSERT(operand.address, "Address-of requires an lvalue");
       return RValue{context.Types().Pointer(operand.c_type), operand.address};
     }
+    case UnaryOpType::UnaryPlus: {
+      RValue operand = EmitRValue(unary_expr->operand.get());
+      ASSERT(IsNumericType(operand.c_type),
+             "Unary plus requires a numeric type");
+      return operand;
+    }
+    case UnaryOpType::UnaryMinus: {
+      RValue operand = EmitRValue(unary_expr->operand.get());
+      ASSERT(IsNumericType(operand.c_type),
+             "Unary minus requires a numeric type");
+      return builder.CreateInv(operand);
+    }
+    case UnaryOpType::BitNot: {
+      RValue operand = EmitRValue(unary_expr->operand.get());
+      ASSERT(IsIntegerType(operand.c_type),
+             "Bitwise NOT requires an integer type");
+      return builder.CreateBitNot(operand);
+    }
     case UnaryOpType::IncBeforeUse:
     case UnaryOpType::IncAfterUse:
     case UnaryOpType::DecBeforeUse:
@@ -341,6 +438,12 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
                                  old_value, one, operand.c_type);
       builder.CreateStore(updated, operand);
       return is_before_use ? updated : old_value;
+    }
+    case UnaryOpType::Not: {
+      RValue operand = EmitRValue(unary_expr->operand.get());
+      ASSERT(IsNumericType(operand.c_type) || operand.c_type->Is<PointerType>(),
+             "Logical NOT requires a numeric or pointer type");
+      return builder.CreateInvBoolCond(operand);
     }
     default:
       break;

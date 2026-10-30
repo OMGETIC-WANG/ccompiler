@@ -250,7 +250,7 @@ inline int GetPromote(TypeRef left, TypeRef right) {
   if (IsIntegerKind(left_t->Kind()) && IsIntegerKind(right_t->Kind())) {
     // shorter->longer
     if (left_t->GetSize() != right_t->GetSize()) {
-      return left_t->GetSize() > right_t->GetSize() ? 0 : 1;
+      return left_t->GetSize() > right_t->GetSize() ? 1 : 0;
     }
     // signed->unsigned
     if (HasTypeTag(left, TypeTag::Unsigned) &&

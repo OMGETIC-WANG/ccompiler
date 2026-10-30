@@ -26,7 +26,12 @@ public:
   x(Sub)\
   x(Mul)\
   x(Div)\
-  x(Mod)
+  x(Mod)\
+  x(AddAssign)\
+  x(SubAssign)\
+  x(MulAssign)\
+  x(DivAssign)\
+  x(ModAssign)
 
 #define BINARY_COMP_OP_VALUES(x)\
   x(Eq)\
@@ -36,9 +41,25 @@ public:
   x(Le)\
   x(Ge)
 
+#define BINARY_BITWISE_OP_VALUES(x)\
+  x(BitAnd)\
+  x(BitOr)\
+  x(BitXor)\
+  x(LShift)\
+  x(RShift)
+
+#define BINARY_BITWISE_ASSIGN_OP_VALUES(x)\
+  x(BitAndAssign)\
+  x(BitOrAssign)\
+  x(BitXorAssign)\
+  x(LShiftAssign)\
+  x(RShiftAssign)
+
 #define BINARY_OP_TYPE_VALUES(x)\
   x(Assignment)\
   BINARY_ARITHMETIC_OP_VALUES(x)\
+  BINARY_BITWISE_OP_VALUES(x)\
+  BINARY_BITWISE_ASSIGN_OP_VALUES(x)\
   BINARY_COMP_OP_VALUES(x)\
   x(Subscript)\
   x(And)\
@@ -53,7 +74,10 @@ public:
   x(Deref)\
   x(TypeCast)\
   x(GetAddress)\
-  x(Not)
+  x(Not)\
+  x(BitNot)\
+  x(UnaryPlus)\
+  x(UnaryMinus)
 // clang-format on
 
 MAKE_ENUM(BinaryOpType, BINARY_OP_TYPE_VALUES)

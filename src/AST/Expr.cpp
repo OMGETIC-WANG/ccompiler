@@ -7,8 +7,12 @@ enum class PrecLevel {
   Assign,
   LogicOr,
   LogicAnd,
+  BitOr,
+  BitXor,
+  BitAnd,
   LogicEqNe,
   LogicLessGreater,
+  Shift,
   AddSub,
   MulDivMod,
   Prefix,
@@ -26,7 +30,20 @@ static int GetPrecedence(TokenType type) {
   case TokenType::Div:
   case TokenType::Mod:
     return (int)PrecLevel::MulDivMod;
+  case TokenType::LShift:
+  case TokenType::RShift:
+    return (int)PrecLevel::Shift;
   case TokenType::Equal:
+  case TokenType::AddEqual:
+  case TokenType::SubEqual:
+  case TokenType::MulEqual:
+  case TokenType::DivEqual:
+  case TokenType::ModEqual:
+  case TokenType::BitAndEqual:
+  case TokenType::BitOrEqual:
+  case TokenType::BitXorEqual:
+  case TokenType::LShiftEqual:
+  case TokenType::RShiftEqual:
     return (int)PrecLevel::Assign;
   case TokenType::Eq:
   case TokenType::Ne:
@@ -35,6 +52,12 @@ static int GetPrecedence(TokenType type) {
     return (int)PrecLevel::LogicAnd;
   case TokenType::Or:
     return (int)PrecLevel::LogicOr;
+  case TokenType::BitOr:
+    return (int)PrecLevel::BitOr;
+  case TokenType::BitXor:
+    return (int)PrecLevel::BitXor;
+  case TokenType::Et:
+    return (int)PrecLevel::BitAnd;
   case TokenType::Lt:
   case TokenType::Gt:
   case TokenType::Le:
@@ -58,6 +81,36 @@ static BinaryOpType GetBinaryOpType(TokenType type) {
     return BinaryOpType::Div;
   case TokenType::Mod:
     return BinaryOpType::Mod;
+  case TokenType::Et:
+    return BinaryOpType::BitAnd;
+  case TokenType::BitOr:
+    return BinaryOpType::BitOr;
+  case TokenType::BitXor:
+    return BinaryOpType::BitXor;
+  case TokenType::LShift:
+    return BinaryOpType::LShift;
+  case TokenType::RShift:
+    return BinaryOpType::RShift;
+  case TokenType::AddEqual:
+    return BinaryOpType::AddAssign;
+  case TokenType::SubEqual:
+    return BinaryOpType::SubAssign;
+  case TokenType::MulEqual:
+    return BinaryOpType::MulAssign;
+  case TokenType::DivEqual:
+    return BinaryOpType::DivAssign;
+  case TokenType::ModEqual:
+    return BinaryOpType::ModAssign;
+  case TokenType::BitAndEqual:
+    return BinaryOpType::BitAndAssign;
+  case TokenType::BitOrEqual:
+    return BinaryOpType::BitOrAssign;
+  case TokenType::BitXorEqual:
+    return BinaryOpType::BitXorAssign;
+  case TokenType::LShiftEqual:
+    return BinaryOpType::LShiftAssign;
+  case TokenType::RShiftEqual:
+    return BinaryOpType::RShiftAssign;
   case TokenType::Equal:
     return BinaryOpType::Assignment;
   case TokenType::Eq:
@@ -251,11 +304,14 @@ AddPrefixes(std::unique_ptr<ASTNode> node,
 }
 
 static std::unordered_map<TokenType, UnaryOpType> tok_to_unary_op_type = {
+    {TokenType::Add, UnaryOpType::UnaryPlus},
+    {TokenType::Sub, UnaryOpType::UnaryMinus},
     {TokenType::AddAdd, UnaryOpType::IncBeforeUse},
     {TokenType::SubSub, UnaryOpType::DecBeforeUse},
     {TokenType::Star, UnaryOpType::Deref},
     {TokenType::Et, UnaryOpType::GetAddress},
-    {TokenType::Ne, UnaryOpType::Not}};
+    {TokenType::BitNot, UnaryOpType::BitNot},
+    {TokenType::Not, UnaryOpType::Not}};
 
 static TypeRef ParseCastTypeName(FilteredLexer &lexer,
                                  CompileContext &context) {
@@ -310,6 +366,8 @@ std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(FilteredLexer &lexer,
     case TokenType::Sub:
     case TokenType::Star:
     case TokenType::Et:
+    case TokenType::BitNot:
+    case TokenType::Not:
       lexer.ConsumeToken(tok);
       add_prefix(std::make_unique<UnaryOp>(tok_to_unary_op_type[tok.type]));
       break;
@@ -344,6 +402,8 @@ static bool IsBinaryOp(TokenType type) {
   switch (type) {
     BINARY_OP_TOKEN_VALUES(MAKE_BINARY_OP_CASE)
     return true;
+  case TokenType::Et:
+    return true;
   default:
     return false;
   }
@@ -352,6 +412,16 @@ static bool IsBinaryOp(TokenType type) {
 static bool IsRightCombineOp(TokenType op) {
   switch (op) {
   case TokenType::Equal:
+  case TokenType::AddEqual:
+  case TokenType::SubEqual:
+  case TokenType::MulEqual:
+  case TokenType::DivEqual:
+  case TokenType::ModEqual:
+  case TokenType::BitAndEqual:
+  case TokenType::BitOrEqual:
+  case TokenType::BitXorEqual:
+  case TokenType::LShiftEqual:
+  case TokenType::RShiftEqual:
     return true;
   default:
     return false;

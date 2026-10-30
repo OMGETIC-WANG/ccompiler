@@ -144,6 +144,27 @@ public:
     return RValue{bool_type, cond};
   }
 
+  RValue CreateInvBoolCond(const RValue &value) {
+    TypeRef bool_type =
+        _context.Types().Builtin(BuiltinKind::I1, TypeTag::Unsigned);
+    llvm::Value *cond = nullptr;
+    if (value.c_type->Is<PointerType>()) {
+      cond = _builder.CreateICmpEQ(
+          value.ir_value,
+          llvm::ConstantPointerNull::get(
+              llvm::cast<llvm::PointerType>(_context.LLVMType(value.c_type))));
+    } else if (IsFloatingType(value.c_type)) {
+      cond = _builder.CreateFCmpUEQ(
+          value.ir_value,
+          llvm::ConstantFP::get(_context.LLVMType(value.c_type), 0.0));
+    } else {
+      cond = _builder.CreateICmpEQ(
+          value.ir_value,
+          llvm::Constant::getNullValue(_context.LLVMType(value.c_type)));
+    }
+    return RValue{bool_type, cond};
+  }
+
   RValue CreateNumericCast(const RValue &value, TypeRef target_type) {
     llvm::Type *from_type = _context.LLVMType(value.c_type);
     llvm::Type *to_type = _context.LLVMType(target_type);
@@ -175,7 +196,12 @@ public:
                    ? _builder.CreateUIToFP(value.ir_value, to_type)
                    : _builder.CreateSIToFP(value.ir_value, to_type);
     } else {
-      RAISE_ERROR("Unsupported numeric cast");
+      if (from_type->getPrimitiveSizeInBits() >
+          to_type->getPrimitiveSizeInBits()) {
+        result = _builder.CreateFPTrunc(value.ir_value, to_type);
+      } else {
+        result = _builder.CreateFPExt(value.ir_value, to_type);
+      }
     }
     return RValue{target_type, result};
   }
@@ -232,6 +258,27 @@ public:
               : (is_unsigned
                      ? _builder.CreateURem(left.ir_value, right.ir_value)
                      : _builder.CreateSRem(left.ir_value, right.ir_value))};
+    case BinaryOpType::BitAnd:
+      ASSERT(!is_float, "Bitwise AND requires integer operands");
+      return RValue{out_type,
+                    _builder.CreateAnd(left.ir_value, right.ir_value)};
+    case BinaryOpType::BitOr:
+      ASSERT(!is_float, "Bitwise OR requires integer operands");
+      return RValue{out_type, _builder.CreateOr(left.ir_value, right.ir_value)};
+    case BinaryOpType::BitXor:
+      ASSERT(!is_float, "Bitwise XOR requires integer operands");
+      return RValue{out_type,
+                    _builder.CreateXor(left.ir_value, right.ir_value)};
+    case BinaryOpType::LShift:
+      ASSERT(!is_float, "Left shift requires integer operands");
+      return RValue{out_type,
+                    _builder.CreateShl(left.ir_value, right.ir_value)};
+    case BinaryOpType::RShift:
+      ASSERT(!is_float, "Right shift requires integer operands");
+      return RValue{out_type,
+                    is_unsigned
+                        ? _builder.CreateLShr(left.ir_value, right.ir_value)
+                        : _builder.CreateAShr(left.ir_value, right.ir_value)};
     case BinaryOpType::Eq:
       return RValue{out_type,
                     is_float
@@ -318,6 +365,12 @@ public:
       return RValue{value.c_type, _builder.CreateNeg(value.ir_value)};
     }
     return RValue{value.c_type, _builder.CreateFNeg(value.ir_value)};
+  }
+
+  RValue CreateBitNot(const RValue &value) {
+    ASSERT(value.ir_value->getType()->isIntegerTy(),
+           "Bitwise NOT requires an integer operand");
+    return RValue{value.c_type, _builder.CreateNot(value.ir_value)};
   }
 
 private:
