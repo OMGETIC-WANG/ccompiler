@@ -452,6 +452,85 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     }
     return;
   }
+  if (auto *while_stmt = node->DynCast<WhileStmt>()) {
+    size_t label_id = context.counter();
+    auto *start_block = llvm::BasicBlock::Create(
+        context.LLVMContext(), std::format("while.start.{}", label_id),
+        context.current_function);
+    auto *body_block = llvm::BasicBlock::Create(
+        context.LLVMContext(), std::format("while.body.{}", label_id),
+        context.current_function);
+    auto *end_block = llvm::BasicBlock::Create(
+        context.LLVMContext(), std::format("while.end.{}", label_id),
+        context.current_function);
+
+    GenContextLoopLayerGuard loop_guard(context);
+    context.CurrLoopLayer().continue_block = start_block;
+    context.CurrLoopLayer().break_block = end_block;
+
+    builder.CreateBr(start_block);
+    builder.SetInsertPoint(start_block);
+    RValue condition = EmitRValue(while_stmt->condition.get());
+    builder.CreateCondBr(condition, body_block, end_block);
+    builder.SetInsertPoint(body_block);
+    {
+      GenContextLayerGuard guard(context);
+      EmitStmt(while_stmt->body.get());
+    }
+    builder.CreateBr(start_block);
+    builder.SetInsertPoint(end_block);
+    return;
+  }
+  if (auto *for_stmt = node->DynCast<ForStmt>()) {
+    GenContextLayerGuard guard(context);
+    size_t label_id = context.counter();
+    if (for_stmt->init) {
+      EmitStmt(for_stmt->init.get());
+    }
+    auto *start_block = llvm::BasicBlock::Create(
+        context.LLVMContext(), std::format("for.start.{}", label_id),
+        context.current_function);
+    auto *body_block = llvm::BasicBlock::Create(
+        context.LLVMContext(), std::format("for.body.{}", label_id),
+        context.current_function);
+    auto *end_block = llvm::BasicBlock::Create(
+        context.LLVMContext(), std::format("for.end.{}", label_id),
+        context.current_function);
+
+    GenContextLoopLayerGuard loop_guard(context);
+    context.CurrLoopLayer().continue_block = start_block;
+    context.CurrLoopLayer().break_block = end_block;
+
+    builder.CreateBr(start_block);
+    builder.SetInsertPoint(start_block);
+    if (for_stmt->condition) {
+      RValue condition = EmitRValue(for_stmt->condition.get());
+      builder.CreateCondBr(condition, body_block, end_block);
+    } else {
+      builder.CreateBr(body_block);
+    }
+    builder.SetInsertPoint(body_block);
+    {
+      GenContextLayerGuard guard(context);
+      EmitStmt(for_stmt->body.get());
+      if (for_stmt->increment) {
+        EmitStmt(for_stmt->increment.get());
+      }
+    }
+    builder.CreateBr(start_block);
+    builder.SetInsertPoint(end_block);
+    return;
+  }
+  if (node->DynCast<BreakStmt>()) {
+    ASSERT(context.loop_layers.size(), "Expect break in a loop statement");
+    builder.CreateBr(context.CurrLoopLayer().break_block);
+    return;
+  }
+  if (node->DynCast<ContinueStmt>()) {
+    ASSERT(context.loop_layers.size(), "Expect continue in a loop statement");
+    builder.CreateBr(context.CurrLoopLayer().continue_block);
+    return;
+  }
   if (auto *ret_stmt = node->DynCast<ReturnStmt>()) {
     if (ret_stmt->ret_value) {
       RValue ret = EmitRValue(ret_stmt->ret_value.get());

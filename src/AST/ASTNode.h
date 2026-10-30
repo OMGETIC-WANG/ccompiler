@@ -28,6 +28,9 @@
   x(IfStmt)\
   x(ReturnStmt)\
   x(WhileStmt)\
+  x(ForStmt)\
+  x(BreakStmt)\
+  x(ContinueStmt)\
   x(EnumDecl)\
   x(EnumElemDecl)\
   x(LabelStmt)\

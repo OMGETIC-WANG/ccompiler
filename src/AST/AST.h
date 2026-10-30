@@ -154,6 +154,34 @@ public:
   std::unique_ptr<ASTNode> else_branch;
 };
 
+class WhileStmt : public ASTNode {
+  ASTNodeImpl(WhileStmt);
+  TreeNodePrintFields(condition, body);
+
+public:
+  std::unique_ptr<ASTNode> condition;
+  std::unique_ptr<ASTNode> body;
+};
+
+class ForStmt : public ASTNode {
+  ASTNodeImpl(ForStmt);
+  TreeNodePrintFields(init, condition, increment, body);
+
+public:
+  std::unique_ptr<ASTNode> init;
+  std::unique_ptr<ASTNode> condition;
+  std::unique_ptr<ASTNode> increment;
+  std::unique_ptr<ASTNode> body;
+};
+
+class BreakStmt : public ASTNode {
+  ASTNodeImpl(BreakStmt);
+};
+
+class ContinueStmt : public ASTNode {
+  ASTNodeImpl(ContinueStmt);
+};
+
 class ReturnStmt : public ASTNode {
   ASTNodeImpl(ReturnStmt);
   TreeNodePrintFields(ret_value);

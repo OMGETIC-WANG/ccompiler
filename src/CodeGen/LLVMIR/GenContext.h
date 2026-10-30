@@ -57,6 +57,12 @@ public:
   std::unordered_map<std::string_view, LValue> variables;
 };
 
+class LoopContextLayer {
+public:
+  llvm::BasicBlock *continue_block = nullptr;
+  llvm::BasicBlock *break_block = nullptr;
+};
+
 class GenContext {
 public:
   GenContext(llvm::LLVMContext &llvm_context, llvm::Module &module,
@@ -77,18 +83,26 @@ public:
   }
 
   std::vector<GenContextLayer> layers;
+  std::vector<LoopContextLayer> loop_layers;
 
   std::unordered_map<std::string_view, FunctionValue> functions;
   llvm::Function *current_function = nullptr;
   TypeRef current_function_type = nullptr;
 
   GenContextLayer &CurrLayer() { return layers.back(); }
+  LoopContextLayer &CurrLoopLayer() { return loop_layers.back(); }
 
   void PushLayer() { layers.emplace_back(); }
+  void PushLoopLayer() { loop_layers.emplace_back(); }
 
   void PopLayer() {
     if (layers.size() > 1) {
       layers.pop_back();
+    }
+  }
+  void PopLoopLayer() {
+    if (loop_layers.size() > 1) {
+      loop_layers.pop_back();
     }
   }
 
@@ -131,6 +145,17 @@ public:
     _context.PushLayer();
   }
   ~GenContextLayerGuard() { _context.PopLayer(); }
+
+private:
+  GenContext &_context;
+};
+
+class GenContextLoopLayerGuard {
+public:
+  explicit GenContextLoopLayerGuard(GenContext &context) : _context(context) {
+    _context.PushLoopLayer();
+  }
+  ~GenContextLoopLayerGuard() { _context.PopLoopLayer(); }
 
 private:
   GenContext &_context;
