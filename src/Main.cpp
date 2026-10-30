@@ -3,6 +3,7 @@
 #include "AST/Type.h"
 #include "AST/TypeContext.h"
 #include "CodeGen/LLVMIR/Generator.h"
+#include "JITRunner/JITRunner.h"
 #include "Lexer.h"
 #include "Util/CmdLine.h"
 #include "Util/File.h"
@@ -23,24 +24,15 @@ static std::string PrintModule(llvm::Module &module) {
 }
 
 CMDLINE_ARG(bool, show_ast, false);
+CMDLINE_ARG(bool, jit_run, false);
 CMDLINE_ARG(std::string, output_file, "o", "");
 
 int main(int argc, char **argv) {
-  std::vector<std::string_view> rest_args;
-  try {
-    rest_args = CmdLine::Parse(argc, argv);
-  } catch (const CmdLineArgParseError &e) {
-    std::println(std::cerr, "Failed to parse command line arguments: {}",
-                 e.what());
-    return 1;
-  } catch (const std::exception &e) {
-    std::println(std::cerr, "Error: {}", e.what());
-    return 1;
-  }
+  std::vector<std::string_view> rest = CmdLine::Parse(argc, argv);
 
   std::string source;
-  if (rest_args.size()) {
-    source = ReadFileContent(std::string(rest_args[0]));
+  if (rest.size() > 0) {
+    source = ReadFileContent(std::string(rest[0]));
   } else {
     std::string line;
     while (std::getline(std::cin, line)) {
@@ -61,11 +53,11 @@ int main(int argc, char **argv) {
     TU->Print(std::cout);
   }
 
-  llvm::LLVMContext llvm_context;
-  auto module = GenerateLLVMModule(TU.get(), types, llvm_context);
+  auto llvm_context = std::make_unique<llvm::LLVMContext>();
+  auto module = GenerateLLVMModule(TU.get(), types, *llvm_context);
   std::string ir = PrintModule(*module);
 
-  if (output_file_declared) {
+  if (output_file.size()) {
     auto out_path = std::filesystem::path(output_file);
     if (!std::filesystem::exists(out_path.parent_path())) {
       std::cerr << "Invalid output path: " << out_path.parent_path()
@@ -77,6 +69,17 @@ int main(int argc, char **argv) {
     out.close();
   } else {
     std::cout << ir;
+  }
+
+  if (jit_run) {
+    std::cout.flush();
+    auto result = RunLLVMModule(std::move(module), std::move(llvm_context));
+    if (!result) {
+      std::cerr << "JIT execution failed: "
+                << llvm::toString(result.takeError()) << '\n';
+      return 1;
+    }
+    std::cout << "Return: " << *result << '\n';
   }
 
   return 0;

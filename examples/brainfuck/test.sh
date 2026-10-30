@@ -10,8 +10,12 @@ trap 'rm -rf "$temporary_dir"' EXIT
 "$case_dir/build.sh"
 
 "$repo_root/build/ccompiler" "$case_dir/tests/compiler-goto.c" \
-  "$temporary_dir/compiler-goto.ll"
+  -o "$temporary_dir/compiler-goto.ll"
 llvm-as "$temporary_dir/compiler-goto.ll" -o "$temporary_dir/compiler-goto.bc"
+"$repo_root/build/ccompiler" -jit-run "$case_dir/tests/compiler-goto.c" \
+  >"$temporary_dir/compiler-goto-jit.out"
+grep -q '^Return: 3$' "$temporary_dir/compiler-goto-jit.out"
+
 set +e
 lli "$temporary_dir/compiler-goto.bc"
 goto_status=$?
