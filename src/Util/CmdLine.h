@@ -11,12 +11,41 @@ public:
   using std::runtime_error::runtime_error;
 };
 
+enum class CmdLineArgType { None, Single, Multiple };
+
 struct CmdLineArgDesc {
 public:
   std::string name;
+  CmdLineArgType type;
   void *ptr;
-  bool *declared;
-  void (*parser)(void *, bool *, std::string_view);
+  void (*parser)(void *, std::string_view);
+};
+
+template <typename T> struct CmdLineArgTypeOf {};
+
+template <> struct CmdLineArgTypeOf<bool> {
+  static constexpr CmdLineArgType value = CmdLineArgType::None;
+};
+
+template <typename T>
+  requires std::integral<T> || std::floating_point<T> ||
+           std::is_same_v<T, std::string>
+struct CmdLineArgTypeOf<T> {
+  static constexpr CmdLineArgType value = CmdLineArgType::Single;
+};
+
+template <typename T> struct IsVector {
+  static constexpr bool value = false;
+};
+
+template <typename T> struct IsVector<std::vector<T>> {
+  static constexpr bool value = true;
+};
+
+template <typename T>
+  requires IsVector<T>::value
+struct CmdLineArgTypeOf<T> {
+  static constexpr CmdLineArgType value = CmdLineArgType::Multiple;
 };
 
 template <typename T> struct CmdLineArgParser {};
@@ -24,8 +53,7 @@ template <typename T> struct CmdLineArgParser {};
 template <typename T>
   requires std::integral<T> || std::floating_point<T>
 struct CmdLineArgParser<T> {
-public:
-  static void Parse(void *ptr, bool *declared, std::string_view str) {
+  static void Parse(void *ptr, std::string_view str) {
     T *pval = (T *)ptr;
     auto [ptr_end, ec] =
         std::from_chars(str.data(), str.data() + str.size(), *pval);
@@ -36,31 +64,41 @@ public:
       throw CmdLineArgParseError("Failed to parse rest of the value: " +
                                  std::string(str));
     }
-    *declared = true;
   }
 };
 
 template <> struct CmdLineArgParser<std::string> {
-public:
-  static void Parse(void *ptr, bool *declared, std::string_view str) {
+  static void Parse(void *ptr, std::string_view str) {
     std::string *pval = (std::string *)ptr;
     *pval = std::string(str);
-    *declared = true;
   }
 };
 
 template <> struct CmdLineArgParser<bool> {
-public:
-  static void Parse(void *ptr, bool *declared, std::string_view str) {
+  static void Parse(void *ptr, std::string_view str) {
     bool *pval = (bool *)ptr;
-    if (str == "true" || str == "1") {
+    if (str.empty()) {
       *pval = true;
-    } else if (str == "false" || str == "0") {
-      *pval = false;
     } else {
-      *pval = true;
+      if (str == "0" || str == "false") {
+        *pval = false;
+      } else if (str == "1" || str == "true") {
+        *pval = true;
+      } else {
+        throw CmdLineArgParseError("Failed to parse boolean value: " +
+                                   std::string(str));
+      }
     }
-    *declared = true;
+  }
+};
+
+template <typename Vec>
+  requires IsVector<Vec>::value
+struct CmdLineArgParser<Vec> {
+  static void Parse(void *ptr, std::string_view str) {
+    Vec *pval = (Vec *)ptr;
+    pval->emplace_back();
+    CmdLineArgParser<typename Vec::value_type>::Parse(&pval->back(), str);
   }
 };
 
@@ -73,18 +111,47 @@ public:
 
   static std::vector<std::string_view> Parse(int argc, char **argv) {
     std::vector<std::string_view> rest;
-    for (int i = 1; i < argc; i++) {
+    for (int i = 1; i < argc;) {
       std::string_view arg(argv[i]);
+      if (arg == "--") {
+        for (int j = i + 1; j < argc; j++) {
+          rest.push_back(argv[j]);
+        }
+        return rest;
+      }
       if (arg.starts_with("-")) {
         std::string_view name_val = arg.substr(1);
         std::string_view name, value;
         if (auto eq_pos = name_val.find('='); eq_pos == name_val.npos) {
           name = name_val;
-          if (i + 1 < argc) {
-            value = std::string_view(argv[i + 1]);
+          auto desc = TryGetArg(name);
+          if (!desc) {
+            throw CmdLineArgParseError("Unknown argument: " +
+                                       std::string(name));
+          }
+
+          if (desc->type == CmdLineArgType::None) {
+            desc->parser(desc->ptr, {});
             i++;
+          } else if (desc->type == CmdLineArgType::Single) {
+            if (i + 1 < argc) {
+              desc->parser(desc->ptr, argv[i + 1]);
+              i += 2;
+            } else {
+              throw CmdLineArgParseError("Missing value for argument: " +
+                                         std::string(name));
+            }
           } else {
-            value = {};
+            int j = i + 1;
+            while (j < argc) {
+              std::string_view value(argv[j]);
+              if (value == "--" || IsOption(value)) {
+                break;
+              }
+              desc->parser(desc->ptr, value);
+              j++;
+            }
+            i = j;
           }
         } else {
           name = name_val.substr(0, eq_pos);
@@ -93,16 +160,45 @@ public:
                                        std::string(name_val));
           }
           value = name_val.substr(eq_pos + 1);
+          auto desc = TryGetArg(name);
+          if (!desc) {
+            throw CmdLineArgParseError("Unknown argument: " +
+                                       std::string(name));
+          }
+          desc->parser(desc->ptr, value);
+          i++;
         }
-        HandleArg(name, value);
       } else {
         rest.push_back(arg);
+        i++;
       }
     }
     return rest;
   }
 
 private:
+  static bool IsOption(std::string_view arg) {
+    if (arg.empty())
+      return false;
+    if (arg[0] == '-') {
+      for (size_t i = 1; i < arg.size(); i++) {
+        if (!isalpha(arg[i]) && arg[i] != '_' && arg[i] != '-')
+          return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  static const CmdLineArgDesc *TryGetArg(std::string_view name) {
+    for (const auto &arg : CmdLineArgs()) {
+      if (CompArgName(arg.name, name)) {
+        return &arg;
+      }
+    }
+    return nullptr;
+  }
+
   static bool CompArgName(std::string_view l, std::string_view r) {
     if (l.size() != r.size())
       return false;
@@ -116,32 +212,22 @@ private:
     }
     return true;
   }
-
-  static void HandleArg(std::string_view name, std::string_view value) {
-    for (const auto &arg : CmdLineArgs()) {
-      if (CompArgName(arg.name, name)) {
-        arg.parser(arg.ptr, arg.declared, value);
-        return;
-      }
-    }
-    throw CmdLineArgParseError("Unknown argument: " + std::string(name));
-  }
 };
 
-#define __CMDLINE_ARG_IMPL_4(type, name, flag_name, def_val)                   \
-  type name = def_val;                                                         \
-  bool name##_declared = false;                                                \
-  auto __cmdline_arg_##name = []() {                                           \
-    CmdLine::CmdLineArgs().push_back(                                          \
-        {flag_name, &name, &name##_declared, &CmdLineArgParser<type>::Parse}); \
+#define CMDLINE_ARG_IMPL_4(type, name, flag_name, def_val)                     \
+  inline type name = def_val;                                                  \
+  inline auto __cmdline_arg_##name = []() {                                    \
+    CmdLine::CmdLineArgs().push_back({flag_name,                               \
+                                      CmdLineArgTypeOf<type>::value, &name,    \
+                                      &CmdLineArgParser<type>::Parse});        \
     return 0;                                                                  \
   }();
 
-#define __CMDLINE_ARG_IMPL_3(type, name, def_val)                              \
-  __CMDLINE_ARG_IMPL_4(type, name, #name, def_val)
+#define CMDLINE_ARG_IMPL_3(type, name, def_val)                                \
+  CMDLINE_ARG_IMPL_4(type, name, #name, def_val)
 
-#define __GET_CMDLINE_ARG_IMPL(_1, _2, _3, _4, macro, ...) macro
+#define GET_CMDLINE_ARG_IMPL(_1, _2, _3, _4, macro, ...) macro
 
 #define CMDLINE_ARG(...)                                                       \
-  __GET_CMDLINE_ARG_IMPL(__VA_ARGS__, __CMDLINE_ARG_IMPL_4,                    \
-                         __CMDLINE_ARG_IMPL_3)(__VA_ARGS__)
+  GET_CMDLINE_ARG_IMPL(__VA_ARGS__, CMDLINE_ARG_IMPL_4,                        \
+                       CMDLINE_ARG_IMPL_3)(__VA_ARGS__)
