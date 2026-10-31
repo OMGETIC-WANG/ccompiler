@@ -397,7 +397,8 @@ bool IsDeclarationSpecifier(Token tok, const CompileContext &context) {
     return true;
   }
   if (tok.type == TokenType::Identifier) {
-    if (context.Is(tok.value, ContextItemType::Typedef)) {
+    if (context.Is(tok.value, ContextItemType::Typedef) ||
+        context.Is(tok.value, ContextItemType::Enum)) {
       return true;
     }
   }

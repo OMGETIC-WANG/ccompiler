@@ -468,4 +468,5 @@ TypeRef ResolveTypeSpecifier(const TypeSpecifier &specifier,
                              CompileContext &context);
 
 std::vector<ParsedType> ParseType(const Declaration *decl,
-                                  CompileContext &context);
+                                  CompileContext &context,
+                                  bool is_tag_definition);

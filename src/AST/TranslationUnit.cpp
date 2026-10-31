@@ -59,7 +59,8 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(FilteredLexer &lexer,
     stmt = std::move(raw_ir);
   } else if (IsDeclarationSpecifier(tok, context)) {
     auto decl = ParseDeclaration(lexer, context);
-    auto decl_types = ParseType(decl.get(), context);
+    bool is_tag_definition = lexer.PeekNextToken().type == TokenType::LBrace;
+    auto decl_types = ParseType(decl.get(), context, is_tag_definition);
     auto type_spec = std::move(decl->declaration_specifier.type_spec);
     const StorageClass storage_class =
         decl->declaration_specifier.storage_class;
@@ -356,14 +357,14 @@ static void ParseEnumContent(FilteredLexer &lexer, CompileContext &context,
     std::string_view name = tok.value;
     lexer.ConsumeToken(tok);
 
+    auto elem_decl = std::make_unique<EnumElemDecl>();
+    elem_decl->name = name;
     tok = lexer.PeekNextToken();
     if (tok.type == TokenType::Equal) {
       lexer.ConsumeToken(tok);
-      auto elem_decl = std::make_unique<EnumElemDecl>();
-      elem_decl->name = name;
       elem_decl->value = ParseExpr(lexer, context);
-      decl->values.push_back(std::move(elem_decl));
     }
+    decl->values.push_back(std::move(elem_decl));
     tok = lexer.PeekNextToken();
     if (tok.type == TokenType::Comma) {
       lexer.ConsumeToken(tok);
