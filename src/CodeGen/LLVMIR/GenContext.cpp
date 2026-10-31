@@ -103,8 +103,8 @@ llvm::FunctionType *LLVMTypeConverter::ConvertFunction(TypeRef type) {
     params.push_back(ConvertParameter(param));
   }
 
-  auto *result =
-      llvm::FunctionType::get(Convert(function->return_type), params, false);
+  auto *result = llvm::FunctionType::get(Convert(function->return_type), params,
+                                         function->has_va_args);
   _types.emplace(type.get(), result);
   return result;
 }

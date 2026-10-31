@@ -353,24 +353,33 @@ public:
     ASSERT(c_function_type->Is<FunctionType>(),
            "Function invoke only supports function or pointer type");
     const auto *function = c_function_type->As<FunctionType>();
-    ASSERT(function->parameters.size() == args.size(),
-           "Function argument count mismatch");
+
+    if (function->has_va_args) {
+      ASSERT(args.size() >= function->parameters.size(),
+             "Function argument count mismatch, expect >= declared arguments");
+    } else {
+      ASSERT(args.size() == function->parameters.size(),
+             "Function argument count mismatch");
+    }
 
     std::vector<llvm::Value *> llvm_args;
     llvm_args.reserve(args.size());
     for (size_t i = 0; i < args.size(); ++i) {
       RValue arg = args[i];
-      TypeRef param_type = function->parameters[i];
-      if (auto *array = param_type->DynCast<ArrayType>()) {
-        param_type = _context.Types().Pointer(array->element_type);
+      if (i < function->parameters.size()) {
+        TypeRef param_type = function->parameters[i];
+        if (auto *array = param_type->DynCast<ArrayType>()) {
+          param_type = _context.Types().Pointer(array->element_type);
+        }
+        if (arg.c_type != param_type && IsNumericType(arg.c_type) &&
+            IsNumericType(param_type)) {
+          arg = CreateNumericCast(arg, param_type);
+        }
+        ASSERT(arg.ir_value->getType() ==
+                   _context.LLVMFunctionType(c_function_type)->getParamType(i),
+               "Function argument type mismatch at argument ",
+               std::to_string(i));
       }
-      if (arg.c_type != param_type && IsNumericType(arg.c_type) &&
-          IsNumericType(param_type)) {
-        arg = CreateNumericCast(arg, param_type);
-      }
-      ASSERT(arg.ir_value->getType() ==
-                 _context.LLVMFunctionType(c_function_type)->getParamType(i),
-             "Function argument type mismatch at argument ", std::to_string(i));
       llvm_args.push_back(arg.ir_value);
     }
 

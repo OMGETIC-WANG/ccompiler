@@ -143,6 +143,7 @@ public:
   }
 
   std::vector<ParamListItem> params;
+  bool has_va_args = false;
 };
 
 class Initializer : public DeclBase {

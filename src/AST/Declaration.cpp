@@ -233,6 +233,14 @@ static std::unique_ptr<ParamList> ParseParamList(FilteredLexer &lexer,
     return param_list;
   }
   while (true) {
+    tok = lexer.PeekNextToken();
+    if (tok.type == TokenType::DotDotDot) {
+      param_list->has_va_args = true;
+      lexer.ConsumeToken(tok);
+      ASSERT(lexer.PeekNextToken().type == TokenType::RParen,
+             "Unexpected token after '...'");
+      break;
+    }
     param_list->params.push_back(ParseParamListItem(lexer, context));
     tok = lexer.PeekNextToken();
     if (tok.type == TokenType::RParen) {

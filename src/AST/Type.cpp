@@ -120,6 +120,7 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
       }
 
       curr_type = types.Function(curr_type, parameter_types);
+      curr_type->As<FunctionType>()->has_va_args = param_list->has_va_args;
       function_parameter_names = std::move(parameter_names);
       break;
     }

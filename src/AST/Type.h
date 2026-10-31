@@ -403,6 +403,7 @@ protected:
 public:
   TypeRef return_type = nullptr;
   std::vector<TypeRef> parameters;
+  bool has_va_args = false;
 
 private:
   friend class TypeContext;
