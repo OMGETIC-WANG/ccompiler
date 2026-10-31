@@ -308,7 +308,12 @@ std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer,
   case TokenType::LiteralString: {
     lexer.ConsumeToken(tok);
     auto literal_string = std::make_unique<LiteralString>();
-    literal_string->value = ParseLiteralStringValue(tok.value);
+    CowString s = ParseLiteralStringValue(tok.value);
+    while (lexer.PeekNextToken().type == TokenType::LiteralString) {
+      s.string() +=
+          ParseLiteralStringValue(lexer.ConsumeNextToken().value).view();
+    }
+    literal_string->value = std::move(s);
     return literal_string;
   }
   case TokenType::Identifier: {
