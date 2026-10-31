@@ -101,6 +101,44 @@ static Token TryPeekAsLiteralChar(std::string_view s) {
   return Token{TokenType::Unknown};
 }
 
+static bool IsSimpleEscape(char c) {
+  switch (c) {
+  case '0':
+  case '\'':
+  case '\"':
+  case '?':
+  case '\\':
+  case 'a':
+  case 'b':
+  case 'f':
+  case 'n':
+  case 'r':
+  case 't':
+  case 'v':
+    return true;
+  default:
+    return false;
+  }
+}
+
+static size_t AdvanceEscapeSeq(std::string_view s, size_t start) {
+  if (start < s.size()) {
+    char next = s[start];
+    if (IsSimpleEscape(next)) {
+      return start + 1;
+    } else if (next == 'x') {
+      if (start + 2 < s.size()) { // x <num1> <num2>
+        return start + 3;
+      }
+    } else if (next >= '0' && next <= '7') {
+      if (start + 2 < s.size()) { // <oct0> <oct1> <oct2>
+        return start + 3;
+      }
+    }
+  }
+  return (size_t)-1;
+}
+
 // Get the end of literal string, contains the quote, return -1 if quote not
 // closed
 static size_t GetLiteralStringEnd(std::string_view s) {
@@ -111,7 +149,10 @@ static size_t GetLiteralStringEnd(std::string_view s) {
       return pos + 1;
     }
     if (s[pos] == '\\') {
-      pos += 2;
+      pos = AdvanceEscapeSeq(s, pos);
+      if (pos == (size_t)-1) {
+        return (size_t)-1;
+      }
     } else {
       pos++;
     }

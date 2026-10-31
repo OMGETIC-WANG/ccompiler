@@ -190,6 +190,110 @@ ParseLiteralNumValue(std::string_view s) {
   return u_val;
 }
 
+static bool IsSimpleEscape(char c) {
+  switch (c) {
+  case '0':
+  case '\'':
+  case '\"':
+  case '?':
+  case '\\':
+  case 'a':
+  case 'b':
+  case 'f':
+  case 'n':
+  case 'r':
+  case 't':
+  case 'v':
+    return true;
+  default:
+    return false;
+  }
+}
+
+static char CastSimpleEscape(char escape) {
+  switch (escape) {
+  case '0':
+    return '\0';
+  case '\'':
+    return '\'';
+  case '\"':
+    return '\"';
+  case '?':
+    return '\?';
+  case '\\':
+    return '\\';
+  case 'a':
+    return '\a';
+  case 'b':
+    return '\b';
+  case 'f':
+    return '\f';
+  case 'n':
+    return '\n';
+  case 'r':
+    return '\r';
+  case 't':
+    return '\t';
+  case 'v':
+    return '\v';
+  default:
+    RAISE_ERROR("Unknown escape sequence: \\", escape);
+  }
+}
+
+static int HexToInt(char c) {
+  if (c >= '0' && c <= '9') {
+    return c - '0';
+  } else if (c >= 'a' && c <= 'f') {
+    return c - 'a' + 10;
+  } else if (c >= 'A' && c <= 'F') {
+    return c - 'A' + 10;
+  } else {
+    RAISE_ERROR("Invalid hex digit: ", c);
+  }
+}
+
+static CowString ParseLiteralStringValue(std::string_view s_) {
+  std::string_view s = s_.substr(1, s_.size() - 2); // remove quote
+  for (auto c : s) {
+    if (c == '\\') {
+      goto has_escape;
+    }
+  }
+  return s;
+
+has_escape:;
+  std::string res;
+  res.reserve(s.size());
+  for (size_t i = 0; i < s.size();) {
+    if (s[i] != '\\') {
+      res.push_back(s[i]);
+      i++;
+    } else {
+      if (IsSimpleEscape(s[i + 1])) {
+        res.push_back(CastSimpleEscape(s[i + 1]));
+        i += 2;
+      } else if (s[i + 1] == 'x') {
+        int h1 = HexToInt(s[i + 2]);
+        int h0 = HexToInt(s[i + 3]);
+        ASSERT(h1 >= 0 && h1 <= 15 && h0 >= 0 && h0 <= 15,
+               "Invalid hex escape sequence");
+        res.push_back(static_cast<char>(h1 * 16 + h0));
+        i += 4;
+      } else {
+        int o2 = s[i + 1] - '0';
+        int o1 = s[i + 2] - '0';
+        int o0 = s[i + 3] - '0';
+        ASSERT(o2 >= 0 && o2 <= 7 && o1 >= 0 && o1 <= 7 && o0 >= 0 && o0 <= 7,
+               "Invalid octal escape sequence");
+        res.push_back(static_cast<char>(o2 * 64 + o1 * 8 + o0));
+        i += 4;
+      }
+    }
+  }
+  return res;
+}
+
 std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer,
                                       CompileContext &context) {
   Token tok = lexer.PeekNextToken();
@@ -203,8 +307,7 @@ std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer,
   case TokenType::LiteralString: {
     lexer.ConsumeToken(tok);
     auto literal_string = std::make_unique<LiteralString>();
-    literal_string->value =
-        tok.value.substr(1, tok.value.size() - 2); // remove quotes
+    literal_string->value = ParseLiteralStringValue(tok.value);
     return literal_string;
   }
   case TokenType::Identifier: {

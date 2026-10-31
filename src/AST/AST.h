@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../Util/CowString.h"
 #include "ASTNode.h"
 #include "Declaration.h"
 #include "Type.h"
@@ -29,7 +30,7 @@ class LiteralString : public ASTNode {
   TreeNodeFieldAsString(value);
 
 public:
-  std::string_view value;
+  CowString value;
 };
 
 class LiteralNum : public ASTNode {

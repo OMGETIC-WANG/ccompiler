@@ -38,6 +38,10 @@ template <typename T> void _AppendChunk(std::string &msg, const T &chunk) {
     msg += std::string_view(chunk);
   } else if constexpr (EnumRefl<T>::registered) {
     msg += EnumRefl<T>::GetName(chunk);
+  } else if constexpr (std::is_same_v<T, char>) {
+    msg += '\'';
+    msg += chunk;
+    msg += '\'';
   } else {
     static_assert(sizeof(T) == 0, "Unsupported chunk type for Assert message");
   }
