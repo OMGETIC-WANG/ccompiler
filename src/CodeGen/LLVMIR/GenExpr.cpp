@@ -520,6 +520,7 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     for (const auto &decl : decl_stmt->decls) {
       EmitStmt(decl.get());
     }
+    return;
   }
   if (auto *var_decl = node->DynCast<VarDecl>()) {
     detail::GenVarDecl(var_decl, *this);
