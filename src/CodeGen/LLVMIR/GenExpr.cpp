@@ -256,7 +256,14 @@ LValue ExprEmitter::EmitLValue(ASTNode *node) {
   }
   if (auto *get_field = node->DynCast<GetField>()) {
     LValue operand = EmitLValue(get_field->operand.get());
+    if (!operand.address) {
+      return {};
+    }
     return builder.GetElementPtr(operand, get_field->field_name);
+  }
+  if (auto *ptr_get_field = node->DynCast<PtrGetField>()) {
+    RValue ptr = EmitRValue(ptr_get_field->operand.get());
+    return builder.GetPtrElementPtr(ptr, ptr_get_field->field_name);
   }
   if (auto *binary = node->DynCast<BinaryOp>()) {
     if (binary->op_type == BinaryOpType::Subscript) {
@@ -300,6 +307,16 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
   }
   if (auto *var_decl = node->DynCast<VarDecl>()) {
     return detail::LoadAsRValue(detail::GenVarDecl(var_decl, *this), *this);
+  }
+  if (auto *get_field = node->DynCast<GetField>()) {
+    LValue operand_lhs = EmitLValue(get_field->operand.get());
+    if (operand_lhs.address) {
+      LValue field_lhs =
+          builder.GetElementPtr(operand_lhs, get_field->field_name);
+      return detail::LoadAsRValue(field_lhs, *this);
+    }
+    RValue operand_rhs = EmitRValue(get_field->operand.get());
+    return builder.CreateExtractValue(operand_rhs, get_field->field_name);
   }
   if (auto *bin_expr = node->DynCast<BinaryOp>()) {
     switch (bin_expr->op_type) {

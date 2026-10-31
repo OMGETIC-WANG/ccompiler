@@ -71,6 +71,7 @@ public:
   x(DecBeforeUse)\
   x(DecAfterUse)\
   x(GetField)\
+  x(PtrGetField)\
   x(Deref)\
   x(TypeCast)\
   x(GetAddress)\
@@ -132,6 +133,17 @@ class GetField : public UnaryOp {
 
 public:
   explicit GetField(std::string_view field_name = "")
+      : UnaryOp(UnaryOpType::GetField), field_name(field_name) {}
+
+  std::string_view field_name;
+};
+
+class PtrGetField : public UnaryOp {
+  ASTNodeImpl(PtrGetField);
+  TreeNodePrintFields(field_name, operand);
+
+public:
+  explicit PtrGetField(std::string_view field_name = "")
       : UnaryOp(UnaryOpType::GetField), field_name(field_name) {}
 
   std::string_view field_name;

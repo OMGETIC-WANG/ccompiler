@@ -261,6 +261,16 @@ std::unique_ptr<ASTNode> ParsePostfix(FilteredLexer &lexer,
       primary = std::move(subscript_op);
       break;
     }
+    case TokenType::RightArrow: {
+      lexer.ConsumeToken(tok);
+      auto get_field_op = std::make_unique<PtrGetField>();
+      get_field_op->operand = std::move(primary);
+      Token field_tok = lexer.ConsumeNextToken();
+      ASSERT(field_tok.type == TokenType::Identifier, "Expected field name");
+      get_field_op->field_name = field_tok.value;
+      primary = std::move(get_field_op);
+      break;
+    }
     case TokenType::Dot: {
       lexer.ConsumeToken(tok);
       auto get_field_op = std::make_unique<GetField>();

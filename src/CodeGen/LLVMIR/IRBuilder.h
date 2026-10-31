@@ -67,23 +67,15 @@ public:
     return LValue{type, alloca};
   }
 
-  LValue GetElementPtr(const LValue &value, const StructField &field) {
-    ASSERT(value.c_type->Is<StructType>(),
-           "GetElementPtr only supports struct type");
-    size_t field_index = 0;
-    bool found = false;
-    for (size_t i = 0; i < value.c_type->As<StructType>()->fields.size(); ++i) {
-      if (value.c_type->As<StructType>()->fields[i].name == field.name) {
-        field_index = i;
-        found = true;
-        break;
-      }
-    }
-    ASSERT(found, "Unknown struct field: ", field.name);
-    auto *struct_type = _context.LLVMStructType(value.c_type);
-    auto *ptr =
-        _builder.CreateStructGEP(struct_type, value.address, field_index);
+  LValue GetElementPtrImpl(llvm::StructType *type, llvm::Value *address,
+                           const StructField &field) {
+    auto *ptr = _builder.CreateStructGEP(type, address, field.index);
     return LValue{field.type, ptr};
+  }
+
+  LValue GetElementPtr(const LValue &value, const StructField &field) {
+    auto *struct_type = _context.LLVMStructType(value.c_type);
+    return GetElementPtrImpl(struct_type, value.address, field);
   }
 
   LValue GetElementPtr(const LValue &value, std::string_view field_name) {
@@ -92,6 +84,33 @@ public:
     auto field = value.c_type->As<StructType>()->GetField(field_name);
     ASSERT(field.has_value(), "Unknown struct field: ", field_name);
     return GetElementPtr(value, field.value());
+  }
+
+  LValue GetPtrElementPtr(const RValue &ptr, std::string_view field_name) {
+    ASSERT(ptr.c_type->Is<PointerType>(),
+           "PtrGetField requires a pointer operand");
+    auto *pointee_type =
+        ptr.c_type->As<PointerType>()->pointee_type->DynCast<StructType>();
+    ASSERT(pointee_type, "PtrGetField requires a pointer to struct type");
+    auto field = pointee_type->GetField(field_name);
+    ASSERT(field.has_value(), "Unknown struct field: ", field_name);
+    auto *struct_type = _context.LLVMStructType(pointee_type);
+    return GetElementPtrImpl(struct_type, ptr.ir_value, field.value());
+  }
+
+  RValue CreateExtractValue(const RValue &value, const StructField &field) {
+    ASSERT(value.c_type->Is<StructType>(),
+           "GetElementPtr only supports struct type");
+    auto *val = _builder.CreateExtractValue(value.ir_value, field.index);
+    return RValue{field.type, val};
+  }
+
+  RValue CreateExtractValue(const RValue &value, std::string_view field_name) {
+    ASSERT(value.c_type->Is<StructType>(),
+           "GetElementPtr only supports struct type");
+    auto field = value.c_type->As<StructType>()->GetField(field_name);
+    ASSERT(field.has_value(), "Unknown struct field: ", field_name);
+    return CreateExtractValue(value, field.value());
   }
 
   LValue CreateSubscript(const RValue &value, const RValue &index) {

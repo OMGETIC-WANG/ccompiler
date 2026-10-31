@@ -36,7 +36,8 @@
   x(LabelStmt)\
   x(GotoStmt)\
   x(TypeCast)\
-  x(GetField)
+  x(GetField)\
+  x(PtrGetField)
 // clang-format on
 
 MAKE_ENUM(ASTNodeType, AST_NODE_TYPE_VALUES)

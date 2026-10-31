@@ -376,17 +376,17 @@ static Token TryPeekAsSingleCharToken(std::string_view s) {
 
 static Token TryPeekAsPrefixToken(std::string_view s) {
   static std::pair<std::string_view, TokenType> prefix_tokens[] = {
-      {"==", TokenType::Eq},          {"!=", TokenType::Ne},
-      {"<=", TokenType::Le},          {">=", TokenType::Ge},
-      {"<<", TokenType::LShift},      {">>", TokenType::RShift},
-      {"&&", TokenType::And},         {"||", TokenType::Or},
-      {"++", TokenType::AddAdd},      {"--", TokenType::SubSub},
-      {"...", TokenType::DotDotDot},  {"+=", TokenType::AddEqual},
-      {"-=", TokenType::SubEqual},    {"*=", TokenType::MulEqual},
-      {"/=", TokenType::DivEqual},    {"%=", TokenType::ModEqual},
-      {"&=", TokenType::BitAndEqual}, {"|=", TokenType::BitOrEqual},
-      {"^=", TokenType::BitXorEqual}, {"<<=", TokenType::LShiftEqual},
-      {">>=", TokenType::RShiftEqual}};
+      {"==", TokenType::Eq},           {"!=", TokenType::Ne},
+      {"<=", TokenType::Le},           {">=", TokenType::Ge},
+      {"<<", TokenType::LShift},       {">>", TokenType::RShift},
+      {"&&", TokenType::And},          {"||", TokenType::Or},
+      {"++", TokenType::AddAdd},       {"--", TokenType::SubSub},
+      {"...", TokenType::DotDotDot},   {"+=", TokenType::AddEqual},
+      {"-=", TokenType::SubEqual},     {"*=", TokenType::MulEqual},
+      {"/=", TokenType::DivEqual},     {"%=", TokenType::ModEqual},
+      {"&=", TokenType::BitAndEqual},  {"|=", TokenType::BitOrEqual},
+      {"^=", TokenType::BitXorEqual},  {"<<=", TokenType::LShiftEqual},
+      {">>=", TokenType::RShiftEqual}, {"->", TokenType::RightArrow}};
 
   Token result{TokenType::Unknown};
   for (const auto &p : prefix_tokens) {
