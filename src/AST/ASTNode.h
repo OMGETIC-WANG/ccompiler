@@ -37,7 +37,10 @@
   x(GotoStmt)\
   x(TypeCast)\
   x(GetField)\
-  x(PtrGetField)
+  x(PtrGetField)\
+  x(VaStart)\
+  x(VaArg)\
+  x(VaEnd)
 // clang-format on
 
 MAKE_ENUM(ASTNodeType, AST_NODE_TYPE_VALUES)

@@ -1,5 +1,6 @@
 #include "Expr.h"
 #include "AST.h"
+#include "Declaration.h"
 #include "Operations.h"
 
 enum class PrecLevel {
@@ -312,9 +313,63 @@ std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer,
   }
   case TokenType::Identifier: {
     lexer.ConsumeToken(tok);
-    auto var_ref = std::make_unique<VarRef>();
-    var_ref->name = tok.value;
-    return var_ref;
+    if (tok.value == "__builtin_va_start") {
+      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::LParen,
+                "Expected '(' after __builtin_va_start");
+      lexer.ConsumeNextToken();
+
+      auto va_start = std::make_unique<VaStart>();
+      va_start->va_list = ParseExpr(lexer, context);
+
+      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Comma,
+                "Expected ',' after va_list in __builtin_va_start");
+      lexer.ConsumeNextToken();
+
+      va_start->last_named_arg = ParseExpr(lexer, context);
+
+      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::RParen,
+                "Expected ')' after __builtin_va_start");
+      lexer.ConsumeNextToken();
+      return va_start;
+    } else if (tok.value == "__builtin_va_arg") {
+      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::LParen,
+                "Expected '(' after __builtin_va_arg");
+      lexer.ConsumeNextToken();
+
+      auto va_arg = std::make_unique<VaArg>();
+      va_arg->va_list = ParseExpr(lexer, context);
+
+      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Comma,
+                "Expected ',' after va_list in __builtin_va_arg");
+      lexer.ConsumeNextToken();
+
+      auto declaration = ParseDeclaration(lexer, context);
+      auto parsed_type = ParseType(declaration.get(), context, false);
+      ASSERT(parsed_type.size() == 1, "Expected a single type in cast");
+
+      va_arg->type = parsed_type[0].type;
+
+      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::RParen,
+                "Expected ')' after __builtin_va_arg");
+      lexer.ConsumeNextToken();
+      return va_arg;
+    } else if (tok.value == "__builtin_va_end") {
+      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::LParen,
+                "Expected '(' after __builtin_va_end");
+      lexer.ConsumeNextToken();
+
+      auto va_end = std::make_unique<VaEnd>();
+      va_end->va_list = ParseExpr(lexer, context);
+
+      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::RParen,
+                "Expected ')' after __builtin_va_end");
+      lexer.ConsumeNextToken();
+      return va_end;
+    } else {
+      auto var_ref = std::make_unique<VarRef>();
+      var_ref->name = tok.value;
+      return var_ref;
+    }
   }
   case TokenType::LParen: {
     lexer.ConsumeToken(tok);
@@ -426,33 +481,6 @@ static std::unordered_map<TokenType, UnaryOpType> tok_to_unary_op_type = {
     {TokenType::BitNot, UnaryOpType::BitNot},
     {TokenType::Not, UnaryOpType::Not}};
 
-static TypeRef ParseCastTypeName(FilteredLexer &lexer,
-                                 CompileContext &context) {
-  DeclarationSpecifier specifier = ParseDeclarationSpecifier(lexer, context);
-  ASSERT(specifier.storage_class == StorageClass::None,
-         "A cast type cannot have a storage class");
-  ASSERT(!specifier.type_spec.is_typedef,
-         "A cast type cannot be a typedef declaration");
-
-  TypeRef type = ResolveTypeSpecifier(specifier.type_spec, context);
-  while (lexer.PeekNextToken().type == TokenType::Star) {
-    lexer.ConsumeNextToken();
-    bool is_const = false;
-    while (lexer.PeekNextToken().type == TokenType::KwConst) {
-      lexer.ConsumeNextToken();
-      is_const = true;
-    }
-    if (lexer.PeekNextToken().type == TokenType::KwVolatile) {
-      RAISE_ERROR("volatile pointer qualifiers are not supported yet");
-    }
-    type = context.Types().Pointer(type);
-    if (is_const) {
-      type = ApplyTypeTag(type, TypeTag::Const);
-    }
-  }
-  return type;
-}
-
 std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(FilteredLexer &lexer,
                                                 CompileContext &context) {
   std::unique_ptr<UnaryOp> prefix;
@@ -488,8 +516,13 @@ std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(FilteredLexer &lexer,
       Token type_start = lexer.PeekNextToken(1);
       if (IsDeclarationSpecifier(type_start, context)) {
         lexer.ConsumeToken(tok);
+
+        auto declaration = ParseDeclaration(lexer, context);
+        auto parsed_type = ParseType(declaration.get(), context, false);
+        ASSERT(parsed_type.size() == 1, "Expected a single type in cast");
+
         auto type_cast = std::make_unique<TypeCast>();
-        type_cast->target_type = ParseCastTypeName(lexer, context);
+        type_cast->target_type = parsed_type[0].type;
         add_prefix(std::move(type_cast));
         ASSERT(lexer.ConsumeNextToken().type == TokenType::RParen,
                "Expected closing paren");

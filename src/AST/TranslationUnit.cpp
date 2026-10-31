@@ -405,12 +405,28 @@ ParseFunctionDecl(FilteredLexer &lexer, ParsedType type,
   return FD;
 }
 
+static void AddVaList(CompileContext &context) {
+  auto va_list_type_ref = context.Types().GetOrCreateStruct(
+      context.CurrentScopeId(), "__builtin_va_list_type");
+  StructType *va_list_type = va_list_type_ref->As<StructType>();
+  StructField fields[] = {
+      {"", context.Types().Builtin(BuiltinKind::Int), 0},
+      {"", context.Types().Pointer(context.Types().Builtin(BuiltinKind::Void)),
+       1},
+      {"", context.Types().Pointer(context.Types().Builtin(BuiltinKind::Void)),
+       2},
+      {"", context.Types().Builtin(BuiltinKind::Int), 3}};
+  context.Types().CompleteStruct(va_list_type_ref, fields);
+  context.CurrentLayer().AddTypedef("va_list", va_list_type);
+}
+
 std::unique_ptr<TranslationUnit> ParseTranslationUnit(FilteredLexer &lexer,
                                                       TypeContext &types) {
   std::unique_ptr<TranslationUnit> TU = std::make_unique<TranslationUnit>();
   TU->body = std::make_unique<CompoundStmt>();
   CompileContext context(types);
   context.PushLayer();
+  AddVaList(context);
   while (true) {
     Token tok = lexer.PeekNextToken();
     if (tok.type == TokenType::EndOfFile) {

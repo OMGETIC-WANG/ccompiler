@@ -380,7 +380,23 @@ public:
                "Function argument type mismatch at argument ",
                std::to_string(i));
       }
-      llvm_args.push_back(arg.ir_value);
+      auto arg_ir_value = arg.ir_value;
+      if (function->has_va_args && i >= function->parameters.size()) {
+        if (arg_ir_value->getType()->isIntegerTy() &&
+            arg_ir_value->getType()->getIntegerBitWidth() < 32) {
+          if (HasTypeTag(arg.c_type, TypeTag::Unsigned)) {
+            arg_ir_value = _builder.CreateIntCast(arg_ir_value,
+                                                  _builder.getInt32Ty(), false);
+          } else {
+            arg_ir_value = _builder.CreateIntCast(arg_ir_value,
+                                                  _builder.getInt32Ty(), true);
+          }
+        } else if (arg_ir_value->getType()->isFloatTy()) {
+          arg_ir_value =
+              _builder.CreateFPCast(arg_ir_value, _builder.getDoubleTy());
+        }
+      }
+      llvm_args.push_back(arg_ir_value);
     }
 
     auto *call = _builder.CreateCall(_context.LLVMFunctionType(c_function_type),
@@ -399,6 +415,21 @@ public:
     ASSERT(value.ir_value->getType()->isIntegerTy(),
            "Bitwise NOT requires an integer operand");
     return RValue{value.c_type, _builder.CreateNot(value.ir_value)};
+  }
+
+  void CreateVaStart(const LValue &va_list) {
+    _builder.CreateIntrinsic(llvm::Intrinsic::vastart, {_builder.getPtrTy()},
+                             {va_list.address});
+  }
+
+  void CreateVaEnd(const LValue &va_list) {
+    _builder.CreateIntrinsic(llvm::Intrinsic::vaend, {_builder.getPtrTy()},
+                             {va_list.address});
+  }
+
+  RValue CreateVaArg(const LValue &va_list, TypeRef type) {
+    return RValue{
+        type, _builder.CreateVAArg(va_list.address, _context.LLVMType(type))};
   }
 
 private:

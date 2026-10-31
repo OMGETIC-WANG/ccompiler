@@ -427,7 +427,7 @@ std::unique_ptr<Declaration> ParseDeclaration(FilteredLexer &lexer,
         ParseInitDeclarator(lexer, context));
     tok = lexer.PeekNextToken();
     if (tok.type == TokenType::Semicolon || tok.type == TokenType::LBrace ||
-        tok.type == TokenType::EndOfFile) {
+        tok.type == TokenType::EndOfFile || tok.type == TokenType::RParen) {
       break;
     }
     ASSERT(tok.type == TokenType::Comma, "Expected comma in declaration");
