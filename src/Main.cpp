@@ -12,6 +12,7 @@
 #include <iostream>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
+#include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_ostream.h>
 #include <string>
 
@@ -56,6 +57,14 @@ int main(int argc, char **argv) {
   auto llvm_context = std::make_unique<llvm::LLVMContext>();
   auto module = GenerateLLVMModule(TU.get(), types, *llvm_context);
   std::string ir = PrintModule(*module);
+
+  std::string verification_error;
+  llvm::raw_string_ostream error_stream(verification_error);
+  if (llvm::verifyModule(*module, &error_stream)) {
+    std::cout << ir;
+    error_stream.flush();
+    RAISE_ERROR("Invalid LLVM module:\n", verification_error);
+  }
 
   if (output_file.size()) {
     auto out_path = std::filesystem::path(output_file);

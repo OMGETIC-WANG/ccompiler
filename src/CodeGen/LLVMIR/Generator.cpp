@@ -159,11 +159,5 @@ GenerateLLVMModule(const TranslationUnit *tu, TypeContext &types,
     }
   }
 
-  std::string verification_error;
-  llvm::raw_string_ostream error_stream(verification_error);
-  if (llvm::verifyModule(*module, &error_stream)) {
-    error_stream.flush();
-    RAISE_ERROR("Invalid LLVM module:\n", verification_error);
-  }
   return module;
 }
