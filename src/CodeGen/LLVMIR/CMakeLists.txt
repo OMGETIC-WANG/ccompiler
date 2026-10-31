@@ -30,8 +30,9 @@ endif()
 find_package(LLVM 23.1.3 EXACT CONFIG REQUIRED)
 
 target_sources(
-  ccompiler PRIVATE Generator.cpp GenContext.cpp GenDecl.cpp GenExpr.cpp
-                    ${PROJECT_SOURCE_DIR}/src/JITRunner/JITRunner.cpp)
+  ccompiler
+  PRIVATE Generator.cpp GenContext.cpp GenDecl.cpp GenExpr.cpp ConstantEval.cpp
+          ${PROJECT_SOURCE_DIR}/src/JITRunner/JITRunner.cpp)
 
 target_include_directories(ccompiler PRIVATE ${LLVM_INCLUDE_DIRS})
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND "${LLVM_DEFINITIONS}")

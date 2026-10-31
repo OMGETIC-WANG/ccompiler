@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "ConstantEval.h"
+
 void GenStructDecl(StructDecl *decl, GenContext &context) {
   if (!decl->fields) {
     return;
@@ -44,33 +46,34 @@ void GenEnumDecl(EnumDecl *decl, GenContext &context) {
 
   std::vector<EnumValue> values;
   values.reserve(decl->values.size());
-  for (const auto &element : decl->values) {
-    ASSERT_EQ(element->value->GetType(), ASTNodeType::LiteralNum,
-              "Only support literal num enum value yet");
-    values.push_back(
-        {.name = std::string(element->name),
-         .value = GetEnumValue(element->value->As<LiteralNum>()->value)});
+  for (size_t i = 0; i < decl->values.size(); i++) {
+    const auto &element = decl->values[i];
+    std::variant<int64_t, uint64_t> enum_val;
+    if (element->value) {
+      NumericValue val = EvalNumeric(element->value.get());
+      if (std::holds_alternative<double>(val)) {
+        RAISE_ERROR("Enum value cannot be a floating point number");
+      }
+      if (std::holds_alternative<int64_t>(val)) {
+        enum_val = std::get<int64_t>(val);
+      } else {
+        enum_val = std::get<uint64_t>(val);
+      }
+    } else {
+      if (i == 0) {
+        enum_val = 0;
+      } else {
+        auto prev = values.back();
+        enum_val = std::visit(
+            [](auto arg) -> std::variant<int64_t, uint64_t> { return arg + 1; },
+            prev.value);
+      }
+    }
+    values.push_back({.name = std::string(element->name), .value = enum_val});
   }
 
   TypeRef underlying = context.Types().Builtin(BuiltinKind::Int);
   context.Types().CompleteEnum(decl->type, underlying, values);
-}
-
-static llvm::Constant *GenNumericConstant(TypeRef type, LiteralNum *literal,
-                                          GenContext &context) {
-  llvm::Type *llvm_type = context.LLVMType(type);
-  if (std::holds_alternative<int64_t>(literal->value)) {
-    ASSERT(llvm_type->isIntegerTy(), "Integer initializer type mismatch");
-    return llvm::ConstantInt::get(llvm_type, std::get<int64_t>(literal->value),
-                                  true);
-  }
-  if (std::holds_alternative<uint64_t>(literal->value)) {
-    ASSERT(llvm_type->isIntegerTy(), "Integer initializer type mismatch");
-    return llvm::ConstantInt::get(llvm_type, std::get<uint64_t>(literal->value),
-                                  false);
-  }
-  ASSERT(llvm_type->isFloatingPointTy(), "Floating initializer type mismatch");
-  return llvm::ConstantFP::get(llvm_type, std::get<double>(literal->value));
 }
 
 llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
@@ -81,7 +84,7 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
 
   if (auto *value_init = initializer->DynCast<ValueInitializer>()) {
     if (auto *literal = value_init->value->DynCast<LiteralNum>()) {
-      return GenNumericConstant(type, literal, context);
+      return EvalNumericConstant(type, literal, context);
     }
     if (auto *literal = value_init->value->DynCast<LiteralString>()) {
       ASSERT(type->Is<PointerType>(),

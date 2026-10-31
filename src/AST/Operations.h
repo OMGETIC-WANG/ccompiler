@@ -21,19 +21,24 @@ public:
 };
 
 // clang-format off
-#define BINARY_ARITHMETIC_OP_VALUES(x)\
+#define BINARY_COMPOUNT_ASSIGN_OP_VALUES(x)\
+  x(AddAssign)\
+  x(SubAssign)\
+  x(MulAssign)\
+  x(DivAssign)\
+  x(ModAssign)\
+  x(BitAndAssign)\
+  x(BitOrAssign)\
+  x(BitXorAssign)\
+  x(LShiftAssign)\
+  x(RShiftAssign)
+
+#define BINARY_NUMERIC_ARITHMETIC_OP_VALUES(x)\
   x(Add)\
   x(Sub)\
   x(Mul)\
   x(Div)\
   x(Mod)\
-  x(AddAssign)\
-  x(SubAssign)\
-  x(MulAssign)\
-  x(DivAssign)\
-  x(ModAssign)
-
-#define BINARY_COMP_OP_VALUES(x)\
   x(Eq)\
   x(Ne)\
   x(Lt)\
@@ -41,29 +46,28 @@ public:
   x(Le)\
   x(Ge)
 
-#define BINARY_BITWISE_OP_VALUES(x)\
+#define BINARY_BITWISE_ARITHMETIC_OP_VALUES(x)\
   x(BitAnd)\
   x(BitOr)\
   x(BitXor)\
   x(LShift)\
   x(RShift)
 
-#define BINARY_BITWISE_ASSIGN_OP_VALUES(x)\
-  x(BitAndAssign)\
-  x(BitOrAssign)\
-  x(BitXorAssign)\
-  x(LShiftAssign)\
-  x(RShiftAssign)
-
 #define BINARY_OP_TYPE_VALUES(x)\
   x(Assignment)\
-  BINARY_ARITHMETIC_OP_VALUES(x)\
-  BINARY_BITWISE_OP_VALUES(x)\
-  BINARY_BITWISE_ASSIGN_OP_VALUES(x)\
-  BINARY_COMP_OP_VALUES(x)\
+  BINARY_NUMERIC_ARITHMETIC_OP_VALUES(x)\
+  BINARY_BITWISE_ARITHMETIC_OP_VALUES(x)\
+  BINARY_COMPOUNT_ASSIGN_OP_VALUES(x)\
   x(Subscript)\
   x(And)\
   x(Or)
+
+#define UNARY_ARITHMETIC_OP_VALUES(x)\
+  x(Not)\
+  x(BitNot)\
+  x(UnaryPlus)\
+  x(UnaryMinus)\
+  x(TypeCast)
 
 #define UNARY_OP_TYPE_VALUES(x)\
   x(IncBeforeUse)\
@@ -73,12 +77,8 @@ public:
   x(GetField)\
   x(PtrGetField)\
   x(Deref)\
-  x(TypeCast)\
   x(GetAddress)\
-  x(Not)\
-  x(BitNot)\
-  x(UnaryPlus)\
-  x(UnaryMinus)
+  UNARY_ARITHMETIC_OP_VALUES(x)
 // clang-format on
 
 MAKE_ENUM(BinaryOpType, BINARY_OP_TYPE_VALUES)

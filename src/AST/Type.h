@@ -348,7 +348,7 @@ private:
 
 struct EnumValue {
   std::string name;
-  int64_t value;
+  std::variant<int64_t, uint64_t> value;
 };
 
 class EnumType : public TypeBase {
