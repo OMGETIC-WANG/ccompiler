@@ -152,6 +152,8 @@ GenerateLLVMModule(const TranslationUnit *tu, TypeContext &types,
     case ASTNodeType::VarDecl:
       GenGlobalVarDecl(child->As<VarDecl>(), context);
       break;
+    case ASTNodeType::TypedefDecl:
+      break;
     default:
       RAISE_ERROR("Unsupported top-level AST node: ", child->GetType());
     }

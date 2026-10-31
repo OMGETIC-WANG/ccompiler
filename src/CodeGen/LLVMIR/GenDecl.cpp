@@ -74,6 +74,7 @@ void GenEnumDecl(EnumDecl *decl, GenContext &context) {
 
   TypeRef underlying = context.Types().Builtin(BuiltinKind::Int);
   context.Types().CompleteEnum(decl->type, underlying, values);
+  context.CurrLayer().enums[decl->name] = decl->type->As<EnumType>();
 }
 
 llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,

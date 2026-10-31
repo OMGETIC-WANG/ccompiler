@@ -467,9 +467,19 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     }
   }
 
-  LValue lhs = EmitLValue(node);
-  if (lhs.address) {
-    return detail::LoadAsRValue(lhs, *this);
+  try {
+    LValue lhs = EmitLValue(node);
+    if (lhs.address) {
+      return detail::LoadAsRValue(lhs, *this);
+    }
+  } catch (...) {
+    if (auto var_ref = node->DynCast<VarRef>()) {
+      auto enum_val = context.FindEnumValue(var_ref->name);
+      if (enum_val.has_value()) {
+        return enum_val.value();
+      }
+    }
+    throw;
   }
   RAISE_ERROR("Unsupported ASTNode type: ", node->GetType());
 }
@@ -506,6 +516,11 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     return;
   }
 
+  if (auto *decl_stmt = node->DynCast<DeclStmt>()) {
+    for (const auto &decl : decl_stmt->decls) {
+      EmitStmt(decl.get());
+    }
+  }
   if (auto *var_decl = node->DynCast<VarDecl>()) {
     detail::GenVarDecl(var_decl, *this);
     return;
@@ -677,6 +692,9 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
   }
   if (auto *struct_decl = node->DynCast<StructDecl>()) {
     GenStructDecl(struct_decl, context);
+    return;
+  }
+  if (node->DynCast<TypedefDecl>()) {
     return;
   }
   EmitRValue(node);

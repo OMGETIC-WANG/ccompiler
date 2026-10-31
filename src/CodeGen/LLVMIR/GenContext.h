@@ -3,6 +3,8 @@
 #include "../../AST/TypeContext.h"
 #include "Value.h"
 
+#include <llvm/IR/Constants.h>
+
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -55,6 +57,7 @@ struct FunctionValue {
 class GenContextLayer {
 public:
   std::unordered_map<std::string_view, LValue> variables;
+  std::unordered_map<std::string_view, EnumType *> enums;
 };
 
 class LoopContextLayer {
@@ -115,6 +118,24 @@ public:
       }
     }
     return nullptr;
+  }
+
+  std::optional<RValue> FindEnumValue(std::string_view name) {
+    for (auto it = layers.rbegin(); it != layers.rend(); ++it) {
+      for (auto &[_, enum_type] : it->enums) {
+        for (auto &value : enum_type->enumerators) {
+          if (value.name == name) {
+            auto llvm_val = std::visit(
+                [this, enum_type](auto v) {
+                  return llvm::ConstantInt::get(LLVMType(enum_type), v, true);
+                },
+                value.value);
+            return RValue{enum_type, llvm_val};
+          }
+        }
+      }
+    }
+    return std::nullopt;
   }
 
   FunctionValue *FindFunction(std::string_view name) {
