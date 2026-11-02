@@ -5,12 +5,16 @@
 #include "GenContext.h"
 #include "Value.h"
 
+#include <llvm/IR/Attributes.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Intrinsics.h>
 
+#include <optional>
 #include <span>
 #include <string_view>
 #include <vector>
+
+std::optional<llvm::Attribute::AttrKind> GetIntegerABIAttribute(TypeRef type);
 
 class IRBuilder {
 public:

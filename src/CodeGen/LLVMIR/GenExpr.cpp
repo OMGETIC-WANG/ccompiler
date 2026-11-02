@@ -26,12 +26,8 @@ static RValue TryCastTo(TypeRef type, const RValue &value, IRBuilder &builder) {
       builder.Context().LLVMType(value.c_type)) {
     return RValue{type, value.ir_value};
   }
-  int promote = GetPromote(type, value.c_type);
-  if (promote == -1) {
-    ASSERT(type.get() == value.c_type.get(),
-           "Failed to cast between incompatible types");
-    return RValue{type, value.ir_value};
-  }
+  ASSERT(IsNumericType(type) && IsNumericType(value.c_type),
+         "Failed to cast between incompatible types");
   return builder.CreateNumericCast(value, type);
 }
 
@@ -278,14 +274,13 @@ struct ExprEmitter::detail {
     return EvalAndOr<EvalAndOr::Or>(left, right, self);
   }
 
-  static void PromoteNumericOperands(RValue &left, RValue &right,
-                                     ExprEmitter &self) {
-    int promote = GetPromote(left.c_type, right.c_type);
-    if (promote == 0) {
-      left = self.builder.CreateNumericCast(left, right.c_type);
-    } else if (promote == 1) {
-      right = self.builder.CreateNumericCast(right, left.c_type);
-    }
+  static TypeRef PromoteNumericOperands(RValue &left, RValue &right,
+                                        ExprEmitter &self) {
+    TypeRef common_type =
+        UsualArithmeticType(left.c_type, right.c_type, self.context.Types());
+    left = TryCastTo(common_type, left, self.builder);
+    right = TryCastTo(common_type, right, self.builder);
+    return common_type;
   }
 
   static RValue EvalBinaryOp(BinaryOpType op_type, RValue left, RValue right,
@@ -296,8 +291,8 @@ struct ExprEmitter::detail {
              "Bitwise operators require an integer left operand");
       ASSERT(IsIntegerType(right.c_type),
              "Bitwise operators require an integer right operand");
-      PromoteNumericOperands(left, right, self);
-      return self.builder.CreateBinaryOp(op_type, left, right, left.c_type);
+      TypeRef result_type = PromoteNumericOperands(left, right, self);
+      return self.builder.CreateBinaryOp(op_type, left, right, result_type);
     }
 
     if (op_type == BinaryOpType::LShift || op_type == BinaryOpType::RShift) {
@@ -305,8 +300,12 @@ struct ExprEmitter::detail {
              "Shift operators require an integer left operand");
       ASSERT(IsIntegerType(right.c_type),
              "Shift operators require an integer right operand");
-      if (right.c_type != left.c_type) {
-        right = self.builder.CreateNumericCast(right, left.c_type);
+      left = TryCastTo(PromoteInteger(left.c_type, self.context.Types()), left,
+                       self.builder);
+      right = TryCastTo(PromoteInteger(right.c_type, self.context.Types()),
+                        right, self.builder);
+      if (left.c_type != right.c_type) {
+        right = TryCastTo(left.c_type, right, self.builder);
       }
       return self.builder.CreateBinaryOp(op_type, left, right, left.c_type);
     }
@@ -323,7 +322,7 @@ struct ExprEmitter::detail {
       return RValue{left.c_type, subscripted.address};
     }
 
-    PromoteNumericOperands(left, right, self);
+    TypeRef result_type = PromoteNumericOperands(left, right, self);
     bool is_comparison =
         op_type == BinaryOpType::Eq || op_type == BinaryOpType::Ne ||
         op_type == BinaryOpType::Lt || op_type == BinaryOpType::Gt ||
@@ -331,7 +330,7 @@ struct ExprEmitter::detail {
     TypeRef out_type =
         is_comparison
             ? self.context.Types().Builtin(BuiltinKind::I1, TypeTag::Unsigned)
-            : left.c_type;
+            : result_type;
     return self.builder.CreateBinaryOp(op_type, left, right, out_type);
   }
 };
@@ -558,18 +557,28 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
       RValue operand = EmitRValue(unary_expr->operand.get());
       ASSERT(IsNumericType(operand.c_type),
              "Unary plus requires a numeric type");
+      if (IsIntegerType(operand.c_type)) {
+        operand = TryCastTo(PromoteInteger(operand.c_type, context.Types()),
+                            operand, builder);
+      }
       return operand;
     }
     case UnaryOpType::UnaryMinus: {
       RValue operand = EmitRValue(unary_expr->operand.get());
       ASSERT(IsNumericType(operand.c_type),
              "Unary minus requires a numeric type");
+      if (IsIntegerType(operand.c_type)) {
+        operand = TryCastTo(PromoteInteger(operand.c_type, context.Types()),
+                            operand, builder);
+      }
       return builder.CreateInv(operand);
     }
     case UnaryOpType::BitNot: {
       RValue operand = EmitRValue(unary_expr->operand.get());
       ASSERT(IsIntegerType(operand.c_type),
              "Bitwise NOT requires an integer type");
+      operand = TryCastTo(PromoteInteger(operand.c_type, context.Types()),
+                          operand, builder);
       return builder.CreateBitNot(operand);
     }
     case UnaryOpType::IncBeforeUse:

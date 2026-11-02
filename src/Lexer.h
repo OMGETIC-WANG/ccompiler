@@ -67,6 +67,7 @@
   x(KwGoto)\
   x(KwInt)\
   x(KwChar)\
+  x(KwShort)\
   x(KwFloat)\
   x(KwDouble)\
   x(KwSigned)\
@@ -128,6 +129,7 @@ inline bool IsTypeKeyword(TokenType type) {
   case TokenType::KwVoid:
   case TokenType::KwInt:
   case TokenType::KwChar:
+  case TokenType::KwShort:
   case TokenType::KwFloat:
   case TokenType::KwDouble:
   case TokenType::KwLong:

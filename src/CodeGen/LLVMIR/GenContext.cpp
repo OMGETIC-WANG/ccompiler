@@ -44,6 +44,9 @@ llvm::Type *LLVMTypeConverter::Convert(TypeRef type) {
     case BuiltinKind::Char:
       result = llvm::Type::getInt8Ty(_context);
       break;
+    case BuiltinKind::Short:
+      result = llvm::Type::getInt16Ty(_context);
+      break;
     case BuiltinKind::Float:
       result = llvm::Type::getFloatTy(_context);
       break;
@@ -51,6 +54,9 @@ llvm::Type *LLVMTypeConverter::Convert(TypeRef type) {
       result = llvm::Type::getDoubleTy(_context);
       break;
     case BuiltinKind::Long:
+      result = llvm::Type::getInt64Ty(_context);
+      break;
+    case BuiltinKind::LongLong:
       result = llvm::Type::getInt64Ty(_context);
       break;
     case BuiltinKind::I1:

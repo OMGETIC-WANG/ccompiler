@@ -32,16 +32,16 @@ struct TypeSpecifier {
   bool is_unsigned = false;
 };
 
-constexpr size_t default_align = 4;
-
 // clang-format off
 #define BUILTIN_KIND_VALUES(x)\
   x(Void)\
   x(Int)\
   x(Char)\
+  x(Short)\
   x(Float)\
   x(Double)\
   x(Long)\
+  x(LongLong)\
   x(I1)
 // clang-format on
 
@@ -210,8 +210,9 @@ private:
 };
 
 inline bool IsIntegerKind(BuiltinKind kind) {
-  return kind == BuiltinKind::Char || kind == BuiltinKind::Int ||
-         kind == BuiltinKind::Long || kind == BuiltinKind::I1;
+  return kind == BuiltinKind::Char || kind == BuiltinKind::Short ||
+         kind == BuiltinKind::Int || kind == BuiltinKind::Long ||
+         kind == BuiltinKind::LongLong || kind == BuiltinKind::I1;
 }
 
 inline bool IsIntegerType(TypeRef type) {
@@ -238,39 +239,11 @@ inline bool IsNumericType(TypeRef type) {
   return IsIntegerType(type) || IsFloatingType(type);
 }
 
-// Return: -1: not needed; 0: left; 1:right
-inline int GetPromote(TypeRef left, TypeRef right) {
-  if (left == right || !IsNumericType(left) || !IsNumericType(right)) {
-    return -1;
-  }
+int IntegerConversionRank(BuiltinKind kind);
 
-  BuiltinType *left_t = left->As<BuiltinType>();
-  BuiltinType *right_t = right->As<BuiltinType>();
+TypeRef PromoteInteger(TypeRef type, TypeContext &types);
 
-  if (IsIntegerKind(left_t->Kind()) && IsIntegerKind(right_t->Kind())) {
-    // shorter->longer
-    if (left_t->GetSize() != right_t->GetSize()) {
-      return left_t->GetSize() > right_t->GetSize() ? 1 : 0;
-    }
-    // signed->unsigned
-    if (HasTypeTag(left, TypeTag::Unsigned) &&
-        !HasTypeTag(right, TypeTag::Unsigned)) {
-      return 1;
-    } else {
-      return 0;
-    }
-  }
-  if (IsFloatingKind(left_t->Kind()) && IsFloatingKind(right_t->Kind())) {
-    // shorter->longer
-    return left_t->GetSize() > right_t->GetSize() ? 1 : 0;
-  }
-  // integer->floating point
-  if (IsFloatingKind(left_t->Kind())) {
-    return 1;
-  } else {
-    return 0;
-  }
-}
+TypeRef UsualArithmeticType(TypeRef left, TypeRef right, TypeContext &types);
 
 struct StructField {
   std::string name;
@@ -320,7 +293,7 @@ protected:
     size_t align = GetAlign();
     size_t size = 0;
     for (const auto &field : fields) {
-      size_t field_align = std::min(field.type->GetAlign(), align);
+      size_t field_align = field.type->GetAlign();
       size = (size + field_align - 1) / field_align * field_align;
       size += field.type->GetSize();
     }
@@ -339,7 +312,7 @@ protected:
     for (const auto &field : fields) {
       max_valid_align = std::max(field.type->GetAlign(), max_valid_align);
     }
-    return std::min(max_valid_align, default_align);
+    return max_valid_align;
   }
 
 private:

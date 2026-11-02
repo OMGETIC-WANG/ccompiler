@@ -6,6 +6,14 @@
 #include <string>
 #include <vector>
 
+std::optional<llvm::Attribute::AttrKind> GetIntegerABIAttribute(TypeRef type) {
+  if (!IsIntegerType(type) || type->GetSize() * 8 >= 32) {
+    return std::nullopt;
+  }
+  return HasTypeTag(type, TypeTag::Unsigned) ? llvm::Attribute::ZExt
+                                             : llvm::Attribute::SExt;
+}
+
 bool IRBuilder::IsTerminated() const {
   auto *block = GetInsertBlock();
   return block && block->hasTerminator();
@@ -356,18 +364,17 @@ RValue IRBuilder::CreateFuncInvoke(const RValue &func,
     }
     auto arg_ir_value = arg.ir_value;
     if (function->has_va_args && i >= function->parameters.size()) {
-      if (arg_ir_value->getType()->isIntegerTy() &&
-          arg_ir_value->getType()->getIntegerBitWidth() < 32) {
-        if (HasTypeTag(arg.c_type, TypeTag::Unsigned)) {
-          arg_ir_value = _builder.CreateIntCast(arg_ir_value,
-                                                _builder.getInt32Ty(), false);
-        } else {
-          arg_ir_value =
-              _builder.CreateIntCast(arg_ir_value, _builder.getInt32Ty(), true);
+      if (IsIntegerType(arg.c_type)) {
+        TypeRef promoted = PromoteInteger(arg.c_type, _context.Types());
+        if (promoted != arg.c_type) {
+          arg = CreateNumericCast(arg, promoted);
+          arg_ir_value = arg.ir_value;
         }
-      } else if (arg_ir_value->getType()->isFloatTy()) {
-        arg_ir_value =
-            _builder.CreateFPCast(arg_ir_value, _builder.getDoubleTy());
+      } else if (IsFloatingType(arg.c_type) &&
+                 arg.c_type->As<BuiltinType>()->Kind() == BuiltinKind::Float) {
+        arg = CreateNumericCast(arg,
+                                _context.Types().Builtin(BuiltinKind::Double));
+        arg_ir_value = arg.ir_value;
       }
     }
     llvm_args.push_back(arg_ir_value);
@@ -375,6 +382,18 @@ RValue IRBuilder::CreateFuncInvoke(const RValue &func,
 
   auto *call = _builder.CreateCall(_context.LLVMFunctionType(c_function_type),
                                    func.ir_value, llvm_args);
+  if (auto attr = GetIntegerABIAttribute(function->return_type)) {
+    call->addRetAttr(*attr);
+  }
+  for (size_t i = 0; i < function->parameters.size(); ++i) {
+    TypeRef parameter_type = function->parameters[i];
+    if (auto *array = parameter_type->DynCast<ArrayType>()) {
+      parameter_type = _context.Types().Pointer(array->element_type);
+    }
+    if (auto attr = GetIntegerABIAttribute(parameter_type)) {
+      call->addParamAttr(static_cast<unsigned>(i), *attr);
+    }
+  }
   return RValue{function->return_type, call};
 }
 

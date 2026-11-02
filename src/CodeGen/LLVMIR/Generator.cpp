@@ -73,6 +73,16 @@ void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
                                       context.Module());
   }
   function->setLinkage(linkage);
+  if (auto attr = GetIntegerABIAttribute(function_type->return_type)) {
+    function->addRetAttr(*attr);
+  }
+  for (size_t i = 0; i < function_type->parameters.size(); ++i) {
+    TypeRef parameter_type =
+        GetParameterType(function_type->parameters[i], context.Types());
+    if (auto attr = GetIntegerABIAttribute(parameter_type)) {
+      function->addParamAttr(static_cast<unsigned>(i), *attr);
+    }
+  }
   context.AddFunction(decl->name, FunctionValue{resolved, function});
 
   if (!decl->body) {

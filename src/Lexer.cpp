@@ -192,6 +192,7 @@ static Token TryPeekAsKeyword(std::string_view s) {
       {"goto", TokenType::KwGoto},
       {"int", TokenType::KwInt},
       {"char", TokenType::KwChar},
+      {"short", TokenType::KwShort},
       {"float", TokenType::KwFloat},
       {"double", TokenType::KwDouble},
       {"signed", TokenType::KwSigned},

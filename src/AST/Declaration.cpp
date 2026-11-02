@@ -21,21 +21,29 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
   TypeSpecifier &spec = decl_spec.type_spec;
   spec.scope_id = context.CurrentScopeId();
 
-  enum class IntrinsicType { None, Int, Char, Float, Double, Void, Long };
-
-  IntrinsicType intrinsic_type = IntrinsicType::None;
   bool saw_signed = false;
   bool saw_unsigned = false;
+  bool saw_void = false;
+  bool saw_char = false;
+  bool saw_short = false;
+  bool saw_int = false;
+  bool saw_float = false;
+  bool saw_double = false;
+  size_t long_count = 0;
 
   auto has_nominal_type = [&] {
     return spec.is_struct || spec.is_enum || spec.is_named_type;
+  };
+  auto has_builtin_type = [&] {
+    return saw_void || saw_char || saw_short || saw_int || saw_float ||
+           saw_double || long_count != 0;
   };
 
   while (true) {
     Token tok = lexer.PeekNextToken();
     if (tok.type == TokenType::Identifier) {
-      if (has_nominal_type() || intrinsic_type != IntrinsicType::None ||
-          saw_signed || saw_unsigned) {
+      if (has_nominal_type() || has_builtin_type() || saw_signed ||
+          saw_unsigned) {
         break;
       }
       spec.type_name = tok.value;
@@ -68,15 +76,17 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
     case TokenType::KwSigned:
     case TokenType::KwUnsigned: {
       const bool is_unsigned = tok.type == TokenType::KwUnsigned;
-      ASSERT(!(saw_signed && is_unsigned) && !(saw_unsigned && !is_unsigned),
+      ASSERT(!(saw_signed && saw_unsigned),
              "signed and unsigned cannot be used together");
+      ASSERT(is_unsigned ? !saw_unsigned : !saw_signed,
+             "Duplicate signedness specifier");
       saw_signed |= !is_unsigned;
       saw_unsigned |= is_unsigned;
       lexer.ConsumeToken(tok);
       break;
     }
     case TokenType::KwStruct:
-      ASSERT(!has_nominal_type() && intrinsic_type == IntrinsicType::None,
+      ASSERT(!has_nominal_type() && !has_builtin_type(),
              "Multiple base types in declaration specifier");
       spec.is_struct = true;
       lexer.ConsumeToken(tok);
@@ -93,7 +103,7 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
       }
       break;
     case TokenType::KwEnum:
-      ASSERT(!has_nominal_type() && intrinsic_type == IntrinsicType::None,
+      ASSERT(!has_nominal_type() && !has_builtin_type(),
              "Multiple base types in declaration specifier");
       spec.is_enum = true;
       lexer.ConsumeToken(tok);
@@ -111,6 +121,7 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
       break;
     case TokenType::KwInt:
     case TokenType::KwChar:
+    case TokenType::KwShort:
     case TokenType::KwFloat:
     case TokenType::KwDouble:
     case TokenType::KwVoid:
@@ -118,32 +129,26 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
       ASSERT(!has_nominal_type(),
              "Multiple base types in declaration specifier");
       if (tok.type == TokenType::KwInt) {
-        ASSERT(intrinsic_type == IntrinsicType::None ||
-                   intrinsic_type == IntrinsicType::Long,
-               "Multiple integer types in declaration specifier");
-        if (intrinsic_type == IntrinsicType::None) {
-          intrinsic_type = IntrinsicType::Int;
-        }
+        ASSERT(!saw_int, "Duplicate int declaration specifier");
+        saw_int = true;
+      } else if (tok.type == TokenType::KwShort) {
+        ASSERT(!saw_short, "Duplicate short declaration specifier");
+        saw_short = true;
       } else if (tok.type == TokenType::KwChar) {
-        ASSERT(intrinsic_type == IntrinsicType::None,
-               "Multiple integer types in declaration specifier");
-        intrinsic_type = IntrinsicType::Char;
+        ASSERT(!saw_char, "Duplicate char declaration specifier");
+        saw_char = true;
       } else if (tok.type == TokenType::KwFloat) {
-        ASSERT(intrinsic_type == IntrinsicType::None,
-               "Multiple base types in declaration specifier");
-        intrinsic_type = IntrinsicType::Float;
+        ASSERT(!saw_float, "Duplicate float declaration specifier");
+        saw_float = true;
       } else if (tok.type == TokenType::KwDouble) {
-        ASSERT(intrinsic_type == IntrinsicType::None,
-               "Multiple base types in declaration specifier");
-        intrinsic_type = IntrinsicType::Double;
+        ASSERT(!saw_double, "Duplicate double declaration specifier");
+        saw_double = true;
       } else if (tok.type == TokenType::KwVoid) {
-        ASSERT(intrinsic_type == IntrinsicType::None,
-               "Multiple base types in declaration specifier");
-        intrinsic_type = IntrinsicType::Void;
+        ASSERT(!saw_void, "Duplicate void declaration specifier");
+        saw_void = true;
       } else if (tok.type == TokenType::KwLong) {
-        ASSERT(intrinsic_type == IntrinsicType::None,
-               "long long is not supported");
-        intrinsic_type = IntrinsicType::Long;
+        ASSERT(long_count < 2, "Too many long declaration specifiers");
+        ++long_count;
       }
       lexer.ConsumeToken(tok);
       spec.is_builtin = true;
@@ -161,41 +166,65 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
   ASSERT(!has_nominal_type() || (!saw_signed && !saw_unsigned),
          "signedness cannot qualify a struct, enum, or typedef type");
 
-  if (intrinsic_type == IntrinsicType::None) {
-    if (saw_signed || saw_unsigned) {
-      intrinsic_type = IntrinsicType::Int;
-      spec.is_builtin = true;
-    } else {
-      return;
-    }
+  if (has_nominal_type()) {
+    ASSERT(!has_builtin_type(), "Multiple base types in declaration specifier");
+    return;
   }
 
-  switch (intrinsic_type) {
-  case IntrinsicType::Int:
-    spec.type_name = "int";
-    break;
-  case IntrinsicType::Char:
-    spec.type_name = "char";
-    break;
-  case IntrinsicType::Float:
-    spec.type_name = "float";
-    break;
-  case IntrinsicType::Double:
-    spec.type_name = "double";
-    break;
-  case IntrinsicType::Void:
-    spec.type_name = "void";
-    break;
-  case IntrinsicType::Long:
-    spec.type_name = "long";
-    break;
-  case IntrinsicType::None:
-    break;
+  if (saw_double && long_count != 0) {
+    RAISE_ERROR("long double is not supported yet");
   }
-  ASSERT(intrinsic_type == IntrinsicType::Int ||
-             intrinsic_type == IntrinsicType::Char ||
-             intrinsic_type == IntrinsicType::Long ||
-             (!saw_signed && !saw_unsigned),
+
+  if (saw_void) {
+    ASSERT(!saw_char && !saw_short && !saw_int && !saw_float && !saw_double &&
+               long_count == 0 && !saw_signed && !saw_unsigned,
+           "void cannot be combined with another type specifier");
+    spec.type_name = "void";
+    spec.is_builtin = true;
+  } else if (saw_char) {
+    ASSERT(!saw_short && !saw_int && !saw_float && !saw_double &&
+               long_count == 0,
+           "char cannot be combined with another base type");
+    spec.type_name = "char";
+    spec.is_builtin = true;
+  } else if (saw_float) {
+    ASSERT(!saw_short && !saw_int && !saw_double && long_count == 0 &&
+               !saw_signed && !saw_unsigned,
+           "float cannot be combined with another type specifier");
+    spec.type_name = "float";
+    spec.is_builtin = true;
+  } else if (saw_double) {
+    ASSERT(!saw_short && !saw_int && long_count == 0 && !saw_signed &&
+               !saw_unsigned,
+           "double cannot be combined with another type specifier");
+    spec.type_name = "double";
+    spec.is_builtin = true;
+  } else if (saw_short) {
+    ASSERT(!saw_char && !saw_float && !saw_double && long_count == 0,
+           "short cannot be combined with another base type");
+    spec.type_name = "short";
+    spec.is_builtin = true;
+  } else if (long_count != 0) {
+    ASSERT(!saw_char && !saw_float && !saw_double && !saw_void,
+           "long cannot be combined with another base type");
+    spec.type_name = long_count == 2 ? "long long" : "long";
+    spec.is_builtin = true;
+  } else if (saw_int) {
+    ASSERT(!saw_char && !saw_float && !saw_double && !saw_void,
+           "int cannot be combined with another base type");
+    spec.type_name = "int";
+    spec.is_builtin = true;
+  } else if (saw_signed || saw_unsigned) {
+    spec.type_name = "int";
+    spec.is_builtin = true;
+  } else {
+    return;
+  }
+
+  const bool is_integer_type = saw_char || saw_short || saw_int ||
+                               long_count != 0 ||
+                               (!saw_void && !saw_float && !saw_double);
+  ASSERT(is_integer_type || (!saw_signed && !saw_unsigned),
          "signedness is only valid for integer types");
   spec.is_unsigned = saw_unsigned;
 }

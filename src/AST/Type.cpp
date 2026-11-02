@@ -21,9 +21,7 @@ TypeRef CreateBaseType(const TypeSpecifier &specifier, CompileContext &context,
     type = types.Builtin(specifier.type_name);
     if (specifier.is_unsigned) {
       const auto *builtin = type->As<BuiltinType>();
-      ASSERT(builtin->Kind() == BuiltinKind::Int ||
-                 builtin->Kind() == BuiltinKind::Char ||
-                 builtin->Kind() == BuiltinKind::Long,
+      ASSERT(IsIntegerKind(builtin->Kind()),
              "unsigned is only valid for integer types");
       type = ApplyTypeTag(type, TypeTag::Unsigned);
     }
@@ -171,6 +169,94 @@ static ParsedType ParseInitDeclarator(TypeRef base_type,
 }
 
 } // namespace
+
+int IntegerConversionRank(BuiltinKind kind) {
+  switch (kind) {
+  case BuiltinKind::I1:
+    return 0;
+  case BuiltinKind::Char:
+    return 1;
+  case BuiltinKind::Short:
+    return 2;
+  case BuiltinKind::Int:
+    return 3;
+  case BuiltinKind::Long:
+    return 4;
+  case BuiltinKind::LongLong:
+    return 5;
+  default:
+    RAISE_ERROR("Type does not have an integer conversion rank: ", kind);
+  }
+}
+
+TypeRef PromoteInteger(TypeRef type, TypeContext &types) {
+  ASSERT(IsIntegerType(type), "Integer promotion requires an integer type");
+  type = StripTypeTag(type, TypeTag::Const);
+
+  const auto *builtin = type->As<BuiltinType>();
+  const BuiltinKind kind = builtin->Kind();
+  if (kind != BuiltinKind::Char && kind != BuiltinKind::Short &&
+      kind != BuiltinKind::I1) {
+    return type;
+  }
+
+  const TypeRef int_type = types.Builtin(BuiltinKind::Int);
+  if (HasTypeTag(type, TypeTag::Unsigned) && kind != BuiltinKind::I1 &&
+      type->GetSize() >= int_type->GetSize()) {
+    return types.Builtin(BuiltinKind::Int, TypeTag::Unsigned);
+  }
+  return int_type;
+}
+
+TypeRef UsualArithmeticType(TypeRef left, TypeRef right, TypeContext &types) {
+  ASSERT(IsNumericType(left) && IsNumericType(right),
+         "Usual arithmetic conversions require numeric operands");
+  left = StripTypeTag(left, TypeTag::Const);
+  right = StripTypeTag(right, TypeTag::Const);
+
+  const auto *left_builtin = left->As<BuiltinType>();
+  const auto *right_builtin = right->As<BuiltinType>();
+  if (IsFloatingType(left) || IsFloatingType(right)) {
+    if (left_builtin->Kind() == BuiltinKind::Double ||
+        right_builtin->Kind() == BuiltinKind::Double) {
+      return types.Builtin(BuiltinKind::Double);
+    }
+    return types.Builtin(BuiltinKind::Float);
+  }
+
+  left = PromoteInteger(left, types);
+  right = PromoteInteger(right, types);
+  if (left == right) {
+    return left;
+  }
+
+  const auto *promoted_left = left->As<BuiltinType>();
+  const auto *promoted_right = right->As<BuiltinType>();
+  const int left_rank = IntegerConversionRank(promoted_left->Kind());
+  const int right_rank = IntegerConversionRank(promoted_right->Kind());
+  const bool left_unsigned = HasTypeTag(left, TypeTag::Unsigned);
+  const bool right_unsigned = HasTypeTag(right, TypeTag::Unsigned);
+
+  if (left_unsigned == right_unsigned) {
+    return left_rank >= right_rank ? left : right;
+  }
+
+  TypeRef signed_type = left_unsigned ? right : left;
+  TypeRef unsigned_type = left_unsigned ? left : right;
+  const int signed_rank =
+      IntegerConversionRank(signed_type->As<BuiltinType>()->Kind());
+  const int unsigned_rank =
+      IntegerConversionRank(unsigned_type->As<BuiltinType>()->Kind());
+
+  if (unsigned_rank >= signed_rank) {
+    return unsigned_type;
+  }
+  if (signed_type->GetSize() > unsigned_type->GetSize()) {
+    return signed_type;
+  }
+  return types.Builtin(signed_type->As<BuiltinType>()->Kind(),
+                       TypeTag::Unsigned);
+}
 
 TypeRef ResolveTypeSpecifier(const TypeSpecifier &specifier,
                              CompileContext &context) {

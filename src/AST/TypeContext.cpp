@@ -25,9 +25,11 @@ constexpr std::array BUILTIN_TYPES = {
     BuiltinTypeInfo{BuiltinKind::Void, "void", "void", std::nullopt, 1},
     MakeBuiltinTypeInfo(Int, int, "i32"),
     MakeBuiltinTypeInfo(Char, char, "i8"),
+    MakeBuiltinTypeInfo(Short, short, "i16"),
     MakeBuiltinTypeInfo(Float, float, "float"),
     MakeBuiltinTypeInfo(Double, double, "double"),
     MakeBuiltinTypeInfo(Long, long, "i64"),
+    MakeBuiltinTypeInfo(LongLong, long long, "i64"),
     BuiltinTypeInfo{BuiltinKind::I1, "i1", "i1", 1, 1}};
 
 size_t HashCombine(size_t seed, size_t value) {
