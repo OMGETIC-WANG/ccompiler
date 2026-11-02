@@ -530,6 +530,9 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     return;
   }
 
+  if (node->DynCast<EmptyStmt>()) {
+    return;
+  }
   if (auto *decl_stmt = node->DynCast<DeclStmt>()) {
     for (const auto &decl : decl_stmt->decls) {
       EmitStmt(decl.get());

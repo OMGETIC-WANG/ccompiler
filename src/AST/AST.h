@@ -279,3 +279,7 @@ class VaEnd : public ASTNode {
 public:
   std::unique_ptr<ASTNode> va_list;
 };
+
+class EmptyStmt : public ASTNode {
+  ASTNodeImpl(EmptyStmt);
+};

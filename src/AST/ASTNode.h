@@ -40,7 +40,8 @@
   x(PtrGetField)\
   x(VaStart)\
   x(VaArg)\
-  x(VaEnd)
+  x(VaEnd)\
+  x(EmptyStmt)
 // clang-format on
 
 MAKE_ENUM(ASTNodeType, AST_NODE_TYPE_VALUES)

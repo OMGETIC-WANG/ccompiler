@@ -199,6 +199,10 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
     return nullptr;
   }
 
+  while (lexer.PeekNextToken().type == TokenType::Semicolon) {
+    lexer.ConsumeNextToken();
+  }
+
   std::unique_ptr<ASTNode> stmt = ParseStmtOnly(lexer, context);
 
   while (lexer.PeekNextToken().type == TokenType::Semicolon)
@@ -228,16 +232,26 @@ std::unique_ptr<CompoundStmt> ParseCompoundStmt(FilteredLexer &lexer,
   return CS;
 }
 
+static std::unique_ptr<ASTNode> TryParseStmt(FilteredLexer &lexer,
+                                             CompileContext &context) {
+  if (lexer.PeekNextToken().type == TokenType::Semicolon) {
+    lexer.ConsumeNextToken();
+    return std::make_unique<EmptyStmt>();
+  } else {
+    return ParseStmt(lexer, context);
+  }
+}
+
 static std::unique_ptr<ASTNode> ParseIfStmt(FilteredLexer &lexer,
                                             CompileContext &context) {
   auto if_stmt = std::make_unique<IfStmt>();
   lexer.ConsumeNextToken(); // consume "if"
   if_stmt->condition = ParseControlCondExpr(lexer, context);
-  if_stmt->then_branch = ParseStmt(lexer, context);
+  if_stmt->then_branch = TryParseStmt(lexer, context);
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::KwElse) {
     lexer.ConsumeToken(tok);
-    if_stmt->else_branch = ParseStmt(lexer, context);
+    if_stmt->else_branch = TryParseStmt(lexer, context);
   }
   return if_stmt;
 }
@@ -247,7 +261,7 @@ static std::unique_ptr<WhileStmt> ParseWhileStmt(FilteredLexer &lexer,
   auto while_stmt = std::make_unique<WhileStmt>();
   lexer.ConsumeNextToken(); // consume "while"
   while_stmt->condition = ParseControlCondExpr(lexer, context);
-  while_stmt->body = ParseStmt(lexer, context);
+  while_stmt->body = TryParseStmt(lexer, context);
   return while_stmt;
 }
 
@@ -282,7 +296,7 @@ static std::unique_ptr<ForStmt> ParseForStmt(FilteredLexer &lexer,
 
   ASSERT_EQ(lexer.PeekNextToken().type, TokenType::RParen, "Expected a ')'");
   lexer.ConsumeNextToken();
-  for_stmt->body = ParseStmt(lexer, context);
+  for_stmt->body = TryParseStmt(lexer, context);
   return for_stmt;
 }
 
