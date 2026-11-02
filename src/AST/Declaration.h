@@ -160,16 +160,9 @@ public:
 
 class FieldInitializer : public Initializer {
   DeclBaseImpl(FieldInitializer);
+  TreeNodePrintFields(field_initializers);
 
 public:
-  std::vector<TreeNodePrintField> GetPrintFields() const override {
-    std::vector<TreeNodePrintField> print_fields;
-    for (const auto &[name, initializer] : field_initializers) {
-      AppendTreeNodePrintField(print_fields, name, initializer);
-    }
-    return print_fields;
-  }
-
   std::vector<std::pair<std::string_view, std::unique_ptr<Initializer>>>
       field_initializers;
 };

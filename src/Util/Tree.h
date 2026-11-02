@@ -37,6 +37,12 @@ concept _TreeNodePtrLike =
       { ptr.operator->() } -> std::convertible_to<const TreeNode *>;
     };
 
+template <typename Elem>
+concept _MapElemLike = requires(const Elem &elem) {
+  { elem.first } -> std::convertible_to<std::string_view>;
+  { elem.second } -> _TreeNodePtrLike;
+};
+
 template <_TreeNodePtrLike Ptr>
 void AppendTreeNodePrintField(std::vector<TreeNodePrintField> &fields,
                               std::string_view name, const Ptr &node) {
@@ -51,6 +57,15 @@ void AppendTreeNodePrintField(std::vector<TreeNodePrintField> &fields,
                               std::string_view name, const Range &nodes) {
   for (const auto &node : nodes) {
     AppendTreeNodePrintField(fields, name, node);
+  }
+}
+
+template <std::ranges::input_range Range>
+  requires _MapElemLike<std::ranges::range_value_t<Range>>
+void AppendTreeNodePrintField(std::vector<TreeNodePrintField> &fields,
+                              std::string_view name, const Range &map) {
+  for (const auto &elem : map) {
+    AppendTreeNodePrintField(fields, elem.first, elem.second);
   }
 }
 
