@@ -41,6 +41,16 @@ public:
 
   std::string_view GetNodeTypeName() const override;
 
+  template <std::derived_from<DeclBase> T> T *As() {
+#ifdef ENABLE_AS_TYPE_CHECK
+    if (GetType() != T::__type) {
+      RAISE_ERROR("Invalid ASTNode type cast from ", GetType(), " to ",
+                  T::__type);
+    }
+#endif
+    return static_cast<T *>(this);
+  }
+
   template <std::derived_from<DeclBase> T> const T *As() const {
 #ifdef ENABLE_AS_TYPE_CHECK
     if (GetType() != T::__type) {
@@ -51,8 +61,11 @@ public:
     return static_cast<const T *>(this);
   }
 
-  template <std::derived_from<DeclBase> T> T *As() {
-    return const_cast<T *>(std::as_const(*this).template As<T>());
+  template <std::derived_from<DeclBase> T> T *DynCast() {
+    if (GetType() != T::__type) {
+      return nullptr;
+    }
+    return static_cast<T *>(this);
   }
 
   template <std::derived_from<DeclBase> T> const T *DynCast() const {
@@ -62,8 +75,8 @@ public:
     return static_cast<const T *>(this);
   }
 
-  template <std::derived_from<DeclBase> T> T *DynCast() {
-    return const_cast<T *>(std::as_const(*this).template DynCast<T>());
+  template <std::derived_from<DeclBase> T> bool Is() const {
+    return GetType() == T::__type;
   }
 };
 
