@@ -94,9 +94,13 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
       if (tok.type == TokenType::Identifier) {
         spec.type_name = tok.value;
         lexer.ConsumeToken(tok);
+if (lexer.PeekNextToken().type == TokenType::LBrace) {
+          auto struct_decl = ParseStructDecl(lexer, tok.value, context);
+          decl_spec.decl = std::move(struct_decl);
+        }
       } else if (tok.type == TokenType::LBrace) {
         std::string_view name = GenerateAnoymousSymbol();
-        decl_spec.anoymous_decl = ParseStructDecl(lexer, name, context);
+        decl_spec.decl = ParseStructDecl(lexer, name, context);
         spec.type_name = name;
       } else {
         RAISE_ERROR("Expected struct name or definition");
@@ -111,9 +115,13 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
       if (tok.type == TokenType::Identifier) {
         spec.type_name = tok.value;
         lexer.ConsumeToken(tok);
+if (lexer.PeekNextToken().type == TokenType::LBrace) {
+          auto enum_decl = ParseEnumDecl(lexer, tok.value, context);
+          decl_spec.decl = std::move(enum_decl);
+        }
       } else if (tok.type == TokenType::LBrace) {
         std::string_view name = GenerateAnoymousSymbol();
-        decl_spec.anoymous_decl = ParseEnumDecl(lexer, name, context);
+        decl_spec.decl = ParseEnumDecl(lexer, name, context);
         spec.type_name = name;
       } else {
         RAISE_ERROR("Expected enum name or definition");

@@ -12,7 +12,7 @@ enum class StorageClass { None, Static };
 struct DeclarationSpecifier {
   TypeSpecifier type_spec;
   StorageClass storage_class = StorageClass::None;
-  std::unique_ptr<ASTNode> anoymous_decl;
+  std::unique_ptr<ASTNode> decl;
 };
 
 // clang-format off

@@ -59,21 +59,19 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(FilteredLexer &lexer,
     stmt = std::move(raw_ir);
   } else if (IsDeclarationSpecifier(tok, context)) {
     auto decl = ParseDeclaration(lexer, context);
-    bool is_tag_definition = lexer.PeekNextToken().type == TokenType::LBrace;
-    auto decl_types = ParseType(decl.get(), context, is_tag_definition);
+    auto decl_types = ParseType(decl.get(), context);
     auto type_spec = std::move(decl->declaration_specifier.type_spec);
     const StorageClass storage_class =
         decl->declaration_specifier.storage_class;
 
     DeclStmtBuilder decl_stmt_builder;
+    if (decl->declaration_specifier.decl) {
+      decl_stmt_builder.Add(std::move(decl->declaration_specifier.decl));
+    }
 
     if (type_spec.is_typedef) {
       ASSERT(storage_class == StorageClass::None,
              "A typedef cannot have a storage class");
-      if (decl->declaration_specifier.anoymous_decl) {
-        decl_stmt_builder.Add(
-            std::move(decl->declaration_specifier.anoymous_decl));
-      }
       for (auto &parsed_type : decl_types) {
         if (!parsed_type.declarator_name.empty()) {
           auto typedef_decl = std::make_unique<TypedefDecl>();
@@ -94,29 +92,7 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(FilteredLexer &lexer,
         switch (type->GetType()) {
         case TypeBaseType::BuiltinType:
         case TypeBaseType::StructType:
-        case TypeBaseType::EnumType: {
-          if (!parsed_type.declarator_name.empty()) {
-            auto var_decl = std::make_unique<VarDecl>();
-            var_decl->name = parsed_type.declarator_name;
-            var_decl->type = type;
-            var_decl->storage_class = storage_class;
-            var_decl->initializer =
-                std::move(decl->init_declarators[i]->initializer);
-            context.AddVariable(var_decl->name, type);
-            decl_stmt_builder.Add(std::move(var_decl));
-          } else {
-            if (type_spec.is_struct) {
-              decl_stmt_builder.Add(
-                  ParseStructDecl(lexer, type_spec.type_name, context));
-              context.AddStruct(type_spec.type_name, type);
-            } else if (type_spec.is_enum) {
-              decl_stmt_builder.Add(
-                  ParseEnumDecl(lexer, type_spec.type_name, context));
-              context.AddEnum(type_spec.type_name, type);
-            }
-          }
-          break;
-        }
+        case TypeBaseType::EnumType:
         case TypeBaseType::PointerType:
         case TypeBaseType::ArrayType:
           if (!parsed_type.declarator_name.empty()) {
@@ -129,7 +105,9 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(FilteredLexer &lexer,
             context.AddVariable(var_decl->name, type);
             decl_stmt_builder.Add(std::move(var_decl));
           } else {
-            RAISE_ERROR("Expected an identifier");
+            ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon,
+                      "Expected semicolon after declaration");
+            lexer.ConsumeNextToken();
           }
           break;
         case TypeBaseType::FunctionType:

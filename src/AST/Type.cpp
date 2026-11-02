@@ -13,8 +13,8 @@ TypeRef ApplyConstQualifier(TypeRef type, TypeContext &types) {
   return ApplyTypeTag(type, TypeTag::Const);
 }
 
-TypeRef CreateBaseType(const TypeSpecifier &specifier, CompileContext &context,
-                       bool is_tag_definition = false) {
+TypeRef CreateBaseType(const TypeSpecifier &specifier,
+                       CompileContext &context) {
   TypeContext &types = context.Types();
   TypeRef type;
   if (specifier.is_builtin) {
@@ -27,26 +27,10 @@ TypeRef CreateBaseType(const TypeSpecifier &specifier, CompileContext &context,
     }
   } else if (specifier.is_struct) {
     ASSERT(!specifier.is_unsigned, "unsigned cannot qualify a struct type");
-    if (is_tag_definition) {
-      type = types.GetOrCreateStruct(specifier.scope_id, specifier.type_name);
-    } else {
-      if (auto existed = context.FindStruct(specifier.type_name)) {
-        type = existed;
-      } else {
-        type = types.GetOrCreateStruct(specifier.scope_id, specifier.type_name);
-      }
-    }
+    type = types.GetOrCreateStruct(specifier.scope_id, specifier.type_name);
   } else if (specifier.is_enum) {
     ASSERT(!specifier.is_unsigned, "unsigned cannot qualify an enum type");
-    if (is_tag_definition) {
-      type = types.GetOrCreateEnum(specifier.scope_id, specifier.type_name);
-    } else {
-      if (auto existed = context.FindEnum(specifier.type_name)) {
-        type = existed;
-      } else {
-        type = types.GetOrCreateEnum(specifier.scope_id, specifier.type_name);
-      }
-    }
+    type = types.GetOrCreateEnum(specifier.scope_id, specifier.type_name);
   } else if (specifier.is_named_type) {
     ASSERT(!specifier.is_unsigned,
            "unsigned cannot qualify a typedef in a type specifier");
@@ -264,11 +248,10 @@ TypeRef ResolveTypeSpecifier(const TypeSpecifier &specifier,
 }
 
 std::vector<ParsedType> ParseType(const Declaration *decl,
-                                  CompileContext &context,
-                                  bool is_tag_definition) {
+                                  CompileContext &context) {
   std::vector<ParsedType> results;
-  TypeRef base_type = CreateBaseType(decl->declaration_specifier.type_spec,
-                                     context, is_tag_definition);
+  TypeRef base_type =
+      CreateBaseType(decl->declaration_specifier.type_spec, context);
 
   if (decl->init_declarators.size()) {
     results.reserve(decl->init_declarators.size());

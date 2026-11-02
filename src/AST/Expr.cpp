@@ -349,7 +349,7 @@ std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer,
       lexer.ConsumeNextToken();
 
       auto declaration = ParseDeclaration(lexer, context);
-      auto parsed_type = ParseType(declaration.get(), context, false);
+      auto parsed_type = ParseType(declaration.get(), context);
       ASSERT(parsed_type.size() == 1, "Expected a single type in cast");
 
       va_arg->type = parsed_type[0].type;
@@ -523,7 +523,7 @@ std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(FilteredLexer &lexer,
         lexer.ConsumeToken(tok);
 
         auto declaration = ParseDeclaration(lexer, context);
-        auto parsed_type = ParseType(declaration.get(), context, false);
+        auto parsed_type = ParseType(declaration.get(), context);
         ASSERT(parsed_type.size() == 1, "Expected a single type in cast");
 
         auto type_cast = std::make_unique<TypeCast>();

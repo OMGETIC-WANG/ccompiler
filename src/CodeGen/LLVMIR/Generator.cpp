@@ -117,6 +117,36 @@ void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
   FinalizeFunctionBlocks(function, context, builder);
 }
 
+void GenTopLevelStmt(ASTNode *stmt, GenContext &context, IRBuilder &builder) {
+  switch (stmt->GetType()) {
+  case ASTNodeType::RawLLVMIR:
+    RAISE_ERROR("RawLLVMIR is no longer supported by LLVM API code "
+                "generation");
+  case ASTNodeType::FunctionDecl:
+    GenFunction(stmt->As<FunctionDecl>(), builder, context);
+    break;
+  case ASTNodeType::StructDecl:
+    GenStructDecl(stmt->As<StructDecl>(), context);
+    break;
+  case ASTNodeType::EnumDecl:
+    GenEnumDecl(stmt->As<EnumDecl>(), context);
+    break;
+  case ASTNodeType::VarDecl:
+    GenGlobalVarDecl(stmt->As<VarDecl>(), context);
+    break;
+  case ASTNodeType::TypedefDecl:
+    break;
+  case ASTNodeType::DeclStmt: {
+    for (const auto &decl : stmt->As<DeclStmt>()->decls) {
+      GenTopLevelStmt(decl.get(), context, builder);
+    }
+    break;
+  }
+  default:
+    RAISE_ERROR("Unsupported top-level AST node: ", stmt->GetType());
+  }
+}
+
 std::unique_ptr<llvm::Module>
 GenerateLLVMModule(const TranslationUnit *tu, TypeContext &types,
                    llvm::LLVMContext &llvm_context) {
@@ -145,28 +175,8 @@ GenerateLLVMModule(const TranslationUnit *tu, TypeContext &types,
   context.PushLayer();
   IRBuilder builder(context);
 
-  for (const auto &child : tu->body->statements) {
-    switch (child->GetType()) {
-    case ASTNodeType::RawLLVMIR:
-      RAISE_ERROR("RawLLVMIR is no longer supported by LLVM API code "
-                  "generation");
-    case ASTNodeType::FunctionDecl:
-      GenFunction(child->As<FunctionDecl>(), builder, context);
-      break;
-    case ASTNodeType::StructDecl:
-      GenStructDecl(child->As<StructDecl>(), context);
-      break;
-    case ASTNodeType::EnumDecl:
-      GenEnumDecl(child->As<EnumDecl>(), context);
-      break;
-    case ASTNodeType::VarDecl:
-      GenGlobalVarDecl(child->As<VarDecl>(), context);
-      break;
-    case ASTNodeType::TypedefDecl:
-      break;
-    default:
-      RAISE_ERROR("Unsupported top-level AST node: ", child->GetType());
-    }
+  for (const auto &stmt : tu->body->statements) {
+    GenTopLevelStmt(stmt.get(), context, builder);
   }
 
   return module;
