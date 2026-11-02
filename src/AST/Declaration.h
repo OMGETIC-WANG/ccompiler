@@ -27,7 +27,8 @@ struct DeclarationSpecifier {
   x(ParamList)\
   x(Initializer)\
   x(ValueInitializer)\
-  x(FieldInitializer)
+  x(FieldInitializer)\
+  x(ArrayInitializer)
 // clang-format on
 
 MAKE_ENUM(DeclType, DECL_TYPE_VALUES)
@@ -180,6 +181,14 @@ public:
       field_initializers;
 };
 
+class ArrayInitializer : public Initializer {
+  DeclBaseImpl(ArrayInitializer);
+  TreeNodePrintFields(initializers);
+
+public:
+  std::vector<std::unique_ptr<Initializer>> initializers;
+};
+
 class InitDeclarator : public DeclBase {
   DeclBaseImpl(InitDeclarator);
   TreeNodePrintFields(declarator, initializer);
@@ -209,3 +218,5 @@ DeclarationSpecifier ParseDeclarationSpecifier(FilteredLexer &lexer,
 
 std::unique_ptr<Declaration> ParseDeclaration(FilteredLexer &lexer,
                                               CompileContext &context);
+
+bool IsConstantFoldable(const Initializer *initializer);

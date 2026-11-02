@@ -82,6 +82,9 @@ public:
 
   void CreateVaEnd(const LValue &va_list);
 
+  void CreateMemcpy(const LValue &dst, const RValue &src, size_t size,
+                    size_t align);
+
 private:
   GenContext &_context;
   llvm::IRBuilder<> _builder;

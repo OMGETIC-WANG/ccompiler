@@ -56,37 +56,159 @@ static void CheckConstAssignment(TypeRef target, TypeRef value) {
          "Cannot assign a pointer after discarding const");
 }
 
+static RValue CreateIndex(size_t index, GenContext &context) {
+  return RValue{
+      context.Types().Builtin(BuiltinKind::Int),
+      llvm::ConstantInt::get(llvm::Type::getInt64Ty(context.LLVMContext()),
+                             index, false)};
+}
+
+static RValue CreateNullValue(TypeRef type, GenContext &context) {
+  return RValue{type, llvm::Constant::getNullValue(context.LLVMType(type))};
+}
+
+static bool IsLiteralStringInit(const ArrayType *type,
+                                const Initializer *initializer) {
+  return type->element_type->Is<BuiltinType>() &&
+         type->element_type->As<BuiltinType>()->Kind() == BuiltinKind::Char &&
+         initializer->Is<ValueInitializer>() &&
+         initializer->As<ValueInitializer>()->value->Is<LiteralString>();
+}
+
 struct ExprEmitter::detail {
   static void GenVarInitializer(const LValue &value, TypeRef type,
                                 Initializer *initializer, ExprEmitter &self) {
-    if (!initializer) {
-      return;
-    }
-    if (auto *value_init = initializer->DynCast<ValueInitializer>()) {
-      RValue init = self.EmitRValue(value_init->value.get());
-      self.builder.CreateStore(TryCastTo(type, init, self.builder), value);
-      return;
-    }
-    if (auto *field_init = initializer->DynCast<FieldInitializer>()) {
-      auto *struct_type = type->DynCast<StructType>();
-      ASSERT(struct_type, "FieldInitializer only supports struct type");
-      for (const auto &[name, init] : field_init->field_initializers) {
-        auto field = struct_type->GetField(name);
-        ASSERT(field.has_value(), "Unknown field: ", name);
-        LValue field_lhs = self.builder.GetElementPtr(value, field.value());
-        GenVarInitializer(field_lhs, field->type, init.get(), self);
+    if (auto *array_type = type->DynCast<ArrayType>()) {
+      if (auto *array_init = initializer->DynCast<ArrayInitializer>()) {
+        size_t array_size =
+            array_type->size.value_or(array_init->initializers.size());
+        ASSERT(array_init->initializers.size() <= array_size,
+               "Array initializer has more elements than the array size");
+
+        RValue array_base = LoadAsRValue(value, self);
+        for (size_t i = 0; i < array_size; ++i) {
+          if (i < array_init->initializers.size()) {
+            GenVarInitializer(self.builder.CreateSubscript(
+                                  array_base, CreateIndex(i, self.context)),
+                              array_type->element_type,
+                              array_init->initializers[i].get(), self);
+          } else {
+            self.builder.CreateStore(
+                CreateNullValue(array_type->element_type, self.context),
+                self.builder.CreateSubscript(array_base,
+                                             CreateIndex(i, self.context)));
+          }
+        }
+      }
+      if (IsLiteralStringInit(array_type, initializer)) {
+        auto *literal_str =
+            initializer->As<ValueInitializer>()->value->As<LiteralString>();
+        ASSERT(array_type->size.value() >= literal_str->value.view().size() + 1,
+               "Array size is smaller than the literal string size");
+        auto s = self.context.CreateStringConstant(literal_str->value.view(),
+                                                   array_type->size.value());
+        self.builder.CreateMemcpy(value, RValue{nullptr, s},
+                                  array_type->size.value(), 1);
       }
       return;
     }
-    RAISE_ERROR("Unsupported local initializer");
+
+    if (auto *struct_type = type->DynCast<StructType>()) {
+      if (auto *field_init = initializer->DynCast<FieldInitializer>()) {
+        std::vector<uint8_t> fields_inited(struct_type->fields.size(), false);
+        for (const auto &[name, init] : field_init->field_initializers) {
+          auto field = struct_type->GetField(name);
+          ASSERT(field.has_value(), "Unknown field name: ", name);
+          size_t field_index = 0;
+          bool found = false;
+          for (size_t i = 0; i < struct_type->fields.size(); ++i) {
+            if (struct_type->fields[i].name == name) {
+              field_index = i;
+              found = true;
+              break;
+            }
+          }
+          ASSERT(found, "Unknown field name: ", name);
+          fields_inited[field_index] = true;
+          GenVarInitializer(self.builder.GetElementPtr(value, field.value()),
+                            field->type, init.get(), self);
+        }
+        for (size_t i = 0; i < struct_type->fields.size(); i++) {
+          if (!fields_inited[i]) {
+            self.builder.CreateStore(
+                CreateNullValue(struct_type->fields[i].type, self.context),
+                self.builder.GetElementPtr(value, struct_type->fields[i]));
+          }
+        }
+      }
+      if (auto *array_init = initializer->DynCast<ArrayInitializer>()) {
+        ASSERT(array_init->initializers.size() <= struct_type->fields.size(),
+               "Struct initializer has more elements than the struct fields");
+        for (size_t i = 0; i < array_init->initializers.size(); i++) {
+          auto &field = struct_type->fields[i];
+          GenVarInitializer(self.builder.GetElementPtr(value, field),
+                            field.type, array_init->initializers[i].get(),
+                            self);
+        }
+        for (size_t i = array_init->initializers.size();
+             i < struct_type->fields.size(); i++) {
+          auto &field = struct_type->fields[i];
+          self.builder.CreateStore(CreateNullValue(field.type, self.context),
+                                   self.builder.GetElementPtr(value, field));
+        }
+      }
+      return;
+    }
+
+    if (auto *val_init = initializer->DynCast<ValueInitializer>()) {
+      RValue val = self.EmitRValue(val_init->value.get());
+      val = TryCastTo(type, val, self.builder);
+      self.builder.CreateStore(val, value);
+      return;
+    }
+
+    RAISE_ERROR("Unexpected init");
   }
 
   static LValue GenVarDecl(VarDecl *decl, ExprEmitter &self) {
     ASSERT(decl->storage_class == StorageClass::None,
            "Local static storage is not supported yet");
-    LValue value = self.builder.CreateAlloca(decl->type);
+    TypeRef type = decl->type;
+    if (decl->type->Is<ArrayType>()) {
+      auto array_type = decl->type->As<ArrayType>();
+      if (!array_type->size.has_value()) {
+        ASSERT(decl->initializer.get(),
+               "Array with unspecified size requires an initializer");
+        if (auto *array_init = decl->initializer->DynCast<ArrayInitializer>()) {
+          if (!array_type->size.has_value()) {
+            type = self.context.Types().Array(array_type->element_type,
+                                              array_init->initializers.size(),
+                                              (TypeTag)type.get_tag());
+          } else {
+            ASSERT(array_type->size.value() >= array_init->initializers.size(),
+                   "Array initializer has more elements than the array size");
+          }
+        } else {
+          if (IsLiteralStringInit(array_type, decl->initializer.get())) {
+            type = self.context.Types().Array(
+                array_type->element_type,
+                decl->initializer->As<ValueInitializer>()
+                        ->value->As<LiteralString>()
+                        ->value.view()
+                        .size() +
+                    1,
+                (TypeTag)type.get_tag());
+          } else {
+            RAISE_ERROR("Failed to init array");
+          }
+        }
+      } else {
+        // TODO: check initializer and size
+      }
+    }
+    LValue value = self.builder.CreateAlloca(type);
     self.context.CurrLayer().variables[decl->name] = value;
-    GenVarInitializer(value, decl->type, decl->initializer.get(), self);
+    GenVarInitializer(value, type, decl->initializer.get(), self);
     return value;
   }
 
@@ -303,7 +425,9 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
   if (auto *literal_str = node->DynCast<LiteralString>()) {
     TypeRef type =
         context.Types().Pointer(context.Types().Builtin(BuiltinKind::Char));
-    return RValue{type, context.CreateStringConstant(literal_str->value)};
+    return RValue{
+        type, context.CreateStringConstant(
+                  literal_str->value, literal_str->value.view().size() + 1)};
   }
   if (auto *var_decl = node->DynCast<VarDecl>()) {
     return detail::LoadAsRValue(detail::GenVarDecl(var_decl, *this), *this);

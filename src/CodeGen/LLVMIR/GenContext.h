@@ -40,6 +40,7 @@ public:
   llvm::Type *Convert(TypeRef type);
   llvm::FunctionType *ConvertFunction(TypeRef type);
   llvm::StructType *ConvertStruct(TypeRef type);
+  llvm::ArrayType *ConvertArray(TypeRef type, size_t size);
 
 private:
   llvm::Type *ConvertParameter(TypeRef type);
@@ -83,6 +84,9 @@ public:
   }
   llvm::StructType *LLVMStructType(TypeRef type) {
     return type_converter.ConvertStruct(type);
+  }
+  llvm::ArrayType *LLVMArrayType(TypeRef type, size_t size) {
+    return type_converter.ConvertArray(type, size);
   }
 
   std::vector<GenContextLayer> layers;
@@ -149,7 +153,10 @@ public:
     functions[name] = value;
   }
 
-  llvm::Value *CreateStringConstant(std::string_view value);
+  llvm::Value *CreateStringConstant(std::string_view value, size_t buffer_size);
+
+  llvm::Constant *CreateLiteralConstant(std::string_view value,
+                                        size_t buffer_size);
 
   Counter<> counter;
 

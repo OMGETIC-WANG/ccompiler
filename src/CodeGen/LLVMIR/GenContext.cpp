@@ -133,17 +133,50 @@ llvm::StructType *LLVMTypeConverter::ConvertStruct(TypeRef type) {
   return result;
 }
 
+llvm::ArrayType *LLVMTypeConverter::ConvertArray(TypeRef type, size_t size) {
+  ASSERT(type != nullptr && type->Is<ArrayType>(), "Expected a C array type");
+  if (auto found = _types.find(type.get()); found != _types.end()) {
+    return llvm::cast<llvm::ArrayType>(found->second);
+  }
+
+  auto *c_array = type->As<ArrayType>();
+  auto *result = llvm::ArrayType::get(Convert(c_array->element_type), size);
+  _types.emplace(type.get(), result);
+  return result;
+}
+
 GenContext::GenContext(llvm::LLVMContext &llvm_context, llvm::Module &module,
                        TypeContext &types)
     : counter(1), _llvm_context(llvm_context), _module(module), types(types),
       type_converter(llvm_context, counter) {}
 
-llvm::Value *GenContext::CreateStringConstant(std::string_view value) {
-  auto *data = llvm::ConstantDataArray::getString(_llvm_context, value, true);
+llvm::Value *GenContext::CreateStringConstant(std::string_view value,
+                                              size_t buffer_size) {
+  llvm::Constant *data = nullptr;
+  if (value.size() + 1 == buffer_size) {
+    data = llvm::ConstantDataArray::getString(_llvm_context, value, true);
+  } else {
+    std::string s(buffer_size, '\0');
+    s.replace(0, value.size(), value);
+    data = llvm::ConstantDataArray::getString(_llvm_context, s, false);
+  }
   auto *global = new llvm::GlobalVariable(
       _module, data->getType(), true, llvm::GlobalValue::PrivateLinkage, data,
       std::format(".str.{}", counter()));
   global->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
   global->setAlignment(llvm::Align(1));
   return global;
+}
+
+llvm::Constant *GenContext::CreateLiteralConstant(std::string_view value,
+                                                  size_t buffer_size) {
+  if (value.size() + 1 == buffer_size) {
+    return llvm::ConstantDataArray::getString(_llvm_context, value, true);
+  }
+  std::string str;
+  str.reserve(buffer_size);
+  str.assign(value.begin(), value.end());
+  str.resize(buffer_size, '\0');
+  auto *data = llvm::ConstantDataArray::getString(_llvm_context, str, false);
+  return data;
 }

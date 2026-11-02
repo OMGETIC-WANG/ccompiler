@@ -405,3 +405,9 @@ RValue IRBuilder::CreateVaArg(const LValue &va_list, TypeRef type) {
   return RValue{type,
                 _builder.CreateVAArg(va_list.address, _context.LLVMType(type))};
 }
+
+void IRBuilder::CreateMemcpy(const LValue &dst, const RValue &src, size_t size,
+                             size_t align) {
+  _builder.CreateMemCpy(dst.address, llvm::Align(align), src.ir_value,
+                        llvm::Align(align), size);
+}

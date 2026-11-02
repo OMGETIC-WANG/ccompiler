@@ -368,6 +368,27 @@ ParseFieldInitializer(FilteredLexer &lexer, CompileContext &context) {
   return initializer;
 }
 
+static std::unique_ptr<ArrayInitializer>
+ParseArrayInitializer(FilteredLexer &lexer, CompileContext &context) {
+  auto initializer = std::make_unique<ArrayInitializer>();
+  while (true) {
+    if (lexer.PeekNextToken().type == TokenType::RBrace) {
+      break;
+    }
+    if (initializer->initializers.size()) {
+      ASSERT(lexer.PeekNextToken().type == TokenType::Comma,
+             "Expect comma in array initializer");
+      lexer.ConsumeNextToken();
+    }
+    if (lexer.PeekNextToken().type == TokenType::RBrace) {
+      break;
+    }
+    auto val_initializer = ParseValueInitializer(lexer, context);
+    initializer->initializers.push_back(std::move(val_initializer));
+  }
+  return initializer;
+}
+
 static std::unique_ptr<Initializer> ParseInitializer(FilteredLexer &lexer,
                                                      CompileContext &context) {
   Token tok = lexer.PeekNextToken();
@@ -377,12 +398,17 @@ static std::unique_ptr<Initializer> ParseInitializer(FilteredLexer &lexer,
   }
   if (tok.type == TokenType::LBrace) {
     lexer.ConsumeToken(tok);
+    if (lexer.PeekNextToken().type == TokenType::Dot) {
     auto res = ParseFieldInitializer(lexer, context);
-    // ASSERT(lexer.ConsumeNextToken().type == TokenType::RBrace,
-    //        "Expected closing brace");
     ASSERT_EQ(lexer.ConsumeNextToken().type, TokenType::RBrace,
               "Expected closing brace");
     return res;
+  } else {
+      auto res = ParseArrayInitializer(lexer, context);
+      ASSERT_EQ(lexer.ConsumeNextToken().type, TokenType::RBrace,
+                "Expected closing brace");
+      return res;
+    }
   } else {
     return ParseValueInitializer(lexer, context);
   }
