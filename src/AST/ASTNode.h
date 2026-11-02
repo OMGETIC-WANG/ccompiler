@@ -67,11 +67,28 @@ public:
     return static_cast<T *>(this);
   }
 
+  template <std::derived_from<ASTNode> T> const T *As() const {
+#ifdef ENABLE_AS_TYPE_CHECK
+    if (GetType() != T::__type) {
+      RAISE_ERROR("Invalid ASTNode type cast from ", GetType(), " to ",
+                  T::__type);
+    }
+#endif
+    return static_cast<const T *>(this);
+  }
+
   template <std::derived_from<ASTNode> T> T *DynCast() {
     if (GetType() != T::__type) {
       return nullptr;
     }
     return static_cast<T *>(this);
+  }
+
+  template <std::derived_from<ASTNode> T> const T *DynCast() const {
+    if (GetType() != T::__type) {
+      return nullptr;
+    }
+    return static_cast<const T *>(this);
   }
 
   template <std::derived_from<ASTNode> T> bool Is() const {

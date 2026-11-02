@@ -399,11 +399,11 @@ static std::unique_ptr<Initializer> ParseInitializer(FilteredLexer &lexer,
   if (tok.type == TokenType::LBrace) {
     lexer.ConsumeToken(tok);
     if (lexer.PeekNextToken().type == TokenType::Dot) {
-    auto res = ParseFieldInitializer(lexer, context);
-    ASSERT_EQ(lexer.ConsumeNextToken().type, TokenType::RBrace,
-              "Expected closing brace");
-    return res;
-  } else {
+      auto res = ParseFieldInitializer(lexer, context);
+      ASSERT_EQ(lexer.ConsumeNextToken().type, TokenType::RBrace,
+                "Expected closing brace");
+      return res;
+    } else {
       auto res = ParseArrayInitializer(lexer, context);
       ASSERT_EQ(lexer.ConsumeNextToken().type, TokenType::RBrace,
                 "Expected closing brace");
@@ -460,4 +460,31 @@ std::unique_ptr<Declaration> ParseDeclaration(FilteredLexer &lexer,
     lexer.ConsumeToken(tok);
   }
   return declaration;
+}
+
+bool IsConstantFoldable(const Initializer *initializer) {
+  if (initializer == nullptr) {
+    return false;
+  }
+
+  if (auto val_init = initializer->DynCast<ValueInitializer>()) {
+    return IsConstantFoldable(val_init->value.get());
+  }
+  if (auto field_init = initializer->DynCast<FieldInitializer>()) {
+    for (const auto &[name, field_init] : field_init->field_initializers) {
+      if (!IsConstantFoldable(field_init.get())) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (auto array_init = initializer->DynCast<ArrayInitializer>()) {
+    for (const auto &elem_init : array_init->initializers) {
+      if (!IsConstantFoldable(elem_init.get())) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
 }

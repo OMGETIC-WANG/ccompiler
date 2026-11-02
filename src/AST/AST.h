@@ -283,3 +283,5 @@ public:
 class EmptyStmt : public ASTNode {
   ASTNodeImpl(EmptyStmt);
 };
+
+bool IsConstantFoldable(const ASTNode *node);
