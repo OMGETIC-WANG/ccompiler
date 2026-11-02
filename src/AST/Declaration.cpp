@@ -94,7 +94,7 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
       if (tok.type == TokenType::Identifier) {
         spec.type_name = tok.value;
         lexer.ConsumeToken(tok);
-if (lexer.PeekNextToken().type == TokenType::LBrace) {
+        if (lexer.PeekNextToken().type == TokenType::LBrace) {
           auto struct_decl = ParseStructDecl(lexer, tok.value, context);
           decl_spec.decl = std::move(struct_decl);
         }
@@ -115,7 +115,7 @@ if (lexer.PeekNextToken().type == TokenType::LBrace) {
       if (tok.type == TokenType::Identifier) {
         spec.type_name = tok.value;
         lexer.ConsumeToken(tok);
-if (lexer.PeekNextToken().type == TokenType::LBrace) {
+        if (lexer.PeekNextToken().type == TokenType::LBrace) {
           auto enum_decl = ParseEnumDecl(lexer, tok.value, context);
           decl_spec.decl = std::move(enum_decl);
         }
@@ -501,7 +501,7 @@ std::unique_ptr<Declaration> ParseDeclaration(FilteredLexer &lexer,
 
 bool IsConstantFoldable(const Initializer *initializer) {
   if (initializer == nullptr) {
-    return false;
+    return true;
   }
 
   if (auto val_init = initializer->DynCast<ValueInitializer>()) {

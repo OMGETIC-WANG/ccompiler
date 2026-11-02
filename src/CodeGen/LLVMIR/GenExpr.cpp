@@ -204,7 +204,9 @@ struct ExprEmitter::detail {
     }
     LValue value = self.builder.CreateAlloca(type);
     self.context.CurrLayer().variables[decl->name] = value;
-    GenVarInitializer(value, type, decl->initializer.get(), self);
+    if (decl->initializer) {
+      GenVarInitializer(value, type, decl->initializer.get(), self);
+    }
     return value;
   }
 
