@@ -42,6 +42,8 @@ template <typename T> void _AppendChunk(std::string &msg, const T &chunk) {
     msg += '\'';
     msg += chunk;
     msg += '\'';
+  } else if constexpr (std::formattable<T, char>) {
+    msg += std::format("{}", chunk);
   } else {
     static_assert(sizeof(T) == 0, "Unsupported chunk type for Assert message");
   }

@@ -21,22 +21,28 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
   TypeSpecifier &spec = decl_spec.type_spec;
   spec.scope_id = context.CurrentScopeId();
 
+  enum TypeMask : unsigned int {
+    MVoid = 1 << 0,
+    MChar = 1 << 1,
+    MShort = 1 << 2,
+    MInt = 1 << 3,
+    MLong = 1 << 4,
+    MFloat = 1 << 5,
+    MDouble = 1 << 6,
+    MLongLong = 1 << 7,
+  };
+
+  unsigned int type_mask = 0;
+
   bool saw_signed = false;
   bool saw_unsigned = false;
-  bool saw_void = false;
-  bool saw_char = false;
-  bool saw_short = false;
-  bool saw_int = false;
-  bool saw_float = false;
-  bool saw_double = false;
-  size_t long_count = 0;
 
   auto has_nominal_type = [&] {
     return spec.is_struct || spec.is_enum || spec.is_named_type;
   };
   auto has_builtin_type = [&] {
-    return saw_void || saw_char || saw_short || saw_int || saw_float ||
-           saw_double || long_count != 0;
+    return type_mask &
+           (MVoid | MChar | MShort | MInt | MFloat | MDouble | MLongLong);
   };
 
   while (true) {
@@ -127,48 +133,44 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
         RAISE_ERROR("Expected enum name or definition");
       }
       break;
-    case TokenType::KwInt:
-    case TokenType::KwChar:
-    case TokenType::KwShort:
-    case TokenType::KwFloat:
-    case TokenType::KwDouble:
-    case TokenType::KwVoid:
-    case TokenType::KwLong:
-      ASSERT(!has_nominal_type(),
-             "Multiple base types in declaration specifier");
-      if (tok.type == TokenType::KwInt) {
-        ASSERT(!saw_int, "Duplicate int declaration specifier");
-        saw_int = true;
-      } else if (tok.type == TokenType::KwShort) {
-        ASSERT(!saw_short, "Duplicate short declaration specifier");
-        saw_short = true;
-      } else if (tok.type == TokenType::KwChar) {
-        ASSERT(!saw_char, "Duplicate char declaration specifier");
-        saw_char = true;
-      } else if (tok.type == TokenType::KwFloat) {
-        ASSERT(!saw_float, "Duplicate float declaration specifier");
-        saw_float = true;
-      } else if (tok.type == TokenType::KwDouble) {
-        ASSERT(!saw_double, "Duplicate double declaration specifier");
-        saw_double = true;
-      } else if (tok.type == TokenType::KwVoid) {
-        ASSERT(!saw_void, "Duplicate void declaration specifier");
-        saw_void = true;
-      } else if (tok.type == TokenType::KwLong) {
-        ASSERT(long_count < 2, "Too many long declaration specifiers");
-        ++long_count;
-      }
-      lexer.ConsumeToken(tok);
-      spec.is_builtin = true;
-      break;
     case TokenType::KwExtern:
     case TokenType::KwRegister:
       RAISE_ERROR("Unsupported storage class ", tok.value);
     default:
-      RAISE_ERROR("Unexpected declaration specifier");
+      static const std::unordered_map<TokenType, TypeMask> tok_type_to_mask = {
+          {TokenType::KwInt, MInt},       {TokenType::KwChar, MChar},
+          {TokenType::KwShort, MShort},   {TokenType::KwFloat, MFloat},
+          {TokenType::KwDouble, MDouble}, {TokenType::KwVoid, MVoid},
+      };
+      auto it = tok_type_to_mask.find(tok.type);
+      if (tok.type == TokenType::KwLong) {
+        if (type_mask & MLong) {
+          type_mask &= ~MLong;
+          type_mask |= MLongLong;
+        } else {
+          if (type_mask & MLongLong) {
+            RAISE_ERROR("long long is not supported yet");
+          } else {
+            type_mask |= MLong;
+          }
+        }
+        lexer.ConsumeToken(tok);
+        break;
+      } else if (it != tok_type_to_mask.end()) {
+        ASSERT(!has_nominal_type(),
+               "Multiple base types in declaration specifier");
+        int mask = it->second;
+        ASSERT((type_mask & mask) == 0, "Duplicate type specifier");
+        type_mask |= mask;
+        lexer.ConsumeToken(tok);
+        break;
+      } else {
+        goto end;
+      }
     }
   }
 
+end:;
   ASSERT(!saw_signed || !saw_unsigned,
          "signed and unsigned cannot be used together");
   ASSERT(!has_nominal_type() || (!saw_signed && !saw_unsigned),
@@ -179,62 +181,52 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
     return;
   }
 
-  if (saw_double && long_count != 0) {
+  if ((type_mask & MDouble) && (type_mask & MLong)) {
     RAISE_ERROR("long double is not supported yet");
   }
 
-  if (saw_void) {
-    ASSERT(!saw_char && !saw_short && !saw_int && !saw_float && !saw_double &&
-               long_count == 0 && !saw_signed && !saw_unsigned,
-           "void cannot be combined with another type specifier");
-    spec.type_name = "void";
-    spec.is_builtin = true;
-  } else if (saw_char) {
-    ASSERT(!saw_short && !saw_int && !saw_float && !saw_double &&
-               long_count == 0,
-           "char cannot be combined with another base type");
-    spec.type_name = "char";
-    spec.is_builtin = true;
-  } else if (saw_float) {
-    ASSERT(!saw_short && !saw_int && !saw_double && long_count == 0 &&
-               !saw_signed && !saw_unsigned,
-           "float cannot be combined with another type specifier");
-    spec.type_name = "float";
-    spec.is_builtin = true;
-  } else if (saw_double) {
-    ASSERT(!saw_short && !saw_int && long_count == 0 && !saw_signed &&
-               !saw_unsigned,
-           "double cannot be combined with another type specifier");
-    spec.type_name = "double";
-    spec.is_builtin = true;
-  } else if (saw_short) {
-    ASSERT(!saw_char && !saw_float && !saw_double && long_count == 0,
-           "short cannot be combined with another base type");
-    spec.type_name = "short";
-    spec.is_builtin = true;
-  } else if (long_count != 0) {
-    ASSERT(!saw_char && !saw_float && !saw_double && !saw_void,
-           "long cannot be combined with another base type");
-    spec.type_name = long_count == 2 ? "long long" : "long";
-    spec.is_builtin = true;
-  } else if (saw_int) {
-    ASSERT(!saw_char && !saw_float && !saw_double && !saw_void,
-           "int cannot be combined with another base type");
-    spec.type_name = "int";
-    spec.is_builtin = true;
-  } else if (saw_signed || saw_unsigned) {
-    spec.type_name = "int";
-    spec.is_builtin = true;
-  } else {
-    return;
+  if ((type_mask & (MShort | MLong | MLongLong)) && (type_mask & MInt)) {
+    type_mask &= ~MInt;
   }
 
-  const bool is_integer_type = saw_char || saw_short || saw_int ||
-                               long_count != 0 ||
-                               (!saw_void && !saw_float && !saw_double);
-  ASSERT(is_integer_type || (!saw_signed && !saw_unsigned),
-         "signedness is only valid for integer types");
+  ASSERT(std::has_single_bit(type_mask),
+         "Invalid combination of type specifiers");
+
+  constexpr unsigned int integer_mask =
+      MChar | MShort | MInt | MLong | MLongLong;
+  ASSERT((type_mask & integer_mask) || (!saw_unsigned && !saw_signed),
+         "signedness can only qualify integer types");
+
+  spec.is_builtin = true;
   spec.is_unsigned = saw_unsigned;
+  switch (type_mask) {
+  case MVoid:
+    spec.type_name = "void";
+    break;
+  case MChar:
+    spec.type_name = "char";
+    break;
+  case MShort:
+    spec.type_name = "short";
+    break;
+  case MInt:
+    spec.type_name = "int";
+    break;
+  case MLong:
+    spec.type_name = "long";
+    break;
+  case MLongLong:
+    spec.type_name = "long long";
+    break;
+  case MFloat:
+    spec.type_name = "float";
+    break;
+  case MDouble:
+    spec.type_name = "double";
+    break;
+  default:
+    RAISE_ERROR("Unknown type mask: ", type_mask);
+  }
 }
 
 DeclarationSpecifier ParseDeclarationSpecifier(FilteredLexer &lexer,
