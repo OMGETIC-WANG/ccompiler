@@ -20,5 +20,10 @@ bool IsConstantFoldable(const ASTNode *node) {
   if (auto *unary_expr = node->DynCast<UnaryOp>()) {
     return IsConstantFoldable(unary_expr->operand.get());
   }
+  if (auto *cond_expr = node->DynCast<ConditionalExpr>()) {
+    return IsConstantFoldable(cond_expr->condition.get()) &&
+           IsConstantFoldable(cond_expr->true_expr.get()) &&
+           IsConstantFoldable(cond_expr->false_expr.get());
+  }
   return false;
 }

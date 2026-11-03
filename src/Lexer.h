@@ -104,6 +104,7 @@
   x(RBrace)\
   x(DotDotDot)\
   x(RightArrow)\
+  x(Question)\
   BINARY_OP_TOKEN_VALUES(x)\
   PREPROCESSOR_TOKEN_VALUES(x)
 // clang-format on

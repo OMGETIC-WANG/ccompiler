@@ -615,6 +615,32 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
       break;
     }
   }
+  if (auto cond_expr = node->DynCast<ConditionalExpr>()) {
+    size_t label_id = context.counter();
+    llvm::BasicBlock *true_block = llvm::BasicBlock::Create(
+        context.LLVMContext(), std::format("cond_expr.true.{}", label_id),
+        context.current_function);
+    llvm::BasicBlock *false_block = llvm::BasicBlock::Create(
+        context.LLVMContext(), std::format("cond_expr.false.{}", label_id),
+        context.current_function);
+    llvm::BasicBlock *end_block = llvm::BasicBlock::Create(
+        context.LLVMContext(), std::format("cond_expr.end.{}", label_id),
+        context.current_function);
+
+    RValue cond = EmitRValue(cond_expr->condition.get());
+    builder.CreateCondBr(cond, true_block, false_block);
+
+    builder.SetInsertPoint(true_block);
+    RValue true_value = EmitRValue(cond_expr->true_expr.get());
+    builder.CreateBr(end_block);
+
+    builder.SetInsertPoint(false_block);
+    RValue false_value = EmitRValue(cond_expr->false_expr.get());
+    builder.CreateBr(end_block);
+
+    builder.SetInsertPoint(end_block);
+    return builder.CreatePhi(true_value, true_block, false_value, false_block);
+  }
 
   try {
     LValue lhs = EmitLValue(node);

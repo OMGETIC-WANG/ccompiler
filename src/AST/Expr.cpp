@@ -579,8 +579,9 @@ static bool IsRightCombineOp(TokenType op) {
   }
 }
 
-std::unique_ptr<ASTNode> ParseExpr(FilteredLexer &lexer,
-                                   CompileContext &context, int min_prec) {
+std::unique_ptr<ASTNode> ParseSingleExpr(FilteredLexer &lexer,
+                                         CompileContext &context,
+                                         int min_prec = 0) {
   auto lhs = ParsePrefixPostfixExpr(lexer, context);
   while (true) {
     Token tok = lexer.PeekNextToken();
@@ -591,6 +592,8 @@ std::unique_ptr<ASTNode> ParseExpr(FilteredLexer &lexer,
     case TokenType::RBracket:
     case TokenType::Comma:
     case TokenType::RBrace:
+    case TokenType::Question:
+    case TokenType::Colon:
       return lhs;
     default:
       int op_prec = GetPrecedence(tok.type);
@@ -602,7 +605,7 @@ std::unique_ptr<ASTNode> ParseExpr(FilteredLexer &lexer,
 
       int next_min_prec = IsRightCombineOp(tok.type) ? op_prec : op_prec + 1;
 
-      auto rhs = ParseExpr(lexer, context, next_min_prec);
+      auto rhs = ParseSingleExpr(lexer, context, next_min_prec);
 
       auto bin_op = std::make_unique<BinaryOp>(GetBinaryOpType(tok.type));
       bin_op->left = std::move(lhs);
@@ -612,4 +615,21 @@ std::unique_ptr<ASTNode> ParseExpr(FilteredLexer &lexer,
   }
 
   return lhs;
+}
+
+std::unique_ptr<ASTNode> ParseExpr(FilteredLexer &lexer,
+                                   CompileContext &context) {
+  auto expr = ParseSingleExpr(lexer, context);
+  if (lexer.PeekNextToken().type == TokenType::Question) {
+    lexer.ConsumeNextToken();
+    auto cond_expr = std::make_unique<ConditionalExpr>();
+    cond_expr->condition = std::move(expr);
+    cond_expr->true_expr = ParseExpr(lexer, context);
+    ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Colon,
+              "Expected ':' in conditional expression");
+    lexer.ConsumeNextToken();
+    cond_expr->false_expr = ParseExpr(lexer, context);
+    return cond_expr;
+  }
+  return expr;
 }

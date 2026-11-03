@@ -186,6 +186,16 @@ static NumericValue EvalUnary(UnaryOp *unary_expr) {
   }
 }
 
+static NumericValue EvalConditional(ConditionalExpr *cond_expr) {
+  NumericValue condition = EvalNode(cond_expr->condition.get());
+  bool bool_cond = std::visit([](auto v) -> bool { return !!v; }, condition);
+  if (bool_cond) {
+    return EvalNode(cond_expr->true_expr.get());
+  } else {
+    return EvalNode(cond_expr->false_expr.get());
+  }
+}
+
 static NumericValue EvalNode(ASTNode *node) {
   if (auto *literal = node->DynCast<LiteralNum>()) {
     return EvalLiteral(literal);
@@ -195,6 +205,9 @@ static NumericValue EvalNode(ASTNode *node) {
   }
   if (auto *unary = node->DynCast<UnaryOp>()) {
     return EvalUnary(unary);
+  }
+  if (auto *cond_expr = node->DynCast<ConditionalExpr>()) {
+    return EvalConditional(cond_expr);
   }
   RAISE_ERROR("Unexpected ASTNode type for constant evaluation: ",
               node->GetType());

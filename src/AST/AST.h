@@ -284,4 +284,14 @@ class EmptyStmt : public ASTNode {
   ASTNodeImpl(EmptyStmt);
 };
 
+class ConditionalExpr : public ASTNode {
+  ASTNodeImpl(ConditionalExpr);
+  TreeNodePrintFields(condition, true_expr, false_expr);
+
+public:
+  std::unique_ptr<ASTNode> condition;
+  std::unique_ptr<ASTNode> true_expr;
+  std::unique_ptr<ASTNode> false_expr;
+};
+
 bool IsConstantFoldable(const ASTNode *node);

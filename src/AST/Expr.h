@@ -5,4 +5,4 @@
 #include "Context.h"
 
 std::unique_ptr<ASTNode> ParseExpr(FilteredLexer &lexer,
-                                   CompileContext &context, int min_prec = 0);
+                                   CompileContext &context);

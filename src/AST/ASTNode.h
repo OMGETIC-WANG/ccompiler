@@ -41,7 +41,8 @@
   x(VaStart)\
   x(VaArg)\
   x(VaEnd)\
-  x(EmptyStmt)
+  x(EmptyStmt)\
+  x(ConditionalExpr)
 // clang-format on
 
 MAKE_ENUM(ASTNodeType, AST_NODE_TYPE_VALUES)
