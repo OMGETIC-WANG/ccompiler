@@ -44,8 +44,7 @@ size_t HashString(std::string_view value) {
 
 } // namespace
 
-size_t
-type_context_detail::ArrayKeyHash::operator()(const ArrayKey &key) const {
+size_t tcd::ArrayKeyHash::operator()(const ArrayKey &key) const {
   size_t result = HashType(key.element);
   if (key.size) {
     result = HashCombine(result, std::hash<size_t>{}(*key.size) + 1);
@@ -53,8 +52,7 @@ type_context_detail::ArrayKeyHash::operator()(const ArrayKey &key) const {
   return result;
 }
 
-size_t
-type_context_detail::FunctionKeyHash::operator()(const FunctionKey &key) const {
+size_t tcd::FunctionKeyHash::operator()(const FunctionKey &key) const {
   size_t result = HashType(key.return_type);
   for (TypeRef parameter : key.parameters) {
     result = HashCombine(result, HashType(parameter));
@@ -62,8 +60,7 @@ type_context_detail::FunctionKeyHash::operator()(const FunctionKey &key) const {
   return result;
 }
 
-size_t
-type_context_detail::NominalKeyHash::operator()(const NominalKey &key) const {
+size_t tcd::NominalKeyHash::operator()(const NominalKey &key) const {
   return HashCombine(std::hash<ScopeId>{}(key.scope_id), HashString(key.name));
 }
 
@@ -107,7 +104,7 @@ TypeRef TypeContext::Pointer(TypeRef pointee, TypeTag tag) {
 TypeRef TypeContext::Array(TypeRef element, std::optional<size_t> size,
                            TypeTag tag) {
   ASSERT(element != nullptr, "Array element type must not be null");
-  type_context_detail::ArrayKey key{.element = element, .size = size};
+  tcd::ArrayKey key{.element = element, .size = size};
   if (auto found = arrays_.find(key); found != arrays_.end()) {
     return TypeRef(found->second, (TypeRef::TagType)tag);
   }
@@ -125,7 +122,7 @@ TypeRef TypeContext::Function(TypeRef return_type,
   for (TypeRef parameter : parameters) {
     ASSERT(parameter != nullptr, "Function parameter type must not be null");
   }
-  type_context_detail::FunctionKey key{
+  tcd::FunctionKey key{
       .return_type = return_type,
       .parameters = std::vector<TypeRef>(parameters.begin(), parameters.end()),
   };
@@ -139,43 +136,40 @@ TypeRef TypeContext::Function(TypeRef return_type,
   return TypeRef(function, (TypeRef::TagType)tag);
 }
 
-TypeRef TypeContext::GetOrCreateStruct(ScopeId scope_id, std::string_view name,
-                                       TypeTag tag) {
+StructType *TypeContext::GetOrCreateStruct(ScopeId scope_id,
+                                           std::string_view name) {
   ASSERT(!name.empty(), "Struct type name must not be empty");
-  type_context_detail::NominalKey key{.scope_id = scope_id,
-                                      .name = std::string(name)};
+  tcd::NominalKey key{.scope_id = scope_id, .name = std::string(name)};
   if (auto found = structs_.find(key); found != structs_.end()) {
-    return TypeRef(found->second, (TypeRef::TagType)tag);
+    return found->second;
   }
   auto *type = Make<StructType>(scope_id, name);
   structs_.emplace(key, type);
-  return TypeRef(type, (TypeRef::TagType)tag);
+  return type;
 }
 
-TypeRef TypeContext::GetOrCreateUnion(ScopeId scope_id, std::string_view name,
-                                      TypeTag tag) {
+UnionType *TypeContext::GetOrCreateUnion(ScopeId scope_id,
+                                         std::string_view name) {
   ASSERT(!name.empty(), "Union type name must not be empty");
-  type_context_detail::NominalKey key{.scope_id = scope_id,
-                                      .name = std::string(name)};
+  tcd::NominalKey key{.scope_id = scope_id, .name = std::string(name)};
   if (auto found = unions_.find(key); found != unions_.end()) {
-    return TypeRef(found->second, (TypeRef::TagType)tag);
+    return found->second;
   }
   auto *type = Make<UnionType>(scope_id, name);
   unions_.emplace(key, type);
-  return TypeRef(type, (TypeRef::TagType)tag);
+  return type;
 }
 
-TypeRef TypeContext::GetOrCreateEnum(ScopeId scope_id, std::string_view name,
-                                     TypeTag tag) {
+EnumType *TypeContext::GetOrCreateEnum(ScopeId scope_id,
+                                       std::string_view name) {
   ASSERT(!name.empty(), "Enum type name must not be empty");
-  type_context_detail::NominalKey key{.scope_id = scope_id,
-                                      .name = std::string(name)};
+  tcd::NominalKey key{.scope_id = scope_id, .name = std::string(name)};
   if (auto found = enums_.find(key); found != enums_.end()) {
-    return TypeRef(found->second, (TypeRef::TagType)tag);
+    return found->second;
   }
   auto *type = Make<EnumType>(scope_id, name);
   enums_.emplace(key, type);
-  return TypeRef(type, (TypeRef::TagType)tag);
+  return type;
 }
 
 void TypeContext::CompleteStruct(TypeRef type,

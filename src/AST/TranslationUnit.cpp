@@ -438,9 +438,8 @@ ParseFunctionDecl(FilteredLexer &lexer, ParsedType type,
 }
 
 static void AddVaList(CompileContext &context) {
-  auto va_list_type_ref = context.Types().GetOrCreateStruct(
+  auto *va_list_type = context.Types().GetOrCreateStruct(
       context.CurrentScopeId(), "__builtin_va_list_type");
-  StructType *va_list_type = va_list_type_ref->As<StructType>();
   StructField fields[] = {
       {"", context.Types().Builtin(BuiltinKind::Int), 0},
       {"", context.Types().Pointer(context.Types().Builtin(BuiltinKind::Void)),
@@ -448,7 +447,7 @@ static void AddVaList(CompileContext &context) {
       {"", context.Types().Pointer(context.Types().Builtin(BuiltinKind::Void)),
        2},
       {"", context.Types().Builtin(BuiltinKind::Int), 3}};
-  context.Types().CompleteStruct(va_list_type_ref, fields);
+  context.Types().CompleteStruct(va_list_type, fields);
   context.CurrentLayer().AddTypedef("va_list", va_list_type);
 }
 

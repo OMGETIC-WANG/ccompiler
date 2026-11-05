@@ -9,7 +9,8 @@
 #include <unordered_map>
 #include <vector>
 
-namespace type_context_detail {
+// type_context_detail
+namespace tcd {
 
 struct ArrayKey {
   TypeRef element;
@@ -44,7 +45,7 @@ struct NominalKeyHash {
   size_t operator()(const NominalKey &key) const;
 };
 
-} // namespace type_context_detail
+} // namespace tcd
 
 // Owns and interns every type in one compilation unit. It must outlive all
 // TypeRef values stored in the AST and code generator.
@@ -64,12 +65,9 @@ public:
   TypeRef Function(TypeRef return_type, std::span<const TypeRef> parameters,
                    TypeTag tag = TypeTag::None);
 
-  TypeRef GetOrCreateStruct(ScopeId scope_id, std::string_view name,
-                            TypeTag tag = TypeTag::None);
-  TypeRef GetOrCreateUnion(ScopeId scope_id, std::string_view name,
-                           TypeTag tag = TypeTag::None);
-  TypeRef GetOrCreateEnum(ScopeId scope_id, std::string_view name,
-                          TypeTag tag = TypeTag::None);
+  StructType *GetOrCreateStruct(ScopeId scope_id, std::string_view name);
+  UnionType *GetOrCreateUnion(ScopeId scope_id, std::string_view name);
+  EnumType *GetOrCreateEnum(ScopeId scope_id, std::string_view name);
 
   void CompleteStruct(TypeRef type, std::span<const StructField> fields);
   void CompleteUnion(TypeRef type, std::span<const UnionField> fields);
@@ -98,20 +96,12 @@ private:
   std::vector<std::unique_ptr<TypeBase>> storage_;
 
   std::unordered_map<TypeRef, PointerType *> pointers_;
-  std::unordered_map<type_context_detail::ArrayKey, ArrayType *,
-                     type_context_detail::ArrayKeyHash>
-      arrays_;
-  std::unordered_map<type_context_detail::FunctionKey, FunctionType *,
-                     type_context_detail::FunctionKeyHash>
+  std::unordered_map<tcd::ArrayKey, ArrayType *, tcd::ArrayKeyHash> arrays_;
+  std::unordered_map<tcd::FunctionKey, FunctionType *, tcd::FunctionKeyHash>
       functions_;
-  std::unordered_map<type_context_detail::NominalKey, StructType *,
-                     type_context_detail::NominalKeyHash>
+  std::unordered_map<tcd::NominalKey, StructType *, tcd::NominalKeyHash>
       structs_;
-  std::unordered_map<type_context_detail::NominalKey, EnumType *,
-                     type_context_detail::NominalKeyHash>
-      enums_;
+  std::unordered_map<tcd::NominalKey, EnumType *, tcd::NominalKeyHash> enums_;
 
-  std::unordered_map<type_context_detail::NominalKey, UnionType *,
-                     type_context_detail::NominalKeyHash>
-      unions_;
+  std::unordered_map<tcd::NominalKey, UnionType *, tcd::NominalKeyHash> unions_;
 };
