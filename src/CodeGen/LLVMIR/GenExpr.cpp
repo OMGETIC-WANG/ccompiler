@@ -632,10 +632,19 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
 
     builder.SetInsertPoint(true_block);
     RValue true_value = EmitRValue(cond_expr->true_expr.get());
-    builder.CreateBr(end_block);
 
     builder.SetInsertPoint(false_block);
     RValue false_value = EmitRValue(cond_expr->false_expr.get());
+
+    TypeRef common_type = UsualArithmeticType(
+        true_value.c_type, false_value.c_type, context.Types());
+
+    builder.SetInsertPoint(true_block);
+    true_value = TryCastTo(common_type, true_value, builder);
+    builder.CreateBr(end_block);
+
+    builder.SetInsertPoint(false_block);
+    false_value = TryCastTo(common_type, false_value, builder);
     builder.CreateBr(end_block);
 
     builder.SetInsertPoint(end_block);
