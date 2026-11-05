@@ -177,23 +177,24 @@ struct ExprEmitter::detail {
                "Array with unspecified size requires an initializer");
         if (auto *array_init = decl->initializer->DynCast<ArrayInitializer>()) {
           if (!array_type->size.has_value()) {
-            type = self.context.Types().Array(array_type->element_type,
-                                              array_init->initializers.size(),
-                                              (TypeTag)type.get_tag());
+            type = ApplyTypeTag(
+                self.context.Types().Array(array_type->element_type,
+                                           array_init->initializers.size()),
+                static_cast<TypeTag>(type.get_tag()));
           } else {
             ASSERT(array_type->size.value() >= array_init->initializers.size(),
                    "Array initializer has more elements than the array size");
           }
         } else {
           if (IsLiteralStringInit(array_type, decl->initializer.get())) {
-            type = self.context.Types().Array(
-                array_type->element_type,
-                decl->initializer->As<ValueInitializer>()
-                        ->value->As<LiteralString>()
-                        ->value.view()
-                        .size() +
-                    1,
-                (TypeTag)type.get_tag());
+            type = ApplyTypeTag(self.context.Types().Array(
+                                    array_type->element_type,
+                                    decl->initializer->As<ValueInitializer>()
+                                            ->value->As<LiteralString>()
+                                            ->value.view()
+                                            .size() +
+                                        1),
+                                static_cast<TypeTag>(type.get_tag()));
           } else {
             RAISE_ERROR("Failed to init array");
           }
@@ -233,8 +234,8 @@ struct ExprEmitter::detail {
 
   template <EvalAndOr eval_kind>
   static RValue EvalAndOr(ASTNode *left, ASTNode *right, ExprEmitter &self) {
-    TypeRef bool_type =
-        self.context.Types().Builtin(BuiltinKind::I1, TypeTag::Unsigned);
+    TypeRef bool_type = ApplyTypeTag(
+        self.context.Types().Builtin(BuiltinKind::I1), TypeTag::Unsigned);
     RValue left_value = self.EmitRValue(left);
     llvm::BasicBlock *left_block = self.builder.GetInsertBlock();
     ASSERT(left_block, "Missing insertion block in logical expression");
@@ -331,7 +332,8 @@ struct ExprEmitter::detail {
         op_type == BinaryOpType::Le || op_type == BinaryOpType::Ge;
     TypeRef out_type =
         is_comparison
-            ? self.context.Types().Builtin(BuiltinKind::I1, TypeTag::Unsigned)
+            ? ApplyTypeTag(self.context.Types().Builtin(BuiltinKind::I1),
+                           TypeTag::Unsigned)
             : result_type;
     return self.builder.CreateBinaryOp(op_type, left, right, out_type);
   }

@@ -134,8 +134,8 @@ void IRBuilder::CreateVoidRet() {
 }
 
 RValue IRBuilder::CreateBoolCond(const RValue &value) {
-  TypeRef bool_type =
-      _context.Types().Builtin(BuiltinKind::I1, TypeTag::Unsigned);
+  TypeRef bool_type = ApplyTypeTag(_context.Types().Builtin(BuiltinKind::I1),
+                                   TypeTag::Unsigned);
   llvm::Value *cond = nullptr;
   if (value.c_type->Is<PointerType>()) {
     cond = _builder.CreateICmpNE(
@@ -155,8 +155,8 @@ RValue IRBuilder::CreateBoolCond(const RValue &value) {
 }
 
 RValue IRBuilder::CreateInvBoolCond(const RValue &value) {
-  TypeRef bool_type =
-      _context.Types().Builtin(BuiltinKind::I1, TypeTag::Unsigned);
+  TypeRef bool_type = ApplyTypeTag(_context.Types().Builtin(BuiltinKind::I1),
+                                   TypeTag::Unsigned);
   llvm::Value *cond = nullptr;
   if (value.c_type->Is<PointerType>()) {
     cond = _builder.CreateICmpEQ(

@@ -194,7 +194,7 @@ TypeRef PromoteInteger(TypeRef type, TypeContext &types) {
   const TypeRef int_type = types.Builtin(BuiltinKind::Int);
   if (HasTypeTag(type, TypeTag::Unsigned) && kind != BuiltinKind::I1 &&
       type->GetSize() >= int_type->GetSize()) {
-    return types.Builtin(BuiltinKind::Int, TypeTag::Unsigned);
+    return ApplyTypeTag(types.Builtin(BuiltinKind::Int), TypeTag::Unsigned);
   }
   return int_type;
 }
@@ -245,8 +245,8 @@ TypeRef UsualArithmeticType(TypeRef left, TypeRef right, TypeContext &types) {
   if (signed_type->GetSize() > unsigned_type->GetSize()) {
     return signed_type;
   }
-  return types.Builtin(signed_type->As<BuiltinType>()->Kind(),
-                       TypeTag::Unsigned);
+  return ApplyTypeTag(types.Builtin(signed_type->As<BuiltinType>()->Kind()),
+                      TypeTag::Unsigned);
 }
 
 TypeRef ResolveTypeSpecifier(const TypeSpecifier &specifier,

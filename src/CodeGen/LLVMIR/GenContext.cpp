@@ -68,7 +68,7 @@ llvm::Type *LLVMTypeConverter::Convert(TypeRef type) {
     result = llvm::PointerType::get(_context, 0);
     break;
   case TypeBaseType::FunctionType:
-    result = ConvertFunction(type);
+    result = ConvertFunction(type->As<FunctionType>());
     break;
   case TypeBaseType::ArrayType: {
     const auto *array = type->As<ArrayType>();
@@ -80,10 +80,10 @@ llvm::Type *LLVMTypeConverter::Convert(TypeRef type) {
     break;
   }
   case TypeBaseType::StructType:
-    result = ConvertStruct(type);
+    result = ConvertStruct(type->As<StructType>());
     break;
   case TypeBaseType::UnionType:
-    result = ConvertUnion(type);
+    result = ConvertUnion(type->As<UnionType>());
     break;
   case TypeBaseType::EnumType: {
     const auto *enum_type = type->As<EnumType>();
@@ -98,66 +98,61 @@ llvm::Type *LLVMTypeConverter::Convert(TypeRef type) {
   return result;
 }
 
-llvm::FunctionType *LLVMTypeConverter::ConvertFunction(TypeRef type) {
-  ASSERT(type != nullptr && type->Is<FunctionType>(),
-         "Expected a C function type");
-  if (auto found = _types.find(type.get()); found != _types.end()) {
+llvm::FunctionType *LLVMTypeConverter::ConvertFunction(FunctionType *type) {
+  ASSERT(type != nullptr, "Expected a C function type");
+  if (auto found = _types.find(type); found != _types.end()) {
     return llvm::cast<llvm::FunctionType>(found->second);
   }
 
-  const auto *function = type->As<FunctionType>();
   std::vector<llvm::Type *> params;
-  params.reserve(function->parameters.size());
-  for (TypeRef param : function->parameters) {
+  params.reserve(type->parameters.size());
+  for (TypeRef param : type->parameters) {
     params.push_back(ConvertParameter(param));
   }
 
-  auto *result = llvm::FunctionType::get(Convert(function->return_type), params,
-                                         function->has_va_args);
-  _types.emplace(type.get(), result);
+  auto *result = llvm::FunctionType::get(Convert(type->return_type), params,
+                                         type->has_va_args);
+  _types.emplace(type, result);
   return result;
 }
 
-llvm::StructType *LLVMTypeConverter::ConvertStruct(TypeRef type) {
-  ASSERT(type != nullptr && type->Is<StructType>(), "Expected a C struct type");
-  if (auto found = _types.find(type.get()); found != _types.end()) {
+llvm::StructType *LLVMTypeConverter::ConvertStruct(StructType *type) {
+  ASSERT(type != nullptr, "Expected a C struct type");
+  if (auto found = _types.find(type); found != _types.end()) {
     return llvm::cast<llvm::StructType>(found->second);
   }
 
-  auto *c_struct = type->As<StructType>();
-  std::string name =
-      std::format("struct.{}.{}", c_struct->type_name, _counter());
+  std::string name = std::format("struct.{}.{}", type->type_name, _counter());
   auto *result = llvm::StructType::create(_context, name);
-  _types.emplace(type.get(), result);
+  _types.emplace(type, result);
 
-  if (c_struct->is_complete) {
+  if (type->is_complete) {
     std::vector<llvm::Type *> fields;
-    fields.reserve(c_struct->fields.size());
-    for (size_t i = 0; i < c_struct->fields.size(); ++i) {
-      c_struct->fields[i].index = i;
-      fields.push_back(Convert(c_struct->fields[i].type));
+    fields.reserve(type->fields.size());
+    for (size_t i = 0; i < type->fields.size(); ++i) {
+      type->fields[i].index = i;
+      fields.push_back(Convert(type->fields[i].type));
     }
     result->setBody(fields);
   }
   return result;
 }
 
-llvm::StructType *LLVMTypeConverter::ConvertUnion(TypeRef type) {
-  ASSERT(type != nullptr && type->Is<UnionType>(), "Expected a C struct type");
-  if (auto found = _types.find(type.get()); found != _types.end()) {
+llvm::StructType *LLVMTypeConverter::ConvertUnion(UnionType *type) {
+  ASSERT(type != nullptr, "Expected a C union type");
+  if (auto found = _types.find(type); found != _types.end()) {
     return llvm::cast<llvm::StructType>(found->second);
   }
 
-  auto *c_union = type->As<UnionType>();
-  std::string name = std::format("union.{}.{}", c_union->type_name, _counter());
+  std::string name = std::format("union.{}.{}", type->type_name, _counter());
   auto *result = llvm::StructType::create(_context, name);
-  _types.emplace(type.get(), result);
+  _types.emplace(type, result);
 
-  if (c_union->is_complete) {
+  if (type->is_complete) {
     size_t max_size = (size_t)-1;
     size_t max_size_index = (size_t)-1;
-    for (size_t i = 0; i < c_union->fields.size(); i++) {
-      auto field_type = c_union->fields[i].type;
+    for (size_t i = 0; i < type->fields.size(); i++) {
+      auto field_type = type->fields[i].type;
       if (max_size == (size_t)-1 || field_type->GetSize() > max_size) {
         max_size = field_type->GetSize();
         max_size_index = i;
@@ -165,21 +160,20 @@ llvm::StructType *LLVMTypeConverter::ConvertUnion(TypeRef type) {
       Convert(field_type);
     }
     if (max_size_index != (size_t)-1) {
-      result->setBody(Convert(c_union->fields[max_size_index].type));
+      result->setBody(Convert(type->fields[max_size_index].type));
     }
   }
   return result;
 }
 
-llvm::ArrayType *LLVMTypeConverter::ConvertArray(TypeRef type, size_t size) {
-  ASSERT(type != nullptr && type->Is<ArrayType>(), "Expected a C array type");
-  if (auto found = _types.find(type.get()); found != _types.end()) {
+llvm::ArrayType *LLVMTypeConverter::ConvertArray(ArrayType *type, size_t size) {
+  ASSERT(type != nullptr, "Expected a C array type");
+  if (auto found = _types.find(type); found != _types.end()) {
     return llvm::cast<llvm::ArrayType>(found->second);
   }
 
-  auto *c_array = type->As<ArrayType>();
-  auto *result = llvm::ArrayType::get(Convert(c_array->element_type), size);
-  _types.emplace(type.get(), result);
+  auto *result = llvm::ArrayType::get(Convert(type->element_type), size);
+  _types.emplace(type, result);
   return result;
 }
 

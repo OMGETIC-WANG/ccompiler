@@ -56,14 +56,13 @@ public:
   TypeContext(const TypeContext &) = delete;
   TypeContext &operator=(const TypeContext &) = delete;
 
-  TypeRef Builtin(std::string_view name) const;
-  TypeRef Builtin(BuiltinKind kind, TypeTag tag = TypeTag::None) const;
+  BuiltinType *Builtin(std::string_view name) const;
+  BuiltinType *Builtin(BuiltinKind kind) const;
 
-  TypeRef Pointer(TypeRef pointee, TypeTag tag = TypeTag::None);
-  TypeRef Array(TypeRef element, std::optional<size_t> size,
-                TypeTag tag = TypeTag::None);
-  TypeRef Function(TypeRef return_type, std::span<const TypeRef> parameters,
-                   TypeTag tag = TypeTag::None);
+  PointerType *Pointer(TypeRef pointee);
+  ArrayType *Array(TypeRef element, std::optional<size_t> size);
+  FunctionType *Function(TypeRef return_type,
+                         std::span<const TypeRef> parameters);
 
   StructType *GetOrCreateStruct(ScopeId scope_id, std::string_view name);
   UnionType *GetOrCreateUnion(ScopeId scope_id, std::string_view name);

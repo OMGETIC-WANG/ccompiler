@@ -71,7 +71,7 @@ TypeContext::TypeContext() {
   }
 }
 
-TypeRef TypeContext::Builtin(std::string_view name) const {
+BuiltinType *TypeContext::Builtin(std::string_view name) const {
   for (const auto &info : BUILTIN_TYPES) {
     if (info.name == name) {
       return Builtin(info.kind);
@@ -80,44 +80,42 @@ TypeRef TypeContext::Builtin(std::string_view name) const {
   RAISE_ERROR("Unknown builtin type ", name);
 }
 
-TypeRef TypeContext::Builtin(BuiltinKind kind, TypeTag tag) const {
+BuiltinType *TypeContext::Builtin(BuiltinKind kind) const {
   for (const auto &storage : storage_) {
     auto *type = storage->DynCast<BuiltinType>();
     if (type && type->Kind() == kind) {
-      return TypeRef(type, (TypeRef::TagType)tag);
+      return type;
     }
   }
   RAISE_ERROR("Builtin type is not registered: ", kind);
 }
 
-TypeRef TypeContext::Pointer(TypeRef pointee, TypeTag tag) {
+PointerType *TypeContext::Pointer(TypeRef pointee) {
   ASSERT(pointee != nullptr, "Pointer pointee must not be null");
   if (auto found = pointers_.find(pointee); found != pointers_.end()) {
-    return TypeRef(found->second, (TypeRef::TagType)tag);
+    return found->second;
   }
   auto *pointer = Make<PointerType>();
   pointer->pointee_type = pointee;
   pointers_.emplace(pointee, pointer);
-  return TypeRef(pointer, (TypeRef::TagType)tag);
+  return pointer;
 }
 
-TypeRef TypeContext::Array(TypeRef element, std::optional<size_t> size,
-                           TypeTag tag) {
+ArrayType *TypeContext::Array(TypeRef element, std::optional<size_t> size) {
   ASSERT(element != nullptr, "Array element type must not be null");
   tcd::ArrayKey key{.element = element, .size = size};
   if (auto found = arrays_.find(key); found != arrays_.end()) {
-    return TypeRef(found->second, (TypeRef::TagType)tag);
+    return found->second;
   }
   auto *array = Make<ArrayType>();
   array->element_type = element;
   array->size = size;
   arrays_.emplace(key, array);
-  return TypeRef(array, (TypeRef::TagType)tag);
+  return array;
 }
 
-TypeRef TypeContext::Function(TypeRef return_type,
-                              std::span<const TypeRef> parameters,
-                              TypeTag tag) {
+FunctionType *TypeContext::Function(TypeRef return_type,
+                                    std::span<const TypeRef> parameters) {
   ASSERT(return_type != nullptr, "Function return type must not be null");
   for (TypeRef parameter : parameters) {
     ASSERT(parameter != nullptr, "Function parameter type must not be null");
@@ -127,13 +125,13 @@ TypeRef TypeContext::Function(TypeRef return_type,
       .parameters = std::vector<TypeRef>(parameters.begin(), parameters.end()),
   };
   if (auto found = functions_.find(key); found != functions_.end()) {
-    return TypeRef(found->second, (TypeRef::TagType)tag);
+    return found->second;
   }
   auto *function = Make<FunctionType>();
   function->return_type = return_type;
   function->parameters.assign(parameters.begin(), parameters.end());
   functions_.emplace(key, function);
-  return TypeRef(function, (TypeRef::TagType)tag);
+  return function;
 }
 
 StructType *TypeContext::GetOrCreateStruct(ScopeId scope_id,

@@ -38,10 +38,10 @@ public:
   LLVMTypeConverter(llvm::LLVMContext &context, Counter<> &counter);
 
   llvm::Type *Convert(TypeRef type);
-  llvm::FunctionType *ConvertFunction(TypeRef type);
-  llvm::StructType *ConvertStruct(TypeRef type);
-  llvm::StructType *ConvertUnion(TypeRef type);
-  llvm::ArrayType *ConvertArray(TypeRef type, size_t size);
+  llvm::FunctionType *ConvertFunction(FunctionType *type);
+  llvm::StructType *ConvertStruct(StructType *type);
+  llvm::StructType *ConvertUnion(UnionType *type);
+  llvm::ArrayType *ConvertArray(ArrayType *type, size_t size);
 
 private:
   llvm::Type *ConvertParameter(TypeRef type);
@@ -81,16 +81,16 @@ public:
 
   llvm::Type *LLVMType(TypeRef type) { return type_converter.Convert(type); }
   llvm::FunctionType *LLVMFunctionType(TypeRef type) {
-    return type_converter.ConvertFunction(type);
+    return type_converter.ConvertFunction(type->As<FunctionType>());
   }
   llvm::StructType *LLVMStructType(TypeRef type) {
-    return type_converter.ConvertStruct(type);
+    return type_converter.ConvertStruct(type->As<StructType>());
   }
   llvm::StructType *LLVMUnionType(TypeRef type) {
-    return type_converter.ConvertUnion(type);
+    return type_converter.ConvertUnion(type->As<UnionType>());
   }
   llvm::ArrayType *LLVMArrayType(TypeRef type, size_t size) {
-    return type_converter.ConvertArray(type, size);
+    return type_converter.ConvertArray(type->As<ArrayType>(), size);
   }
 
   std::vector<GenContextLayer> layers;
