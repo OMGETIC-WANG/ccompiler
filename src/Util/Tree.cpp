@@ -2,22 +2,43 @@
 
 #include <variant>
 
-static std::string GetTreeNodePrintFieldString(
-    const TreeNodePrintField *field) {
+template <class Node, class FnGetChildren, class FnGetString>
+static void PrintTreeChildren(const Node *node,
+                              const FnGetChildren &get_children,
+                              const FnGetString &get_string, std::ostream &out,
+                              const std::string &prefix) {
+  const auto children = get_children(node);
+  for (size_t child_index = 0; child_index < children.size(); ++child_index) {
+    const auto *child = &children[child_index];
+    const bool is_last = child_index + 1 == children.size();
+
+    out << prefix << "+-" << get_string(child) << '\n';
+
+    const std::string next_prefix = prefix + (is_last ? "  " : "| ");
+    PrintTreeChildren(child, get_children, get_string, out, next_prefix);
+  }
+}
+
+template <class Node, class FnGetChildren, class FnGetString>
+static void PrintTree(const Node *root, const FnGetChildren &get_children,
+                      const FnGetString &get_string, std::ostream &out) {
+  if (!root)
+    return;
+
+  out << get_string(root) << '\n';
+  PrintTreeChildren(root, get_children, get_string, out, {});
+}
+
+static std::string
+GetTreeNodePrintFieldString(const TreeNodePrintField *field) {
   std::string result;
   if (!field->name.empty()) {
-    result += '[';
-    result += field->name;
-    result += "] ";
+    result += std::format("[{}] ", field->name);
   }
 
   if (const auto *node = std::get_if<const TreeNode *>(&field->value)) {
-    result += (*node)->GetNodeTypeName();
-    const auto summary = (*node)->ToString();
-    if (!summary.empty()) {
-      result += ' ';
-      result += summary;
-    }
+    result += std::format("{} 0x{:x} {}", (*node)->GetNodeTypeName(),
+                          (uintptr_t)(*node), (*node)->ToString());
   } else {
     result += std::get<std::string>(field->value);
   }
