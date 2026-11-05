@@ -59,30 +59,27 @@ public:
     return static_cast<TagType>(_ptr & tag_mask);
   }
 
-  TaggedVoidPointer &set_tag(TagType tag) noexcept {
+  void set_tag(TagType tag) {
     ASSERT((static_cast<uintptr_t>(tag) & pointer_mask) == 0,
            "Tag out of range");
     ASSERT(_ptr != 0 || tag == 0, "Null pointer cannot carry a tag");
     _ptr = (_ptr & pointer_mask) | (static_cast<uintptr_t>(tag) & tag_mask);
-    return *this;
   }
 
-  TaggedVoidPointer &set(void *ptr) {
+  void set(void *ptr) {
     uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
     ASSERT((p & tag_mask) == 0, "Pointer is not aligned");
     ASSERT(p != 0 || (_ptr & tag_mask) == 0, "Null pointer cannot carry a tag");
     _ptr = p | (_ptr & tag_mask);
-    return *this;
   }
 
-  TaggedVoidPointer &reset(void *ptr = nullptr, TagType tag = 0) {
+  void reset(void *ptr = nullptr, TagType tag = 0) {
     uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
     ASSERT((p & tag_mask) == 0, "Pointer is not aligned");
     ASSERT((static_cast<uintptr_t>(tag) & pointer_mask) == 0,
            "Tag out of range");
     ASSERT(p != 0 || tag == 0, "Null pointer cannot carry a tag");
     _ptr = p | (static_cast<uintptr_t>(tag) & tag_mask);
-    return *this;
   }
 
   uintptr_t raw() const noexcept { return _ptr; }
@@ -116,31 +113,29 @@ public:
 
   pointer get() const noexcept { return static_cast<pointer>(Base::get()); }
 
+  void set(pointer ptr) { Base::set(const_cast<std::remove_cv_t<T> *>(ptr)); }
+
   template <typename U = T, typename = std::enable_if_t<!std::is_void_v<U>>>
-  U &operator*() const noexcept {
+  U &operator*() const {
     ASSERT(get() != nullptr, "Dereferencing null TaggedPointer");
     return *get();
   }
 
-  pointer operator->() const noexcept {
+  pointer operator->() const {
     ASSERT(get() != nullptr, "Accessing member of null TaggedPointer");
     return get();
   }
 
   TagType get_tag() const noexcept { return Base::get_tag(); }
-  TaggedPointer &set_tag(TagType tag) noexcept {
-    Base::set_tag(tag);
-    return *this;
-  }
 
-  TaggedPointer &set(pointer ptr) {
-    Base::set(const_cast<std::remove_cv_t<T> *>(ptr));
-    return *this;
-  }
+  void set_tag(TagType tag) { Base::set_tag(tag); }
 
-  TaggedPointer &reset(pointer ptr = nullptr, TagType tag = 0) {
+  void reset(pointer ptr = nullptr, TagType tag = 0) {
     Base::reset(const_cast<std::remove_cv_t<T> *>(ptr), tag);
-    return *this;
+  }
+
+  TaggedPointer with_tag(TagType tag) const {
+    return TaggedPointer(get(), tag);
   }
 
   explicit operator bool() const noexcept { return get() != nullptr; }
@@ -207,7 +202,8 @@ struct formatter<TaggedPointer<T, pointer_align>> : std::formatter<char> {
     if (ptr.get() == nullptr) {
       return std::format_to(ctx.out(), "nullptr");
     } else {
-      return std::format_to(ctx.out(), "{}", ptr.get());
+      return std::format_to(ctx.out(), "{}",
+                            static_cast<const void *>(ptr.get()));
     }
   }
 };
