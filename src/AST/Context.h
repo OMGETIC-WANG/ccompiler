@@ -36,8 +36,6 @@ REGISTER_ENUM(ContextItemType, CONTEXT_ITEM_TYPE_VALUES)
   }
 
 struct CompileContextLayer {
-  ScopeId scope_id = 0;
-
   TYPED_CONTEXT_ITEM_TYPE_VALUES(MAKE_CompileContextLayer_DECL_AND_Add_x)
 
   std::vector<std::string_view> labels;
@@ -86,14 +84,11 @@ public:
   TypeContext &Types() { return _types; }
   const TypeContext &Types() const { return _types; }
 
-  ScopeId CurrentScopeId() const { return CurrentLayer().scope_id; }
+  ScopeId CurrentScopeId() { return _next_scope_id++; }
 
   TYPED_CONTEXT_ITEM_TYPE_VALUES(MAKE_CompileContext_Find_x)
 
-  void PushLayer() {
-    layers.emplace_back();
-    layers.back().scope_id = _next_scope_id++;
-  }
+  void PushLayer() { layers.emplace_back(); }
   void PopLayer() {
     if (layers.empty()) {
       RAISE_ERROR("No context layer to remove");
