@@ -14,6 +14,7 @@
   x(TranslationUnit)\
   x(FunctionDecl)\
   x(StructDecl)\
+  x(UnionDecl)\
   x(LiteralString)\
   x(LiteralNum)\
   x(BinaryExpr)\

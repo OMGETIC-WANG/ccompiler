@@ -37,6 +37,14 @@ concept _TreeNodePtrLike =
       { ptr.operator->() } -> std::convertible_to<const TreeNode *>;
     };
 
+template <_TreeNodePtrLike Ptr>
+struct std::formatter<Ptr> : std::formatter<char> {
+  auto format(const Ptr &ptr, std::format_context &ctx) const {
+    return std::format_to(ctx.out(), "{}:{}", ptr->GetNodeTypeName(),
+                          ptr->ToString());
+  }
+};
+
 template <typename Elem>
 concept _MapElemLike = requires(const Elem &elem) {
   { elem.first } -> std::convertible_to<std::string_view>;

@@ -152,6 +152,19 @@ TypeRef TypeContext::GetOrCreateStruct(ScopeId scope_id, std::string_view name,
   return TypeRef(type, (TypeRef::TagType)tag);
 }
 
+TypeRef TypeContext::GetOrCreateUnion(ScopeId scope_id, std::string_view name,
+                                      TypeTag tag) {
+  ASSERT(!name.empty(), "Union type name must not be empty");
+  type_context_detail::NominalKey key{.scope_id = scope_id,
+                                      .name = std::string(name)};
+  if (auto found = unions_.find(key); found != unions_.end()) {
+    return TypeRef(found->second, (TypeRef::TagType)tag);
+  }
+  auto *type = Make<UnionType>(scope_id, name);
+  unions_.emplace(key, type);
+  return TypeRef(type, (TypeRef::TagType)tag);
+}
+
 TypeRef TypeContext::GetOrCreateEnum(ScopeId scope_id, std::string_view name,
                                      TypeTag tag) {
   ASSERT(!name.empty(), "Enum type name must not be empty");
@@ -175,6 +188,18 @@ void TypeContext::CompleteStruct(TypeRef type,
   }
   struct_type->fields.assign(fields.begin(), fields.end());
   struct_type->is_complete = true;
+}
+
+void TypeContext::CompleteUnion(TypeRef type,
+                                std::span<const UnionField> fields) {
+  auto *union_type = Mutable<UnionType>(type);
+  ASSERT(!union_type->is_complete,
+         "Union type is already complete: ", union_type->type_name);
+  for (const auto &field : fields) {
+    ASSERT(field.type != nullptr, "Union field type must not be null");
+  }
+  union_type->fields.assign(fields.begin(), fields.end());
+  union_type->is_complete = true;
 }
 
 void TypeContext::CompleteEnum(TypeRef type, TypeRef underlying_type,

@@ -13,8 +13,8 @@ TypeRef ApplyConstQualifier(TypeRef type, TypeContext &types) {
   return ApplyTypeTag(type, TypeTag::Const);
 }
 
-TypeRef CreateBaseType(const TypeSpecifier &specifier,
-                       CompileContext &context) {
+TypeRef GetOrCreateBaseType(const TypeSpecifier &specifier,
+                            CompileContext &context) {
   TypeContext &types = context.Types();
   TypeRef type;
   if (specifier.is_builtin) {
@@ -28,6 +28,9 @@ TypeRef CreateBaseType(const TypeSpecifier &specifier,
   } else if (specifier.is_struct) {
     ASSERT(!specifier.is_unsigned, "unsigned cannot qualify a struct type");
     type = types.GetOrCreateStruct(specifier.scope_id, specifier.type_name);
+  } else if (specifier.is_union) {
+    ASSERT(!specifier.is_unsigned, "unsigned cannot qualify a union type");
+    type = types.GetOrCreateUnion(specifier.scope_id, specifier.type_name);
   } else if (specifier.is_enum) {
     ASSERT(!specifier.is_unsigned, "unsigned cannot qualify an enum type");
     type = types.GetOrCreateEnum(specifier.scope_id, specifier.type_name);
@@ -88,7 +91,11 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
       parameter_names.reserve(param_list->params.size());
 
       for (const auto &param : param_list->params) {
-        TypeRef param_type = CreateBaseType(param.specifier.type_spec, context);
+        TypeRef param_type = context.GetType(param.specifier.type_spec);
+        if (!param_type) {
+          RAISE_ERROR("Unknown struct/union/enum: ",
+                      param.specifier.type_spec.type_name);
+        }
         if (!param.declarator) {
           parameter_types.push_back(param_type);
           parameter_names.push_back({});
@@ -244,14 +251,18 @@ TypeRef UsualArithmeticType(TypeRef left, TypeRef right, TypeContext &types) {
 
 TypeRef ResolveTypeSpecifier(const TypeSpecifier &specifier,
                              CompileContext &context) {
-  return CreateBaseType(specifier, context);
+  return GetOrCreateBaseType(specifier, context);
 }
 
 std::vector<ParsedType> ParseType(const Declaration *decl,
                                   CompileContext &context) {
   std::vector<ParsedType> results;
-  TypeRef base_type =
-      CreateBaseType(decl->declaration_specifier.type_spec, context);
+  TypeRef base_type = context.GetType(decl->declaration_specifier.type_spec);
+
+  if (!base_type) {
+    RAISE_ERROR("Unknown struct/union/enum: ",
+                decl->declaration_specifier.type_spec.type_name);
+  }
 
   if (decl->init_declarators.size()) {
     results.reserve(decl->init_declarators.size());

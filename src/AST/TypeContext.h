@@ -66,16 +66,21 @@ public:
 
   TypeRef GetOrCreateStruct(ScopeId scope_id, std::string_view name,
                             TypeTag tag = TypeTag::None);
+  TypeRef GetOrCreateUnion(ScopeId scope_id, std::string_view name,
+                           TypeTag tag = TypeTag::None);
   TypeRef GetOrCreateEnum(ScopeId scope_id, std::string_view name,
                           TypeTag tag = TypeTag::None);
 
   void CompleteStruct(TypeRef type, std::span<const StructField> fields);
+  void CompleteUnion(TypeRef type, std::span<const UnionField> fields);
   void CompleteEnum(TypeRef type, TypeRef underlying_type,
                     std::span<const EnumValue> values);
 
   size_t TypeCount() const { return storage_.size(); }
 
 private:
+  struct detail;
+
   template <typename T, typename... Args> T *Make(Args &&...args) {
     std::unique_ptr<T> storage(new T(std::forward<Args>(args)...));
     T *result = storage.get();
@@ -105,4 +110,8 @@ private:
   std::unordered_map<type_context_detail::NominalKey, EnumType *,
                      type_context_detail::NominalKeyHash>
       enums_;
+
+  std::unordered_map<type_context_detail::NominalKey, UnionType *,
+                     type_context_detail::NominalKeyHash>
+      unions_;
 };

@@ -13,6 +13,7 @@
   x(Function)\
   x(Typedef)\
   x(Struct)\
+  x(Union)\
   x(Variable)\
   x(Enum)
 
@@ -112,6 +113,26 @@ public:
 
   bool Is(std::string_view name, ContextItemType type) const {
     return GetTypeOf(name) == type;
+  }
+
+  TypeRef GetType(const TypeSpecifier &spec) const {
+    if (spec.is_builtin)
+      return Types().Builtin(spec.type_name);
+    if (spec.is_struct)
+      return FindStruct(spec.type_name);
+    if (spec.is_union)
+      return FindUnion(spec.type_name);
+    if (spec.is_enum)
+      return FindEnum(spec.type_name);
+    if (spec.is_named_type) {
+      TypeRef type = FindTypedef(spec.type_name);
+      if (type)
+        return type;
+      type = FindEnum(spec.type_name);
+      if (type)
+        return type;
+    }
+    return nullptr;
   }
 
 private:

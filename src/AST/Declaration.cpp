@@ -10,8 +10,9 @@ std::string_view DeclBase::GetNodeTypeName() const {
 
 static std::list<std::string> anoymous_symbols;
 
-static std::string_view GenerateAnoymousSymbol() {
-  std::string sym = "<anoymous_symbol_" + std::to_string(GetUniqueId()) + ">";
+static std::string_view
+GenerateAnoymousSymbol(std::string_view symbol = "symbol") {
+  std::string sym = std::format("<anoymous_{}_{}>", symbol, GetUniqueId());
   anoymous_symbols.push_back(std::move(sym));
   return anoymous_symbols.back();
 }
@@ -38,7 +39,8 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
   bool saw_unsigned = false;
 
   auto has_nominal_type = [&] {
-    return spec.is_struct || spec.is_enum || spec.is_named_type;
+    return spec.is_struct || spec.is_union || spec.is_enum ||
+           spec.is_named_type;
   };
   auto has_builtin_type = [&] {
     return type_mask &
@@ -100,16 +102,39 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
       if (tok.type == TokenType::Identifier) {
         spec.type_name = tok.value;
         lexer.ConsumeToken(tok);
-        if (lexer.PeekNextToken().type == TokenType::LBrace) {
+        if (lexer.PeekNextToken().type == TokenType::LBrace ||
+            lexer.PeekNextToken().type == TokenType::Semicolon) {
           auto struct_decl = ParseStructDecl(lexer, tok.value, context);
           decl_spec.decl = std::move(struct_decl);
         }
       } else if (tok.type == TokenType::LBrace) {
-        std::string_view name = GenerateAnoymousSymbol();
+        std::string_view name = GenerateAnoymousSymbol("struct");
         decl_spec.decl = ParseStructDecl(lexer, name, context);
         spec.type_name = name;
       } else {
         RAISE_ERROR("Expected struct name or definition");
+      }
+      break;
+    case TokenType::KwUnion:
+      ASSERT(!has_nominal_type() && !has_builtin_type(),
+             "Multiple base types in declaration specifier");
+      spec.is_union = true;
+      lexer.ConsumeToken(tok);
+      tok = lexer.PeekNextToken();
+      if (tok.type == TokenType::Identifier) {
+        spec.type_name = tok.value;
+        lexer.ConsumeToken(tok);
+        if (lexer.PeekNextToken().type == TokenType::LBrace ||
+            lexer.PeekNextToken().type == TokenType::Semicolon) {
+          auto union_decl = ParseUnionDecl(lexer, tok.value, context);
+          decl_spec.decl = std::move(union_decl);
+        }
+      } else if (tok.type == TokenType::LBrace) {
+        std::string_view name = GenerateAnoymousSymbol("union");
+        decl_spec.decl = ParseUnionDecl(lexer, name, context);
+        spec.type_name = name;
+      } else {
+        RAISE_ERROR("Expected union name or definition");
       }
       break;
     case TokenType::KwEnum:
@@ -124,9 +149,13 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
         if (lexer.PeekNextToken().type == TokenType::LBrace) {
           auto enum_decl = ParseEnumDecl(lexer, tok.value, context);
           decl_spec.decl = std::move(enum_decl);
+        } else if (lexer.PeekNextToken().type == TokenType::Semicolon) {
+          auto enum_type = context.Types().GetOrCreateEnum(
+              context.CurrentScopeId(), tok.value);
+          context.AddEnum(tok.value, enum_type);
         }
       } else if (tok.type == TokenType::LBrace) {
-        std::string_view name = GenerateAnoymousSymbol();
+        std::string_view name = GenerateAnoymousSymbol("enum");
         decl_spec.decl = ParseEnumDecl(lexer, name, context);
         spec.type_name = name;
       } else {

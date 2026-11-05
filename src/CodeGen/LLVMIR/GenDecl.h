@@ -9,6 +9,8 @@ class Constant;
 
 void GenStructDecl(StructDecl *decl, GenContext &context);
 
+void GenUnionDecl(UnionDecl *decl, GenContext &context);
+
 void GenEnumDecl(EnumDecl *decl, GenContext &context);
 
 llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,

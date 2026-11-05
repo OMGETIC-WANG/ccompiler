@@ -24,6 +24,7 @@ struct TypeSpecifier {
   std::string_view type_name;
   ScopeId scope_id = 0;
   bool is_struct = false;
+  bool is_union = false;
   bool is_typedef = false;
   bool is_builtin = false;
   bool is_enum = false;
@@ -52,6 +53,7 @@ REGISTER_ENUM(BuiltinKind, BUILTIN_KIND_VALUES)
 #define TYPE_BASE_TYPE_VALUES(x)\
   x(BuiltinType)\
   x(StructType)\
+  x(UnionType)\
   x(EnumType)\
   x(FunctionType)\
   x(ArrayType)\
@@ -313,6 +315,85 @@ protected:
       max_valid_align = std::max(field.type->GetAlign(), max_valid_align);
     }
     return max_valid_align;
+  }
+
+private:
+  std::string _ir_name;
+};
+
+struct UnionField {
+  std::string_view name;
+  TypeRef type;
+};
+
+class UnionType : public TypeBase {
+  TypeNodeImpl(UnionType);
+  TreeNodeFieldAsString(type_name);
+
+private:
+  friend class TypeContext;
+
+  UnionType(ScopeId scope_id, std::string_view name)
+      : type_name(name), scope_id(scope_id) {
+    ASSERT(!type_name.empty(), "StructType name must not be empty");
+  }
+
+public:
+  std::string type_name;
+  size_t scope_id;
+
+  std::vector<UnionField> fields;
+  bool is_complete = false;
+
+  std::optional<UnionField> GetField(std::string_view name) const {
+    for (const auto &field : fields) {
+      if (field.name == name) {
+        return field;
+      }
+    }
+    return std::nullopt;
+  }
+
+  std::optional<UnionField> GetMaxSizeField() const {
+    std::optional<UnionField> res;
+    for (const auto &field : fields) {
+      if (res.has_value()) {
+        if (field.type->GetSize() > res.value().type->GetSize()) {
+          res = field;
+        }
+      } else {
+        res = field;
+      }
+    }
+    return res;
+  }
+
+  std::string &IRName() { return _ir_name; }
+
+protected:
+  size_t EvalSize() const override {
+    if (!is_complete) {
+      RAISE_ERROR("Incomplete union type has no size: ", type_name);
+    }
+
+    size_t max_size = 0;
+    for (const auto &field : fields) {
+      max_size = std::max(field.type->GetSize(), max_size);
+    }
+    size_t align = GetAlign();
+    return (max_size + align - 1) / align;
+  }
+
+  size_t EvalAlign() const override {
+    if (!is_complete) {
+      RAISE_ERROR("Incomplete union type has no alignment: ", type_name);
+    }
+
+    size_t max_align = 1;
+    for (const auto &field : fields) {
+      max_align = std::max(field.type->GetAlign(), max_align);
+    }
+    return max_align;
   }
 
 private:

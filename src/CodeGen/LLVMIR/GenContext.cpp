@@ -82,6 +82,9 @@ llvm::Type *LLVMTypeConverter::Convert(TypeRef type) {
   case TypeBaseType::StructType:
     result = ConvertStruct(type);
     break;
+  case TypeBaseType::UnionType:
+    result = ConvertUnion(type);
+    break;
   case TypeBaseType::EnumType: {
     const auto *enum_type = type->As<EnumType>();
     result = enum_type->underlying_type ? Convert(enum_type->underlying_type)
@@ -135,6 +138,27 @@ llvm::StructType *LLVMTypeConverter::ConvertStruct(TypeRef type) {
       fields.push_back(Convert(c_struct->fields[i].type));
     }
     result->setBody(fields);
+  }
+  return result;
+}
+
+llvm::StructType *LLVMTypeConverter::ConvertUnion(TypeRef type) {
+  ASSERT(type != nullptr && type->Is<UnionType>(), "Expected a C struct type");
+  if (auto found = _types.find(type.get()); found != _types.end()) {
+    return llvm::cast<llvm::StructType>(found->second);
+  }
+
+  auto *c_union = type->As<UnionType>();
+  std::string name = std::format("union.{}.{}", c_union->type_name, _counter());
+  auto *result = llvm::StructType::create(_context, name);
+  _types.emplace(type.get(), result);
+
+  if (c_union->is_complete) {
+    auto max_size_field_ = c_union->GetMaxSizeField();
+    if (max_size_field_.has_value()) {
+      auto &max_size_field = max_size_field_.value();
+      result->setBody(Convert(max_size_field.type));
+    }
   }
   return result;
 }

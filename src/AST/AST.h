@@ -137,7 +137,17 @@ public:
 
 class StructDecl : public ASTNode {
   ASTNodeImpl(StructDecl);
-  TreeNodePrintFields(name, fields);
+  TreeNodePrintFields(name, type, fields);
+
+public:
+  std::string_view name;
+  TypeRef type = nullptr;
+  std::unique_ptr<CompoundStmt> fields;
+};
+
+class UnionDecl : public ASTNode {
+  ASTNodeImpl(UnionDecl);
+  TreeNodePrintFields(name, type, fields);
 
 public:
   std::string_view name;

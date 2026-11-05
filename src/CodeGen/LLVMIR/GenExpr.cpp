@@ -335,6 +335,25 @@ struct ExprEmitter::detail {
             : result_type;
     return self.builder.CreateBinaryOp(op_type, left, right, out_type);
   }
+
+  static LValue GetUnionFieldLValue(const LValue &value,
+                                    std::string_view field_name) {
+    ASSERT(value.c_type->Is<UnionType>());
+    auto union_type = value.c_type->As<UnionType>();
+    auto field_ = union_type->GetField(field_name);
+    ASSERT(field_.has_value(), "Unknown union field: ", field_name);
+    auto &field = field_.value();
+    return LValue{field.type, value.address};
+  }
+
+  static RValue GetUnionFieldRValue(const RValue &value,
+                                    std::string_view field_name,
+                                    ExprEmitter &self) {
+    LValue union_lval = self.builder.CreateAlloca(value.c_type);
+    self.builder.CreateStore(value, union_lval);
+    LValue field_lval = GetUnionFieldLValue(union_lval, field_name);
+    return LoadAsRValue(field_lval, self);
+  }
 };
 
 static BinaryOpType OpAssignToOp(BinaryOpType op_assign_op) {
@@ -382,11 +401,30 @@ LValue ExprEmitter::EmitLValue(ASTNode *node) {
     if (!operand.address) {
       return {};
     }
-    return builder.GetElementPtr(operand, get_field->field_name);
+    if (operand.c_type->Is<StructType>()) {
+      return builder.GetElementPtr(operand, get_field->field_name);
+    } else if (operand.c_type->Is<UnionType>()) {
+      return detail::GetUnionFieldLValue(operand, get_field->field_name);
+    } else {
+      RAISE_ERROR("GetField requires a struct or union operand");
+    }
   }
   if (auto *ptr_get_field = node->DynCast<PtrGetField>()) {
     RValue ptr = EmitRValue(ptr_get_field->operand.get());
-    return builder.GetPtrElementPtr(ptr, ptr_get_field->field_name);
+    if (auto ptr_t = ptr.c_type->DynCast<PointerType>()) {
+      if (ptr_t->pointee_type->Is<StructType>()) {
+        return builder.GetPtrElementPtr(ptr, ptr_get_field->field_name);
+      } else if (ptr_t->pointee_type->Is<UnionType>()) {
+        return detail::GetUnionFieldLValue(
+            LValue{ptr_t->pointee_type, ptr.ir_value},
+            ptr_get_field->field_name);
+      } else {
+        RAISE_ERROR("Unexpected pointer type for PtrGetField: ",
+                    ptr_t->pointee_type);
+      }
+    } else {
+      RAISE_ERROR("PtrGetField requires a pointer operand");
+    }
   }
   if (auto *binary = node->DynCast<BinaryOp>()) {
     if (binary->op_type == BinaryOpType::Subscript) {
@@ -436,12 +474,28 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
   if (auto *get_field = node->DynCast<GetField>()) {
     LValue operand_lhs = EmitLValue(get_field->operand.get());
     if (operand_lhs.address) {
-      LValue field_lhs =
-          builder.GetElementPtr(operand_lhs, get_field->field_name);
-      return detail::LoadAsRValue(field_lhs, *this);
+      if (operand_lhs.c_type->Is<StructType>()) {
+        LValue field_lhs =
+            builder.GetElementPtr(operand_lhs, get_field->field_name);
+        return detail::LoadAsRValue(field_lhs, *this);
+      } else if (operand_lhs.c_type->Is<UnionType>()) {
+        LValue field_lhs =
+            detail::GetUnionFieldLValue(operand_lhs, get_field->field_name);
+        return detail::LoadAsRValue(field_lhs, *this);
+      } else {
+        RAISE_ERROR("Unexpected operand type for GetField: ",
+                    operand_lhs.c_type);
+      }
     }
     RValue operand_rhs = EmitRValue(get_field->operand.get());
-    return builder.CreateExtractValue(operand_rhs, get_field->field_name);
+    if (operand_rhs.c_type->Is<StructType>()) {
+      return builder.CreateExtractValue(operand_rhs, get_field->field_name);
+    } else if (operand_rhs.c_type->Is<UnionType>()) {
+      return detail::GetUnionFieldRValue(operand_rhs, get_field->field_name,
+                                         *this);
+    } else {
+      RAISE_ERROR("Unexpected operand type for GetField: ", operand_rhs.c_type);
+    }
   }
   if (auto *bin_expr = node->DynCast<BinaryOp>()) {
     switch (bin_expr->op_type) {

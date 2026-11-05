@@ -92,6 +92,7 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(FilteredLexer &lexer,
         switch (type->GetType()) {
         case TypeBaseType::BuiltinType:
         case TypeBaseType::StructType:
+        case TypeBaseType::UnionType:
         case TypeBaseType::EnumType:
         case TypeBaseType::PointerType:
         case TypeBaseType::ArrayType:
@@ -302,6 +303,7 @@ std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
   auto SD = std::make_unique<StructDecl>();
   SD->name = name;
   SD->type = context.Types().GetOrCreateStruct(context.CurrentScopeId(), name);
+  context.AddStruct(name, SD->type);
   if (lexer.PeekNextToken().type == TokenType::LBrace) {
     SD->fields = ParseCompoundStmt(lexer, context);
     std::vector<StructField> fields;
@@ -331,6 +333,44 @@ std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
     ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon);
   }
   return SD;
+}
+
+std::unique_ptr<UnionDecl> ParseUnionDecl(FilteredLexer &lexer,
+                                          std::string_view name,
+                                          CompileContext &context) {
+  auto UD = std::make_unique<UnionDecl>();
+  UD->name = name;
+  UD->type = context.Types().GetOrCreateUnion(context.CurrentScopeId(), name);
+  context.AddUnion(name, UD->type);
+  if (lexer.PeekNextToken().type == TokenType::LBrace) {
+    UD->fields = ParseCompoundStmt(lexer, context);
+    std::vector<UnionField> fields;
+    auto add_field = [&](const ASTNode *decl) {
+      if (auto field = decl->DynCast<VarDecl>()) {
+        ASSERT(field->storage_class == StorageClass::None,
+               "A Union field cannot have a storage class");
+        fields.push_back({.name = field->name, .type = field->type});
+      } else {
+        ASSERT(decl->GetType() == ASTNodeType::StructDecl ||
+                   decl->GetType() == ASTNodeType::UnionDecl ||
+                   decl->GetType() == ASTNodeType::EnumDecl,
+               "Union fields must be variable declarations");
+      }
+    };
+    for (const auto &statement : UD->fields->statements) {
+      if (statement->GetType() == ASTNodeType::DeclStmt) {
+        for (const auto &decl : statement->As<DeclStmt>()->decls) {
+          add_field(decl.get());
+        }
+      } else {
+        add_field(statement.get());
+      }
+    }
+    context.Types().CompleteUnion(UD->type, fields);
+  } else {
+    ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon);
+  }
+  return UD;
 }
 
 static void ParseEnumContent(FilteredLexer &lexer, CompileContext &context,

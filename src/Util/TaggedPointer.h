@@ -3,6 +3,7 @@
 #include "../Exception.h"
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <functional>
 #include <type_traits>
 
@@ -195,6 +196,19 @@ template <typename T, size_t pointer_align>
 struct hash<TaggedPointer<T, pointer_align>> {
   size_t operator()(const TaggedPointer<T, pointer_align> &ptr) const noexcept {
     return std::hash<uintptr_t>{}(ptr.raw());
+  }
+};
+
+template <typename T, size_t pointer_align>
+struct formatter<TaggedPointer<T, pointer_align>> : std::formatter<char> {
+  template <typename FormatContext>
+  auto format(const TaggedPointer<T, pointer_align> &ptr,
+              FormatContext &ctx) const {
+    if (ptr.get() == nullptr) {
+      return std::format_to(ctx.out(), "nullptr");
+    } else {
+      return std::format_to(ctx.out(), "{}", ptr.get());
+    }
   }
 };
 

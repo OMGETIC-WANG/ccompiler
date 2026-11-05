@@ -40,6 +40,7 @@ public:
   llvm::Type *Convert(TypeRef type);
   llvm::FunctionType *ConvertFunction(TypeRef type);
   llvm::StructType *ConvertStruct(TypeRef type);
+  llvm::StructType *ConvertUnion(TypeRef type);
   llvm::ArrayType *ConvertArray(TypeRef type, size_t size);
 
 private:
@@ -84,6 +85,9 @@ public:
   }
   llvm::StructType *LLVMStructType(TypeRef type) {
     return type_converter.ConvertStruct(type);
+  }
+  llvm::StructType *LLVMUnionType(TypeRef type) {
+    return type_converter.ConvertUnion(type);
   }
   llvm::ArrayType *LLVMArrayType(TypeRef type, size_t size) {
     return type_converter.ConvertArray(type, size);

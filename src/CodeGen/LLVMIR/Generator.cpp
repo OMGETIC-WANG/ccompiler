@@ -128,6 +128,9 @@ void GenTopLevelStmt(ASTNode *stmt, GenContext &context, IRBuilder &builder) {
   case ASTNodeType::StructDecl:
     GenStructDecl(stmt->As<StructDecl>(), context);
     break;
+  case ASTNodeType::UnionDecl:
+    GenUnionDecl(stmt->As<UnionDecl>(), context);
+    break;
   case ASTNodeType::EnumDecl:
     GenEnumDecl(stmt->As<EnumDecl>(), context);
     break;

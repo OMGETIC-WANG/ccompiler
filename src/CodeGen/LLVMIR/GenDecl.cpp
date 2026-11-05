@@ -25,6 +25,19 @@ void GenStructDecl(StructDecl *decl, GenContext &context) {
   context.LLVMStructType(decl->type);
 }
 
+void GenUnionDecl(UnionDecl *decl, GenContext &context) {
+  if (!decl->fields) {
+    return;
+  }
+
+  ASSERT(decl->type != nullptr && decl->type->Is<UnionType>(),
+         "Union declaration has no canonical type");
+  auto *type = decl->type->As<UnionType>();
+  ASSERT(type->is_complete, "Defined union must be complete");
+
+  context.LLVMUnionType(decl->type);
+}
+
 int64_t GetEnumValue(decltype(LiteralNum::value) val) {
   if (std::holds_alternative<int64_t>(val)) {
     return std::get<int64_t>(val);

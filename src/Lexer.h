@@ -58,6 +58,7 @@
   x(KwStatic)\
   x(KwConst)\
   x(KwStruct)\
+  x(KwUnion)\
   x(KwTypedef)\
   x(KwEnum)\
   x(KwSwitch)\
@@ -159,7 +160,8 @@ inline bool IsDeclarationSpecifierKeyword(TokenType type) {
   return IsTypeKeyword(type) || IsStorageSpecifierKeyword(type) ||
          IsTypeQualifierKeyword(type) || type == TokenType::KwSigned ||
          type == TokenType::KwUnsigned || type == TokenType::KwStruct ||
-         type == TokenType::KwEnum || type == TokenType::KwTypedef;
+         type == TokenType::KwUnion || type == TokenType::KwEnum ||
+         type == TokenType::KwTypedef;
 }
 
 constexpr inline std::string_view begin_raw_ir_label = "__llvm_ir_begin__";
