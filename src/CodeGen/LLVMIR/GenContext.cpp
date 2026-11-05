@@ -154,10 +154,18 @@ llvm::StructType *LLVMTypeConverter::ConvertUnion(TypeRef type) {
   _types.emplace(type.get(), result);
 
   if (c_union->is_complete) {
-    auto max_size_field_ = c_union->GetMaxSizeField();
-    if (max_size_field_.has_value()) {
-      auto &max_size_field = max_size_field_.value();
-      result->setBody(Convert(max_size_field.type));
+    size_t max_size = (size_t)-1;
+    size_t max_size_index = (size_t)-1;
+    for (size_t i = 0; i < c_union->fields.size(); i++) {
+      auto field_type = c_union->fields[i].type;
+      if (max_size == (size_t)-1 || field_type->GetSize() > max_size) {
+        max_size = field_type->GetSize();
+        max_size_index = i;
+      }
+      Convert(field_type);
+    }
+    if (max_size_index != (size_t)-1) {
+      result->setBody(Convert(c_union->fields[max_size_index].type));
     }
   }
   return result;
