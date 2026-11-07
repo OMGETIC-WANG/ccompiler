@@ -9,28 +9,22 @@ int validate_brackets(char *code) {
   int depth = 0;
   int current = 0;
 
-validate_loop:
-  current = (int)code[instruction_pointer];
-  if (current == 0) {
-    if (depth == 0) {
-      return 1;
+  while ((current = (int)code[instruction_pointer]) != 0) {
+    if (current == 91) {
+      depth = depth + 1;
     }
-    return 0;
-  }
 
-  if (current == 91) {
-    depth = depth + 1;
-  }
-
-  if (current == 93) {
-    depth = depth - 1;
-    if (depth < 0) {
-      return 0;
+    if (current == 93) {
+      depth = depth - 1;
+      if (depth < 0) {
+        return 0;
+      }
     }
+
+    instruction_pointer = instruction_pointer + 1;
   }
 
-  instruction_pointer = instruction_pointer + 1;
-  goto validate_loop;
+  return depth == 0;
 }
 
 int run_brainfuck(char *code) {
@@ -39,110 +33,90 @@ int run_brainfuck(char *code) {
   int instruction_pointer = 0;
   int depth = 0;
   int current = 0;
-  int init_index = 0;
+  int init_index;
 
-initialize_tape:
-  if (init_index < 30000) {
+  for (init_index = 0; init_index < 30000; init_index = init_index + 1) {
     cells[init_index] = 0;
-    init_index = init_index + 1;
-    goto initialize_tape;
   }
 
-execute:
-  current = (int)code[instruction_pointer];
-  if (current == 0) {
-    return 0;
-  }
+  while ((current = (int)code[instruction_pointer]) != 0) {
+    switch (current) {
+    case 43: // '+'
+      cells[data_pointer] = cells[data_pointer] + 1;
+      if (cells[data_pointer] > 255) {
+        cells[data_pointer] = cells[data_pointer] - 256;
+      }
+      break;
 
-  if (current == 43) {
-    cells[data_pointer] = cells[data_pointer] + 1;
-    if (cells[data_pointer] > 255) {
-      cells[data_pointer] = cells[data_pointer] - 256;
+    case 45: // '-'
+      cells[data_pointer] = cells[data_pointer] - 1;
+      if (cells[data_pointer] < 0) {
+        cells[data_pointer] = cells[data_pointer] + 256;
+      }
+      break;
+
+    case 62: // '>'
+      data_pointer = data_pointer + 1;
+      if (data_pointer >= 30000) {
+        bf_host_error(3);
+        return 1;
+      }
+      break;
+
+    case 60: // '<'
+      data_pointer = data_pointer - 1;
+      if (data_pointer < 0) {
+        bf_host_error(3);
+        return 1;
+      }
+      break;
+
+    case 46: // '.'
+      bf_host_putchar(cells[data_pointer]);
+      break;
+
+    case 44: // ','
+      cells[data_pointer] = bf_host_getchar();
+      break;
+
+    case 91: // '['
+      if (cells[data_pointer] == 0) {
+        depth = 1;
+        while (depth > 0) {
+          instruction_pointer = instruction_pointer + 1;
+          current = (int)code[instruction_pointer];
+          if (current == 91) {
+            depth = depth + 1;
+          }
+          if (current == 93) {
+            depth = depth - 1;
+          }
+        }
+      }
+      break;
+
+    case 93: // ']'
+      if (cells[data_pointer] != 0) {
+        depth = 1;
+        while (depth > 0) {
+          instruction_pointer = instruction_pointer - 1;
+          current = (int)code[instruction_pointer];
+          if (current == 93) {
+            depth = depth + 1;
+          }
+          if (current == 91) {
+            depth = depth - 1;
+          }
+        }
+        instruction_pointer = instruction_pointer - 1;
+      }
+      break;
     }
-    goto next_instruction;
-  }
 
-  if (current == 45) {
-    cells[data_pointer] = cells[data_pointer] - 1;
-    if (cells[data_pointer] < 0) {
-      cells[data_pointer] = cells[data_pointer] + 256;
-    }
-    goto next_instruction;
-  }
-
-  if (current == 62) {
-    data_pointer = data_pointer + 1;
-    if (data_pointer >= 30000) {
-      bf_host_error(3);
-      return 1;
-    }
-    goto next_instruction;
-  }
-
-  if (current == 60) {
-    data_pointer = data_pointer - 1;
-    if (data_pointer < 0) {
-      bf_host_error(3);
-      return 1;
-    }
-    goto next_instruction;
-  }
-
-  if (current == 46) {
-    bf_host_putchar(cells[data_pointer]);
-    goto next_instruction;
-  }
-
-  if (current == 44) {
-    cells[data_pointer] = bf_host_getchar();
-    goto next_instruction;
-  }
-
-  if (current == 91) {
-    if (cells[data_pointer] != 0) {
-      goto next_instruction;
-    }
-
-    depth = 1;
-  find_forward:
     instruction_pointer = instruction_pointer + 1;
-    current = (int)code[instruction_pointer];
-    if (current == 91) {
-      depth = depth + 1;
-    }
-    if (current == 93) {
-      depth = depth - 1;
-      if (depth == 0) {
-        goto next_instruction;
-      }
-    }
-    goto find_forward;
   }
 
-  if (current == 93) {
-    if (cells[data_pointer] == 0) {
-      goto next_instruction;
-    }
-
-    depth = 1;
-  find_backward:
-    instruction_pointer = instruction_pointer - 1;
-    current = (int)code[instruction_pointer];
-    if (current == 93) {
-      depth = depth + 1;
-    }
-    if (current == 91) {
-      depth = depth - 1;
-      if (depth == 0) {
-        goto next_instruction;
-      }
-    }
-    goto find_backward;
-  }
-
-next_instruction:
-  instruction_pointer = instruction_pointer + 1;
-  goto execute;
+  return 0;
 }
 
 int main(int argc, char **argv) {

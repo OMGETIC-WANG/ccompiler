@@ -14,7 +14,7 @@ cmake --build build -j2
 再构建解释器：
 
 ```bash
-examples/brainfuck/build.sh
+python3 examples/brainfuck/build.py
 ```
 
 运行 Brainfuck 程序：
@@ -27,7 +27,7 @@ printf 'abc' | build/brainfuck/brainfuck examples/brainfuck/tests/echo.bf
 也可以指定包装层使用的 C 编译器：
 
 ```bash
-HOST_CC=gcc examples/brainfuck/build.sh
+HOST_CC=gcc python3 examples/brainfuck/build.py
 ```
 
 ## 编译边界
@@ -36,7 +36,7 @@ HOST_CC=gcc examples/brainfuck/build.sh
 
 - `main(argc, argv)`、命令行检查和 `.bf` 文件路径选择；
 - Brainfuck 指令执行状态机；
-- `label/goto` 主循环和嵌套括号跳转；
+- `while` 主循环、`switch` 指令分派和嵌套括号跳转；
 - 30000 个单元的纸带及初始化；
 - 括号验证、指针边界检查和退出码。
 
@@ -57,10 +57,10 @@ void bf_host_error(int error_code);
 构建流水线如下：
 
 ```text
-build/ccompiler main.c main.ll
-llvm-as main.ll main.bc
-llc main.bc main.o
-clang/gcc -c host.c host.o
+build/ccompiler main.c -o main.ll
+llvm-as main.ll -o main.bc
+llc main.bc -relocation-model=pic -filetype=obj -o main.o
+clang/gcc -c host.c -o host.o
 clang/gcc main.o host.o brainfuck
 ```
 
@@ -78,9 +78,9 @@ clang/gcc 调用，核心 C 源码不会交给 clang/gcc 重新编译。
 ## 测试
 
 ```bash
-examples/brainfuck/test.sh
-HOST_CC=gcc examples/brainfuck/test.sh
+python3 examples/brainfuck/test.py
+HOST_CC=gcc python3 examples/brainfuck/test.py
 ```
 
-测试覆盖 `ccompiler` 的 `goto` 循环、Hello World、输入回显和 EOF、
-嵌套循环、括号错误、双向指针越界及单元回绕。
+测试覆盖 Hello World、输入回显和 EOF、嵌套循环、括号错误、
+双向指针越界及单元回绕。
