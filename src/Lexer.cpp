@@ -69,6 +69,10 @@ static Token TryPeekAsIdentifier(std::string_view s) {
   return Token{TokenType::Identifier, s.substr(0, pos)};
 }
 
+template <auto... valid_ranges> bool IsInRange(char c) {
+  return (... || (c >= valid_ranges.first && c <= valid_ranges.second));
+}
+
 template <auto... valid_ranges>
 static size_t AdvancePureNum(std::string_view s, size_t start) {
   size_t pos = start;
@@ -78,7 +82,7 @@ static size_t AdvancePureNum(std::string_view s, size_t start) {
       pos++;
       continue;
     }
-    if ((... || (c >= valid_ranges.first && c <= valid_ranges.second))) {
+    if (IsInRange<valid_ranges...>(c)) {
       pos++;
     } else {
       break;
@@ -87,29 +91,33 @@ static size_t AdvancePureNum(std::string_view s, size_t start) {
   return pos;
 }
 
-constexpr auto AdvancePureHexNum =
-    AdvancePureNum<std::pair{'0', '9'}, std::pair{'a', 'f'},
-                   std::pair{'A', 'F'}>;
-
 constexpr auto AdvancePureDecNum = AdvancePureNum<std::pair{'0', '9'}>;
 
 constexpr auto AdvancePureBinNum = AdvancePureNum<std::pair{'0', '1'}>;
 
-static size_t AdvanceFloatNum(std::string_view s,
-                              size_t (*advancer)(std::string_view, size_t),
-                              size_t start) {
-  size_t pos = advancer(s, start);
+template <auto... valid_ranges>
+static size_t AdvanceFloatNum(std::string_view s, size_t start) {
+  size_t pos = AdvancePureNum<valid_ranges...>(s, start);
   if (pos < s.size() && s[pos] == '.') {
-    pos++;
-    pos = advancer(s, pos);
+    if ((pos >= 1 && IsInRange<valid_ranges...>(s[pos - 1])) ||
+        (pos + 1 < s.size() && IsInRange<valid_ranges...>(s[pos + 1]))) {
+      pos++;
+      pos = AdvancePureNum<valid_ranges...>(s, pos);
+    }
   }
   return pos;
 }
 
+constexpr auto AdvanceHexFloatNum =
+    AdvanceFloatNum<std::pair{'0', '9'}, std::pair{'a', 'f'},
+                    std::pair{'A', 'F'}>;
+
+constexpr auto AdvanceDecFloatNum = AdvanceFloatNum<std::pair{'0', '9'}>;
+
 static std::optional<std::string_view> TryPeekAsLiteralHex(std::string_view s) {
   if (s.starts_with("0x") || s.starts_with("0X")) {
     size_t pos = 2;
-    pos = AdvanceFloatNum(s, AdvancePureHexNum, pos);
+    pos = AdvanceHexFloatNum(s, pos);
     if (pos == 2) {
       return std::nullopt;
     }
@@ -130,7 +138,7 @@ static std::optional<std::string_view> TryPeekAsLiteralHex(std::string_view s) {
 }
 
 static std::optional<std::string_view> TryPeekAsLiteralDec(std::string_view s) {
-  size_t pos = AdvanceFloatNum(s, AdvancePureDecNum, 0);
+  size_t pos = AdvanceDecFloatNum(s, 0);
   if (pos == 0) {
     return std::nullopt;
   }
@@ -151,7 +159,7 @@ static std::optional<std::string_view> TryPeekAsLiteralDec(std::string_view s) {
 static std::optional<std::string_view> TryPeekAsLiteralBin(std::string_view s) {
   if (s.starts_with("0b") || s.starts_with("0B")) {
     size_t pos = 2;
-    pos = AdvanceFloatNum(s, AdvancePureBinNum, pos);
+    pos = AdvancePureBinNum(s, pos);
     if (pos == 2) {
       return std::nullopt;
     }
