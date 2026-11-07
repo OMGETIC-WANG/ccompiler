@@ -111,7 +111,6 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(FilteredLexer &lexer,
           } else {
             ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon,
                       "Expected semicolon after declaration");
-            lexer.ConsumeNextToken();
           }
           break;
         case TypeBaseType::FunctionType:
@@ -170,6 +169,25 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(FilteredLexer &lexer,
   return stmt;
 }
 
+static bool StmtNeedsSemicolon(const ASTNode *stmt) {
+  if (!stmt) {
+    return true;
+  }
+  switch (stmt->GetType()) {
+  case ASTNodeType::CompoundStmt:
+  case ASTNodeType::IfStmt:
+  case ASTNodeType::WhileStmt:
+  case ASTNodeType::ForStmt:
+  case ASTNodeType::SwitchStmt:
+  case ASTNodeType::LabelStmt:
+    return false;
+  case ASTNodeType::FunctionDecl:
+    return !stmt->As<FunctionDecl>()->body;
+  default:
+    return true;
+  }
+}
+
 // Parse one statement or a compound statement.
 static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
                                           CompileContext &context) {
@@ -183,15 +201,17 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
   if (tok.type == TokenType::EndOfFile) {
     return nullptr;
   }
-
-  while (lexer.PeekNextToken().type == TokenType::Semicolon) {
-    lexer.ConsumeNextToken();
+  if (tok.type == TokenType::Semicolon) {
+    lexer.ConsumeToken(tok);
+    return std::make_unique<EmptyStmt>();
   }
 
   std::unique_ptr<ASTNode> stmt = ParseStmtOnly(lexer, context);
 
-  while (lexer.PeekNextToken().type == TokenType::Semicolon)
+  if (StmtNeedsSemicolon(stmt.get()) &&
+      lexer.PeekNextToken().type == TokenType::Semicolon) {
     lexer.ConsumeNextToken();
+  }
 
   return stmt;
 }
@@ -212,19 +232,9 @@ std::unique_ptr<CompoundStmt> ParseCompoundStmt(FilteredLexer &lexer,
       lexer.ConsumeToken(tok);
       break;
     }
-    CS->statements.push_back(ParseStmt(lexer, context));
+    CS->AddStmt(ParseStmt(lexer, context));
   }
   return CS;
-}
-
-static std::unique_ptr<ASTNode> TryParseStmt(FilteredLexer &lexer,
-                                             CompileContext &context) {
-  if (lexer.PeekNextToken().type == TokenType::Semicolon) {
-    lexer.ConsumeNextToken();
-    return std::make_unique<EmptyStmt>();
-  } else {
-    return ParseStmt(lexer, context);
-  }
 }
 
 static std::unique_ptr<ASTNode> ParseIfStmt(FilteredLexer &lexer,
@@ -232,11 +242,11 @@ static std::unique_ptr<ASTNode> ParseIfStmt(FilteredLexer &lexer,
   auto if_stmt = std::make_unique<IfStmt>();
   lexer.ConsumeNextToken(); // consume "if"
   if_stmt->condition = ParseControlCondExpr(lexer, context);
-  if_stmt->then_branch = TryParseStmt(lexer, context);
+  if_stmt->then_branch = ParseStmt(lexer, context);
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::KwElse) {
     lexer.ConsumeToken(tok);
-    if_stmt->else_branch = TryParseStmt(lexer, context);
+    if_stmt->else_branch = ParseStmt(lexer, context);
   }
   return if_stmt;
 }
@@ -246,7 +256,7 @@ static std::unique_ptr<WhileStmt> ParseWhileStmt(FilteredLexer &lexer,
   auto while_stmt = std::make_unique<WhileStmt>();
   lexer.ConsumeNextToken(); // consume "while"
   while_stmt->condition = ParseControlCondExpr(lexer, context);
-  while_stmt->body = TryParseStmt(lexer, context);
+  while_stmt->body = ParseStmt(lexer, context);
   return while_stmt;
 }
 
@@ -281,7 +291,7 @@ static std::unique_ptr<ForStmt> ParseForStmt(FilteredLexer &lexer,
 
   ASSERT_EQ(lexer.PeekNextToken().type, TokenType::RParen, "Expected a ')'");
   lexer.ConsumeNextToken();
-  for_stmt->body = TryParseStmt(lexer, context);
+  for_stmt->body = ParseStmt(lexer, context);
   return for_stmt;
 }
 
@@ -314,7 +324,7 @@ static std::unique_ptr<SwitchStmt> ParseSwitchStmt(FilteredLexer &lexer,
           lexer.ConsumeNextToken();
         }
         do {
-          case_stmt->body.push_back(TryParseStmt(lexer, context));
+          case_stmt->body.push_back(ParseStmt(lexer, context));
         } while (!IsCaseEnd(lexer.PeekNextToken().type));
         switch_stmt->cases.push_back(std::move(case_stmt));
         break;
@@ -326,7 +336,7 @@ static std::unique_ptr<SwitchStmt> ParseSwitchStmt(FilteredLexer &lexer,
                   "Expected a ':'");
         lexer.ConsumeNextToken();
         do {
-          default_stmt->body.push_back(TryParseStmt(lexer, context));
+          default_stmt->body.push_back(ParseStmt(lexer, context));
         } while (!IsCaseEnd(lexer.PeekNextToken().type));
         switch_stmt->cases.push_back(std::move(default_stmt));
         break;
@@ -525,7 +535,7 @@ std::unique_ptr<TranslationUnit> ParseTranslationUnit(FilteredLexer &lexer,
     if (tok.type == TokenType::EndOfFile) {
       break;
     }
-    TU->body->statements.push_back(ParseStmt(lexer, context));
+    TU->body->AddStmt(ParseStmt(lexer, context));
   }
   return TU;
 }

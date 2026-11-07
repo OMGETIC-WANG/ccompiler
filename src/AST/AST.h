@@ -130,6 +130,12 @@ class CompoundStmt : public ASTNode {
 
 public:
   std::vector<std::unique_ptr<ASTNode>> statements;
+
+  void AddStmt(std::unique_ptr<ASTNode> stmt) {
+    if (stmt && stmt->GetType() != ASTNodeType::EmptyStmt) {
+      statements.push_back(std::move(stmt));
+    }
+  }
 };
 
 class StructDecl : public ASTNode {
