@@ -85,8 +85,8 @@ void GenEnumDecl(EnumDecl *decl, GenContext &context) {
     values.push_back({.name = std::string(element->name), .value = enum_val});
   }
 
-  TypeRef underlying = context.Types().Builtin(BuiltinKind::Int);
-  context.Types().CompleteEnum(decl->type, underlying, values);
+  context.Types().CompleteEnum(decl->type,
+                               decl->As<EnumDecl>()->underlying_type, values);
   context.CurrLayer().enums[decl->name] = decl->type->As<EnumType>();
 }
 

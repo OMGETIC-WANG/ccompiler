@@ -146,7 +146,8 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
       if (tok.type == TokenType::Identifier) {
         spec.type_name = tok.value;
         lexer.ConsumeToken(tok);
-        if (lexer.PeekNextToken().type == TokenType::LBrace) {
+        if (lexer.PeekNextToken().type == TokenType::LBrace ||
+            lexer.PeekNextToken().type == TokenType::Colon) {
           auto enum_decl = ParseEnumDecl(lexer, tok.value, context);
           decl_spec.decl = std::move(enum_decl);
         } else if (lexer.PeekNextToken().type == TokenType::Semicolon) {
@@ -154,7 +155,8 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
               context.CurrentScopeId(), tok.value);
           context.AddEnum(tok.value, enum_type);
         }
-      } else if (tok.type == TokenType::LBrace) {
+      } else if (tok.type == TokenType::LBrace ||
+                 lexer.PeekNextToken().type == TokenType::Colon) {
         std::string_view name = GenerateAnoymousSymbol("enum");
         decl_spec.decl = ParseEnumDecl(lexer, name, context);
         spec.type_name = name;

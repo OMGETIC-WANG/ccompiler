@@ -461,11 +461,7 @@ std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer,
                 "Expected ',' after va_list in __builtin_va_arg");
       lexer.ConsumeNextToken();
 
-      auto declaration = ParseDeclaration(lexer, context);
-      auto parsed_type = ParseType(declaration.get(), context);
-      ASSERT(parsed_type.size() == 1, "Expected a single type in cast");
-
-      va_arg->type = parsed_type[0].type;
+      va_arg->type = ParseType(lexer, context);
 
       ASSERT_EQ(lexer.PeekNextToken().type, TokenType::RParen,
                 "Expected ')' after __builtin_va_arg");

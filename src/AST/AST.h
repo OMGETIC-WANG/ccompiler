@@ -277,11 +277,12 @@ public:
 
 class EnumDecl : public ASTNode {
   ASTNodeImpl(EnumDecl);
-  TreeNodePrintFields(name, values);
+  TreeNodePrintFields(name, type, underlying_type, values);
 
 public:
   std::string_view name;
   TypeRef type = nullptr;
+  TypeRef underlying_type = nullptr;
   bool is_definition = false;
   std::vector<std::unique_ptr<EnumElemDecl>> values;
 };

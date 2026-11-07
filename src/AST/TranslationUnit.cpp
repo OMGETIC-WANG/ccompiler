@@ -482,6 +482,18 @@ std::unique_ptr<EnumDecl> ParseEnumDecl(FilteredLexer &lexer,
   auto ED = std::make_unique<EnumDecl>();
   ED->name = name;
   ED->type = context.Types().GetOrCreateEnum(context.CurrentScopeId(), name);
+  context.AddEnum(name, ED->type);
+  if (lexer.PeekNextToken().type == TokenType::Colon) {
+    lexer.ConsumeNextToken();
+    TypeRef parsed_type = ParseType(lexer, context);
+    ASSERT((parsed_type.get_tag() & (TypeRef::TagType)(TypeTag::Const)) == 0,
+           "Unexpected specifier for enum underlying type");
+    ASSERT(IsIntegerType(parsed_type),
+           "Expected integer type for enum underlying type");
+    ED->underlying_type = parsed_type;
+  } else {
+    ED->underlying_type = context.Types().Builtin(BuiltinKind::Int);
+  }
   if (lexer.PeekNextToken().type == TokenType::LBrace) {
     ED->is_definition = true;
     lexer.ConsumeNextToken();

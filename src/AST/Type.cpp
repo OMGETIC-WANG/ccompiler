@@ -282,6 +282,23 @@ std::vector<ParsedType> ParseType(const Declaration *decl,
   return results;
 }
 
+TypeRef ParseType(FilteredLexer &lexer, CompileContext &context) {
+  auto decl = ParseDeclaration(lexer, context);
+  TypeRef base_type = context.GetType(decl->declaration_specifier.type_spec);
+  if (!base_type) {
+    RAISE_ERROR("Unknown struct/union/enum: ",
+                decl->declaration_specifier.type_spec.type_name);
+  }
+  if (decl->init_declarators.size()) {
+    ASSERT(decl->init_declarators.size() == 1, "Expected a single declarator");
+    return ParseInitDeclarator(base_type, decl->init_declarators[0].get(),
+                               context)
+        .type;
+  } else {
+    return base_type;
+  }
+}
+
 std::string_view TypeBase::GetNodeTypeName() const {
   return EnumRefl<TypeBaseType>::GetName(GetType());
 }

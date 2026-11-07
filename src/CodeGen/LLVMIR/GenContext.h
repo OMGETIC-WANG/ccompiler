@@ -38,10 +38,12 @@ public:
   LLVMTypeConverter(llvm::LLVMContext &context, Counter<> &counter);
 
   llvm::Type *Convert(TypeRef type);
+  llvm::Type *ConvertBuiltin(BuiltinType *type);
   llvm::FunctionType *ConvertFunction(FunctionType *type);
   llvm::StructType *ConvertStruct(StructType *type);
   llvm::StructType *ConvertUnion(UnionType *type);
   llvm::ArrayType *ConvertArray(ArrayType *type, size_t size);
+  llvm::Type *ConvertEnum(EnumType *type);
 
 private:
   llvm::Type *ConvertParameter(TypeRef type);
@@ -135,7 +137,9 @@ public:
           if (value.name == name) {
             auto llvm_val = std::visit(
                 [this, enum_type](auto v) {
-                  return llvm::ConstantInt::get(LLVMType(enum_type), v, true);
+                  return llvm::ConstantInt::get(
+                      LLVMType(enum_type), v,
+                      !HasTypeTag(enum_type, TypeTag::Unsigned));
                 },
                 value.value);
             return RValue{enum_type, llvm_val};

@@ -34,38 +34,7 @@ llvm::Type *LLVMTypeConverter::Convert(TypeRef type) {
   llvm::Type *result = nullptr;
   switch (type->GetType()) {
   case TypeBaseType::BuiltinType:
-    switch (type->As<BuiltinType>()->Kind()) {
-    case BuiltinKind::Void:
-      result = llvm::Type::getVoidTy(_context);
-      break;
-    case BuiltinKind::Int:
-      result = llvm::Type::getInt32Ty(_context);
-      break;
-    case BuiltinKind::Char:
-      result = llvm::Type::getInt8Ty(_context);
-      break;
-    case BuiltinKind::Short:
-      result = llvm::Type::getInt16Ty(_context);
-      break;
-    case BuiltinKind::Float:
-      result = llvm::Type::getFloatTy(_context);
-      break;
-    case BuiltinKind::Double:
-      result = llvm::Type::getDoubleTy(_context);
-      break;
-    case BuiltinKind::LongDouble:
-      result = llvm::Type::getX86_FP80Ty(_context);
-      break;
-    case BuiltinKind::Long:
-      result = llvm::Type::getInt64Ty(_context);
-      break;
-    case BuiltinKind::LongLong:
-      result = llvm::Type::getInt64Ty(_context);
-      break;
-    case BuiltinKind::I1:
-      result = llvm::Type::getInt1Ty(_context);
-      break;
-    }
+    result = ConvertBuiltin(type->As<BuiltinType>());
     break;
   case TypeBaseType::PointerType:
     result = llvm::PointerType::get(_context, 0);
@@ -99,6 +68,32 @@ llvm::Type *LLVMTypeConverter::Convert(TypeRef type) {
   ASSERT(result != nullptr, "Failed to convert TypeRef to LLVM type");
   _types.emplace(key, result);
   return result;
+}
+
+llvm::Type *LLVMTypeConverter::ConvertBuiltin(BuiltinType *type) {
+  switch (type->As<BuiltinType>()->Kind()) {
+  case BuiltinKind::Void:
+    return llvm::Type::getVoidTy(_context);
+  case BuiltinKind::Int:
+    return llvm::Type::getInt32Ty(_context);
+  case BuiltinKind::Char:
+    return llvm::Type::getInt8Ty(_context);
+  case BuiltinKind::Short:
+    return llvm::Type::getInt16Ty(_context);
+  case BuiltinKind::Float:
+    return llvm::Type::getFloatTy(_context);
+  case BuiltinKind::Double:
+    return llvm::Type::getDoubleTy(_context);
+  case BuiltinKind::LongDouble:
+    return llvm::Type::getX86_FP80Ty(_context);
+  case BuiltinKind::Long:
+    return llvm::Type::getInt64Ty(_context);
+  case BuiltinKind::LongLong:
+    return llvm::Type::getInt64Ty(_context);
+  case BuiltinKind::I1:
+    return llvm::Type::getInt1Ty(_context);
+  }
+  RAISE_ERROR("Unexpected BuiltinType");
 }
 
 llvm::FunctionType *LLVMTypeConverter::ConvertFunction(FunctionType *type) {
@@ -178,6 +173,10 @@ llvm::ArrayType *LLVMTypeConverter::ConvertArray(ArrayType *type, size_t size) {
   auto *result = llvm::ArrayType::get(Convert(type->element_type), size);
   _types.emplace(type, result);
   return result;
+}
+
+llvm::Type *LLVMTypeConverter::ConvertEnum(EnumType *type) {
+  return ConvertBuiltin(type->underlying_type->As<BuiltinType>());
 }
 
 GenContext::GenContext(llvm::LLVMContext &llvm_context, llvm::Module &module,
