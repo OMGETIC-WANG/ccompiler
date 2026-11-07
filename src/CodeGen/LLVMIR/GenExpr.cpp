@@ -659,13 +659,25 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
       ASSERT(!HasTypeTag(operand.c_type, TypeTag::Const),
              "Cannot modify a const-qualified object");
       RValue old_value = builder.CreateLoad(operand.c_type, operand);
-      RValue one{operand.c_type,
-                 llvm::ConstantInt::get(context.LLVMType(operand.c_type), 1)};
-      RValue updated =
-          builder.CreateBinaryOp(is_inc ? BinaryOpType::Add : BinaryOpType::Sub,
-                                 old_value, one, operand.c_type);
-      builder.CreateStore(updated, operand);
-      return is_before_use ? updated : old_value;
+
+      if (operand.c_type->Is<PointerType>()) {
+        RValue one{context.Types().Builtin(BuiltinKind::Int),
+                   llvm::ConstantInt::get(
+                       llvm::Type::getInt32Ty(context.LLVMContext()), 1)};
+        LValue subscripted = builder.CreateSubscript(
+            old_value, is_inc ? one : builder.CreateInv(one));
+        RValue updated{operand.c_type, subscripted.address};
+        builder.CreateStore(updated, operand);
+        return is_before_use ? updated : old_value;
+      } else {
+        RValue one{operand.c_type,
+                   llvm::ConstantInt::get(context.LLVMType(operand.c_type), 1)};
+        RValue updated = builder.CreateBinaryOp(is_inc ? BinaryOpType::Add
+                                                       : BinaryOpType::Sub,
+                                                old_value, one, operand.c_type);
+        builder.CreateStore(updated, operand);
+        return is_before_use ? updated : old_value;
+      }
     }
     case UnaryOpType::Not: {
       RValue operand = EmitRValue(unary_expr->operand.get());
