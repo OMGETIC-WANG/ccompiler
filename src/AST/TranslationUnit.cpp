@@ -283,7 +283,7 @@ static std::unique_ptr<ForStmt> ParseForStmt(FilteredLexer &lexer,
   ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon, "Expect a ';'");
   lexer.ConsumeNextToken();
 
-  if (lexer.PeekNextToken().type == TokenType::Semicolon) {
+  if (lexer.PeekNextToken().type == TokenType::RParen) {
     for_stmt->increment = nullptr;
   } else {
     for_stmt->increment = ParseStmtOnly(lexer, context);
