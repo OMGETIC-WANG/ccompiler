@@ -12,7 +12,7 @@ static void PrintTreeChildren(const Node *node,
     const auto *child = &children[child_index];
     const bool is_last = child_index + 1 == children.size();
 
-    out << prefix << "+-" << get_string(child) << '\n';
+    out << prefix << (is_last ? "`-" : "+-") << get_string(child) << '\n';
 
     const std::string next_prefix = prefix + (is_last ? "  " : "| ");
     PrintTreeChildren(child, get_children, get_string, out, next_prefix);
