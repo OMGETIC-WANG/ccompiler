@@ -3,6 +3,7 @@
 #include "../../AST/AST.h"
 #include "../../AST/Operations.h"
 #include "../../AST/Type.h"
+#include "ConstantEval.h"
 #include "GenDecl.h"
 #include "IRBuilder.h"
 #include "Value.h"
@@ -740,6 +741,14 @@ llvm::BasicBlock *ExprEmitter::GetOrCreateLabelBlock(std::string_view name) {
   return block;
 }
 
+static bool IsValidSwitchValue(const TypeBase *type) {
+  if (auto builtin = type->DynCast<BuiltinType>()) {
+    BuiltinKind kind = builtin->Kind();
+    return IsIntegerKind(kind) || kind == BuiltinKind::Char;
+  }
+  return type->Is<EnumType>();
+}
+
 void ExprEmitter::EmitStmt(ASTNode *node) {
   if (auto *raw_ir = node->DynCast<RawLLVMIR>()) {
     (void)raw_ir;
@@ -907,6 +916,68 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
       }
     }
     builder.CreateBr(start_block);
+    builder.SetInsertPoint(end_block);
+    return;
+  }
+  if (auto *switch_stmt = node->DynCast<SwitchStmt>()) {
+    size_t label_id = context.counter();
+    auto curr_block = builder.GetInsertBlock();
+
+    RValue switched_val = EmitRValue(switch_stmt->value.get());
+    ASSERT(IsValidSwitchValue(switched_val.c_type.get()),
+           "switch-case requires an integer or enum type");
+
+    llvm::BasicBlock *default_block;
+    llvm::BasicBlock *end_block = llvm::BasicBlock::Create(
+        context.LLVMContext(), std::format("switch.end.{}", label_id),
+        context.current_function);
+
+    DefaultStmt *default_case = switch_stmt->DefaultBlock();
+    if (default_case) {
+      default_block = llvm::BasicBlock::Create(
+          context.LLVMContext(), std::format("switch.default.{}", label_id),
+          context.current_function);
+      builder.SetInsertPoint(default_block);
+      for (const auto &statement : default_case->body) {
+        EmitStmt(statement.get());
+      }
+      builder.CreateBr(end_block);
+    } else {
+      default_block = end_block;
+    }
+
+    GenContextLoopLayerGuard loop_guard(context);
+    context.CurrLoopLayer().break_block = end_block;
+
+    std::vector<std::pair<llvm::ConstantInt *, llvm::BasicBlock *>> case_blocks;
+    case_blocks.reserve(switch_stmt->cases.size() - (default_case ? 1 : 0));
+    unsigned int num_cases = 0;
+    for (const auto &stmt : switch_stmt->cases) {
+      if (stmt->Is<DefaultStmt>()) {
+        continue;
+      }
+      auto case_stmt = stmt->As<CaseStmt>();
+
+      llvm::BasicBlock *body = llvm::BasicBlock::Create(
+          context.LLVMContext(),
+          std::format("switch.case.{}.{}", label_id, num_cases++),
+          context.current_function);
+      builder.SetInsertPoint(body);
+      for (const auto &statement : case_stmt->body) {
+        EmitStmt(statement.get());
+      }
+      builder.CreateBr(default_block);
+
+      for (const auto &val : case_stmt->case_vals) {
+        ASSERT(IsConstantFoldable(val.get()),
+               "Case value must be constant foldable");
+        auto folded =
+            EvalNumericConstant(switched_val.c_type, val.get(), context);
+        case_blocks.push_back({llvm::cast<llvm::ConstantInt>(folded), body});
+      }
+    }
+    builder.SetInsertPoint(curr_block);
+    builder.CreateSwitch(switched_val, case_blocks, default_block, num_cases);
     builder.SetInsertPoint(end_block);
     return;
   }

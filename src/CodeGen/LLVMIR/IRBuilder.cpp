@@ -430,3 +430,13 @@ void IRBuilder::CreateMemcpy(const LValue &dst, const RValue &src, size_t size,
   _builder.CreateMemCpy(dst.address, llvm::Align(align), src.ir_value,
                         llvm::Align(align), size);
 }
+
+void IRBuilder::CreateSwitch(
+    const RValue &value,
+    std::span<std::pair<llvm::ConstantInt *, llvm::BasicBlock *>> cases,
+    llvm::BasicBlock *default_block, unsigned int num_cases) {
+  auto inst = _builder.CreateSwitch(value.ir_value, default_block, num_cases);
+  for (const auto &[val, block] : cases) {
+    inst->addCase(val, block);
+  }
+}

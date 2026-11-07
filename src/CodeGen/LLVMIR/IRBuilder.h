@@ -89,6 +89,11 @@ public:
   void CreateMemcpy(const LValue &dst, const RValue &src, size_t size,
                     size_t align);
 
+  void CreateSwitch(
+      const RValue &value,
+      std::span<std::pair<llvm::ConstantInt *, llvm::BasicBlock *>> cases,
+      llvm::BasicBlock *default_block, unsigned int num_cases);
+
 private:
   GenContext &_context;
   llvm::IRBuilder<> _builder;

@@ -182,6 +182,41 @@ public:
   std::unique_ptr<ASTNode> body;
 };
 
+class CaseStmt : public ASTNode {
+  ASTNodeImpl(CaseStmt);
+  TreeNodePrintFields(case_vals, body);
+
+public:
+  std::vector<std::unique_ptr<ASTNode>> case_vals;
+  std::vector<std::unique_ptr<ASTNode>> body;
+};
+
+class DefaultStmt : public ASTNode {
+  ASTNodeImpl(DefaultStmt);
+  TreeNodePrintFields(body);
+
+public:
+  std::vector<std::unique_ptr<ASTNode>> body;
+};
+
+class SwitchStmt : public ASTNode {
+  ASTNodeImpl(SwitchStmt);
+  TreeNodePrintFields(value, cases);
+
+  DefaultStmt *DefaultBlock() {
+    for (const auto &case_node : cases) {
+      if (case_node->Is<DefaultStmt>()) {
+        return case_node->As<DefaultStmt>();
+      }
+    }
+    return nullptr;
+  }
+
+public:
+  std::unique_ptr<ASTNode> value;
+  std::vector<std::unique_ptr<ASTNode>> cases;
+};
+
 class BreakStmt : public ASTNode {
   ASTNodeImpl(BreakStmt);
 };

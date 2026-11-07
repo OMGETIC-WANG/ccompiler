@@ -30,6 +30,9 @@
   x(ReturnStmt)\
   x(WhileStmt)\
   x(ForStmt)\
+  x(SwitchStmt)\
+  x(CaseStmt)\
+  x(DefaultStmt)\
   x(BreakStmt)\
   x(ContinueStmt)\
   x(EnumDecl)\

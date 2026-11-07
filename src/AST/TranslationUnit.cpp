@@ -40,6 +40,9 @@ static std::unique_ptr<WhileStmt> ParseWhileStmt(FilteredLexer &lexer,
 static std::unique_ptr<ForStmt> ParseForStmt(FilteredLexer &lexer,
                                              CompileContext &context);
 
+static std::unique_ptr<SwitchStmt> ParseSwitchStmt(FilteredLexer &lexer,
+                                                   CompileContext &context);
+
 static std::unique_ptr<ASTNode> ParseReturnStmt(FilteredLexer &lexer,
                                                 CompileContext &context);
 
@@ -130,6 +133,9 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(FilteredLexer &lexer,
       break;
     case TokenType::KwFor:
       stmt = ParseForStmt(lexer, context);
+      break;
+    case TokenType::KwSwitch:
+      stmt = ParseSwitchStmt(lexer, context);
       break;
     case TokenType::KwReturn:
       stmt = ParseReturnStmt(lexer, context);
@@ -277,6 +283,62 @@ static std::unique_ptr<ForStmt> ParseForStmt(FilteredLexer &lexer,
   lexer.ConsumeNextToken();
   for_stmt->body = TryParseStmt(lexer, context);
   return for_stmt;
+}
+
+static bool IsCaseEnd(TokenType type) {
+  return type == TokenType::KwCase || type == TokenType::KwDefault ||
+         type == TokenType::RBrace;
+}
+
+static std::unique_ptr<SwitchStmt> ParseSwitchStmt(FilteredLexer &lexer,
+                                                   CompileContext &context) {
+  auto switch_stmt = std::make_unique<SwitchStmt>();
+  lexer.ConsumeNextToken(); // consume "switch"
+  switch_stmt->value = ParseControlCondExpr(lexer, context);
+  if (lexer.PeekNextToken().type == TokenType::Semicolon) {
+    lexer.ConsumeNextToken();
+    return switch_stmt;
+  } else {
+    ASSERT_EQ(lexer.PeekNextToken().type, TokenType::LBrace, "Expected a '{'");
+    lexer.ConsumeNextToken();
+    while (true) {
+      Token tok = lexer.PeekNextToken();
+      switch (tok.type) {
+      case TokenType::KwCase: {
+        auto case_stmt = std::make_unique<CaseStmt>();
+        while (lexer.PeekNextToken().type == TokenType::KwCase) {
+          lexer.ConsumeNextToken();
+          case_stmt->case_vals.push_back(ParseExpr(lexer, context));
+          ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Colon,
+                    "Expected a ':'");
+          lexer.ConsumeNextToken();
+        }
+        do {
+          case_stmt->body.push_back(TryParseStmt(lexer, context));
+        } while (!IsCaseEnd(lexer.PeekNextToken().type));
+        switch_stmt->cases.push_back(std::move(case_stmt));
+        break;
+      }
+      case TokenType::KwDefault: {
+        lexer.ConsumeToken(tok);
+        auto default_stmt = std::make_unique<DefaultStmt>();
+        ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Colon,
+                  "Expected a ':'");
+        lexer.ConsumeNextToken();
+        do {
+          default_stmt->body.push_back(TryParseStmt(lexer, context));
+        } while (!IsCaseEnd(lexer.PeekNextToken().type));
+        switch_stmt->cases.push_back(std::move(default_stmt));
+        break;
+      }
+      case TokenType::RBrace:
+        lexer.ConsumeToken(tok);
+        return switch_stmt;
+      default:
+        RAISE_ERROR("Unexpected token in switch statement:", tok.type);
+      }
+    }
+  }
 }
 
 static std::unique_ptr<ASTNode> ParseReturnStmt(FilteredLexer &lexer,
