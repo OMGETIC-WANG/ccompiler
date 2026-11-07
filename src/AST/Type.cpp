@@ -81,7 +81,9 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
     };
   }
 
-  for (const auto &suffix : direct->suffixes) {
+  for (auto suffix_it = direct->suffixes.rbegin();
+       suffix_it != direct->suffixes.rend(); ++suffix_it) {
+    const auto &suffix = *suffix_it;
     switch (suffix->GetType()) {
     case DeclType::ParamList: {
       const auto *param_list = suffix->As<ParamList>();
