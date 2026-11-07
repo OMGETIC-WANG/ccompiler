@@ -28,6 +28,7 @@ constexpr std::array BUILTIN_TYPES = {
     MakeBuiltinTypeInfo(Short, short, "i16"),
     MakeBuiltinTypeInfo(Float, float, "float"),
     MakeBuiltinTypeInfo(Double, double, "double"),
+    MakeBuiltinTypeInfo(LongDouble, long double, "x86_fp80"),
     MakeBuiltinTypeInfo(Long, long, "i64"),
     MakeBuiltinTypeInfo(LongLong, long long, "i64"),
     BuiltinTypeInfo{BuiltinKind::I1, "i1", "i1", 1, 1}};

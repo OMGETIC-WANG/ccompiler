@@ -37,18 +37,15 @@ class LiteralNum : public ASTNode {
   ASTNodeImpl(LiteralNum);
 
   std::string ToString() const override {
-    if (std::holds_alternative<double>(value)) {
-      return std::to_string(std::get<double>(value));
-    } else if (std::holds_alternative<uint64_t>(value)) {
-      return std::to_string(std::get<uint64_t>(value));
-    } else if (std::holds_alternative<int64_t>(value)) {
-      return std::to_string(std::get<int64_t>(value));
-    }
-    return {};
+    std::string value_s =
+        std::visit([](auto val) { return std::to_string(val); }, value);
+    return std::format("{}{}:{}", type->ToString(),
+                       HasTypeTag(type, TypeTag::Unsigned) ? "u" : "", value_s);
   }
 
 public:
-  std::variant<double, uint64_t, int64_t> value;
+  TypeRef type;
+  std::variant<long double, uint64_t, int64_t> value;
 };
 
 class DeclStmt : public ASTNode {

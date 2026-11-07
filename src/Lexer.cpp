@@ -1,5 +1,6 @@
 #include "Lexer.h"
 #include "Util/File.h"
+#include "Util/StringUtil.h"
 #include <algorithm>
 #include <cassert>
 
@@ -68,28 +69,124 @@ static Token TryPeekAsIdentifier(std::string_view s) {
   return Token{TokenType::Identifier, s.substr(0, pos)};
 }
 
-static Token TryPeekAsLiteralNum(std::string_view s) {
-  if (s.empty() || !isdigit(s[0])) {
-    return Token{TokenType::Unknown};
-  }
-  size_t pos = 0;
-  while (pos < s.size() && isdigit(s[pos])) {
-    pos++;
-  }
-  if (pos && pos < s.size()) {
-    if (s[pos] == '.') {
+template <auto... valid_ranges>
+static size_t AdvancePureNum(std::string_view s, size_t start) {
+  size_t pos = start;
+  while (pos < s.size()) {
+    char c = s[pos];
+    if (pos > start && c == '\'') {
       pos++;
-      while (pos < s.size() && isdigit(s[pos])) {
-        pos++;
-      }
-      if (pos < s.size() && (s[pos] == 'f' || s[pos] == 'F')) {
-        pos++;
-      }
-    } else if (s[pos] == 'f') {
+      continue;
+    }
+    if ((... || (c >= valid_ranges.first && c <= valid_ranges.second))) {
       pos++;
+    } else {
+      break;
     }
   }
-  return Token{TokenType::LiteralNum, s.substr(0, pos)};
+  return pos;
+}
+
+constexpr auto AdvancePureHexNum =
+    AdvancePureNum<std::pair{'0', '9'}, std::pair{'a', 'f'},
+                   std::pair{'A', 'F'}>;
+
+constexpr auto AdvancePureDecNum = AdvancePureNum<std::pair{'0', '9'}>;
+
+constexpr auto AdvancePureBinNum = AdvancePureNum<std::pair{'0', '1'}>;
+
+static size_t AdvanceFloatNum(std::string_view s,
+                              size_t (*advancer)(std::string_view, size_t),
+                              size_t start) {
+  size_t pos = advancer(s, start);
+  if (pos < s.size() && s[pos] == '.') {
+    pos++;
+    pos = advancer(s, pos);
+  }
+  return pos;
+}
+
+static std::optional<std::string_view> TryPeekAsLiteralHex(std::string_view s) {
+  if (s.starts_with("0x") || s.starts_with("0X")) {
+    size_t pos = 2;
+    pos = AdvanceFloatNum(s, AdvancePureHexNum, pos);
+    if (pos == 2) {
+      return std::nullopt;
+    }
+    if (pos < s.size() && (s[pos] == 'p' || s[pos] == 'P')) {
+      pos++;
+      if (pos < s.size() && (s[pos] == '+' || s[pos] == '-')) {
+        pos++;
+      }
+      size_t advanced = AdvancePureDecNum(s, pos);
+      if (advanced == pos) {
+        RAISE_ERROR("Expected dec exponent after 'p' or 'P'");
+      }
+      pos = advanced;
+    }
+    return s.substr(0, pos);
+  }
+  return std::nullopt;
+}
+
+static std::optional<std::string_view> TryPeekAsLiteralDec(std::string_view s) {
+  size_t pos = AdvanceFloatNum(s, AdvancePureDecNum, 0);
+  if (pos == 0) {
+    return std::nullopt;
+  }
+  if (pos < s.size() && (s[pos] == 'e' || s[pos] == 'E')) {
+    pos++;
+    if (pos < s.size() && (s[pos] == '+' || s[pos] == '-')) {
+      pos++;
+    }
+    size_t advanced = AdvancePureDecNum(s, pos);
+    if (advanced == pos) {
+      RAISE_ERROR("Expected decimal exponent after 'e' or 'E'");
+    }
+    pos = advanced;
+  }
+  return s.substr(0, pos);
+}
+
+static std::optional<std::string_view> TryPeekAsLiteralBin(std::string_view s) {
+  if (s.starts_with("0b") || s.starts_with("0B")) {
+    size_t pos = 2;
+    pos = AdvanceFloatNum(s, AdvancePureBinNum, pos);
+    if (pos == 2) {
+      return std::nullopt;
+    }
+    return s.substr(0, pos);
+  }
+  return std::nullopt;
+}
+
+static std::string_view TryAddPostfix(std::string_view s,
+                                      std::string_view literal) {
+  static std::string_view postfixes[] = {
+      "ull", "ul", "ll", "l", "u", "f",
+  };
+  size_t pos = literal.size();
+  std::string_view rest = s.substr(pos);
+  for (const auto &postfix : postfixes) {
+    if (StartsWithInsensitive(rest, postfix)) {
+      return s.substr(0, pos + postfix.size());
+    }
+  }
+  return literal;
+}
+
+static Token TryPeekAsLiteralNum(std::string_view s) {
+  if (auto hex = TryPeekAsLiteralHex(s)) {
+    return Token{TokenType::LiteralNum, TryAddPostfix(s, hex.value())};
+  }
+  if (auto bin = TryPeekAsLiteralBin(s)) {
+    return Token{TokenType::LiteralNum, TryAddPostfix(s, bin.value())};
+  }
+  // Treat oct as dec in lexer
+  if (auto dec = TryPeekAsLiteralDec(s)) {
+    return Token{TokenType::LiteralNum, TryAddPostfix(s, dec.value())};
+  }
+  return Token{TokenType::Unknown};
 }
 
 static Token TryPeekAsLiteralChar(std::string_view s) {
@@ -551,6 +648,10 @@ Token Lexer::PeekNextToken() {
   if (tok.type != TokenType::Unknown)
     return tok;
 
+  tok = TryPeekAsLiteralNum(rest);
+  if (tok.type != TokenType::Unknown)
+    return tok;
+
   tok = TryPeekAsSingleCharToken(rest);
   if (tok.type != TokenType::Unknown)
     return tok;
@@ -577,10 +678,6 @@ Token Lexer::PeekNextToken() {
       return tok;
     }
   }
-
-  tok = TryPeekAsLiteralNum(rest);
-  if (tok.type != TokenType::Unknown)
-    return tok;
 
   tok = TryPeekAsLiteralChar(rest);
   if (tok.type != TokenType::Unknown)

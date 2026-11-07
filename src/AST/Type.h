@@ -41,6 +41,7 @@ struct TypeSpecifier {
   x(Short)\
   x(Float)\
   x(Double)\
+  x(LongDouble)\
   x(Long)\
   x(LongLong)\
   x(I1)

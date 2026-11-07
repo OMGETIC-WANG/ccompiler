@@ -111,21 +111,36 @@ public:
   }
 
   TypeRef GetType(const TypeSpecifier &spec) const {
-    if (spec.is_builtin)
-      return Types().Builtin(spec.type_name);
-    if (spec.is_struct)
-      return FindStruct(spec.type_name);
-    if (spec.is_union)
-      return FindUnion(spec.type_name);
-    if (spec.is_enum)
-      return FindEnum(spec.type_name);
-    if (spec.is_named_type) {
+    TypeRef res;
+    if (spec.is_builtin) {
+      res = Types().Builtin(spec.type_name);
+    } else if (spec.is_struct) {
+      res = FindStruct(spec.type_name);
+    } else if (spec.is_union) {
+      res = FindUnion(spec.type_name);
+    } else if (spec.is_enum) {
+      res = FindEnum(spec.type_name);
+    } else if (spec.is_named_type) {
       TypeRef type = FindTypedef(spec.type_name);
-      if (type)
-        return type;
-      type = FindEnum(spec.type_name);
-      if (type)
-        return type;
+      if (type) {
+        res = type;
+      } else {
+        type = FindEnum(spec.type_name);
+        if (type) {
+          res = type;
+        } else {
+          res = nullptr;
+        }
+      }
+    }
+    if (res) {
+      if (spec.is_unsigned) {
+        res = ApplyTypeTag(res, TypeTag::Unsigned);
+      }
+      if (spec.is_const) {
+        res = ApplyTypeTag(res, TypeTag::Const);
+      }
+      return res;
     }
     return nullptr;
   }

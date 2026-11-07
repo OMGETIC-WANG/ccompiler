@@ -4,7 +4,7 @@
 #include "GenContext.h"
 #include <llvm/IR/Constants.h>
 
-using NumericValue = std::variant<double, uint64_t, int64_t>;
+using NumericValue = std::variant<long double, uint64_t, int64_t>;
 
 NumericValue EvalNumeric(ASTNode *node);
 

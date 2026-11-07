@@ -43,8 +43,8 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
            spec.is_named_type;
   };
   auto has_builtin_type = [&] {
-    return type_mask &
-           (MVoid | MChar | MShort | MInt | MFloat | MDouble | MLongLong);
+    return type_mask & (MVoid | MChar | MShort | MInt | MFloat | MDouble |
+                        MLong | MLongLong);
   };
 
   while (true) {

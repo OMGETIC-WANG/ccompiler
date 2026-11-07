@@ -1,7 +1,9 @@
 #include "Expr.h"
+#include "../Util/StringUtil.h"
 #include "AST.h"
 #include "Declaration.h"
 #include "Operations.h"
+#include <charconv>
 
 enum class PrecLevel {
   Primary,
@@ -159,36 +161,149 @@ std::vector<std::unique_ptr<ASTNode>> ParseQuotedExpr(FilteredLexer &lexer,
   return results;
 }
 
-static std::variant<double, uint64_t, int64_t>
-ParseLiteralNumValue(std::string_view s) {
+static bool IsOct(std::string_view s) {
+  if (s[0] != '0' || s.size() == 1) {
+    return false;
+  }
+  for (size_t i = 1; i < s.size(); i++) {
+    if (s[i] < '0' || s[i] > '7') {
+      return false;
+    }
+  }
+  return true;
+}
+
+static std::unique_ptr<LiteralNum> ParseLiteralNum(std::string_view s,
+                                                   CompileContext &context) {
   ASSERT(!s.empty(), "Unexpected empty literal num");
 
-  bool is_float = false;
-  if (s.back() == 'f' || s.back() == 'F') {
-    is_float = true;
-    s.remove_suffix(1);
-    ASSERT(!s.empty(), "Unexpected empty float literal");
-  } else if (s.find_first_of(".eE") != std::string_view::npos) {
-    is_float = true;
+  CowString num_s(s);
+  if (s.find('\'') != std::string_view::npos) {
+    std::string cleaned;
+    cleaned.reserve(s.size());
+    for (char c : s) {
+      if (c != '\'') {
+        cleaned.push_back(c);
+      }
+    }
+    num_s = cleaned;
   }
 
+  std::string_view num = num_s.view();
+
+  bool kind_declared = true;
+  BuiltinKind kind = BuiltinKind::Int;
+  bool is_unsigned = false;
+
+  int base = 10;
+  if (StartsWithInsensitive(s, "0x")) {
+    base = 16;
+    num = num.substr(2);
+  } else if (StartsWithInsensitive(s, "0b")) {
+    base = 2;
+    num = num.substr(2);
+  }
+
+  bool is_float_num;
+  if (base == 16) {
+    if (Contains(num, '.')) {
+      is_float_num = true;
+      ASSERT(Contains(num, 'p') || Contains(num, 'P'),
+             "Hex literal must have 'p' or 'P'");
+    } else if (Contains(num, 'p') || Contains(num, 'P')) {
+      is_float_num = true;
+    } else {
+      is_float_num = false;
+    }
+  } else {
+    is_float_num =
+        Contains(num, '.') || Contains(num, 'e') || Contains(num, 'E');
+  }
+
+  if (EndsWithInsensitive(num, "ull")) {
+    kind = BuiltinKind::LongLong;
+    is_unsigned = true;
+    num = num.substr(0, num.size() - 3);
+  } else if (EndsWithInsensitive(num, "ll")) {
+    kind = BuiltinKind::LongLong;
+    is_unsigned = false;
+    num = num.substr(0, num.size() - 2);
+  } else if (EndsWithInsensitive(num, "ul")) {
+    kind = BuiltinKind::Long;
+    is_unsigned = true;
+    num = num.substr(0, num.size() - 2);
+  } else if (EndsWithInsensitive(num, "f")) {
+    if (base == 16 && !is_float_num) {
+      kind = BuiltinKind::Int;
+      is_unsigned = false;
+    } else {
+      kind = BuiltinKind::Float;
+      num = num.substr(0, num.size() - 1);
+    }
+  } else if (EndsWithInsensitive(num, "l")) {
+    kind = BuiltinKind::Long;
+    is_unsigned = false;
+    num = num.substr(0, num.size() - 1);
+    if (is_float_num) {
+      kind = BuiltinKind::LongDouble;
+    }
+  } else if (EndsWithInsensitive(num, "u")) {
+    kind = BuiltinKind::Int;
+    is_unsigned = true;
+    num = num.substr(0, num.size() - 1);
+  } else {
+    kind_declared = false;
+  }
+
+  if (IsOct(num)) {
+    base = 8;
+    num = num.substr(1);
+  }
+
+  if (!kind_declared && is_float_num) {
+    kind = BuiltinKind::Double;
+  }
+
+  bool is_float = kind_declared ? (kind == BuiltinKind::Float ||
+                                   kind == BuiltinKind::Double ||
+                                   kind == BuiltinKind::LongDouble)
+                                : is_float_num;
+
+  ASSERT(!is_float || base != 8, "oct float literal not support");
+
+  auto literal_num = std::make_unique<LiteralNum>();
+  literal_num->type = TypeRef(
+      context.Types().Builtin(kind),
+      (TypeRef::TagType)(is_unsigned ? TypeTag::Unsigned : TypeTag::None));
+
+  const char *ptr;
+  std::errc ec;
   if (is_float) {
-    double val = 0.0;
-    auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), val);
-    ASSERT(ec == std::errc{} && ptr == s.data() + s.size(),
-           "Failed to parse float literal");
-    return val;
+    std::chars_format fmt =
+        base == 16 ? std::chars_format::hex : std::chars_format::general;
+    long double val;
+    auto res = std::from_chars(num.data(), num.data() + num.size(), val, fmt);
+    literal_num->value = val;
+    ptr = res.ptr;
+    ec = res.ec;
+  } else if (is_unsigned) {
+    uint64_t val;
+    auto res = std::from_chars(num.data(), num.data() + num.size(), val, base);
+    literal_num->value = val;
+    ptr = res.ptr;
+    ec = res.ec;
+  } else {
+    int64_t val;
+    auto res = std::from_chars(num.data(), num.data() + num.size(), val, base);
+    literal_num->value = val;
+    ptr = res.ptr;
+    ec = res.ec;
   }
+  ASSERT(ec == std::errc{}, "Error occured when parsing num \'", s, "\'");
+  ASSERT(ptr == num.data() + num.size(),
+         "Not all characters were consumed when parsing num \'", s, "\'");
 
-  uint64_t u_val = 0;
-  auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), u_val);
-  ASSERT(ec == std::errc{} && ptr == s.data() + s.size(),
-         "Failed to parse integer literal");
-
-  if (u_val <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
-    return static_cast<int64_t>(u_val);
-  }
-  return u_val;
+  return literal_num;
 }
 
 static bool IsSimpleEscape(char c) {
@@ -301,9 +416,7 @@ std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer,
   switch (tok.type) {
   case TokenType::LiteralNum: {
     lexer.ConsumeToken(tok);
-    auto literal_num = std::make_unique<LiteralNum>();
-    literal_num->value = ParseLiteralNumValue(tok.value);
-    return literal_num;
+    return ParseLiteralNum(tok.value, context);
   }
   case TokenType::LiteralString: {
     lexer.ConsumeToken(tok);

@@ -25,6 +25,7 @@ static std::string PrintModule(llvm::Module &module) {
 }
 
 CMDLINE_ARG(bool, show_ast, false);
+CMDLINE_ARG(bool, show_tokens, false);
 CMDLINE_ARG(bool, jit_run, false);
 CMDLINE_ARG(std::string, output_file, "o", "");
 
@@ -42,6 +43,18 @@ int main(int argc, char **argv) {
       }
       source += line;
       source += '\n';
+    }
+  }
+
+  if (show_tokens) {
+    Lexer lexer(source);
+    while (true) {
+      Token tok = lexer.ConsumeNextToken();
+      std::cout << EnumRefl<TokenType>::GetName(tok.type) << "]" << tok.value
+                << "\n";
+      if (tok.type == TokenType::EndOfFile) {
+        break;
+      }
     }
   }
 

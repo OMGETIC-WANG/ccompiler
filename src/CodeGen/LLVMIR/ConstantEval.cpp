@@ -50,9 +50,9 @@ template <typename To> NumericValue CastTo(NumericValue val) {
 
 static std::pair<NumericValue, NumericValue> PromoteVal(NumericValue left,
                                                         NumericValue right) {
-  if (std::holds_alternative<double>(left) ||
-      std::holds_alternative<double>(right)) {
-    return {CastTo<double>(left), CastTo<double>(right)};
+  if (std::holds_alternative<long double>(left) ||
+      std::holds_alternative<long double>(right)) {
+    return {CastTo<long double>(left), CastTo<long double>(right)};
   }
   if (std::holds_alternative<uint64_t>(left) ||
       std::holds_alternative<uint64_t>(right)) {
@@ -83,8 +83,8 @@ static NumericValue CalcAs(NumericValue left, NumericValue right) {
 template <typename Op>
 static NumericValue Calc(NumericValue left, NumericValue right) {
   ASSERT(left.index() == right.index(), "Expect promoted left and right");
-  if (std::holds_alternative<double>(left)) {
-    return CalcAs<double, Op>(left, right);
+  if (std::holds_alternative<long double>(left)) {
+    return CalcAs<long double, Op>(left, right);
   } else if (std::holds_alternative<uint64_t>(left)) {
     return CalcAs<uint64_t, Op>(left, right);
   } else {
@@ -229,5 +229,5 @@ llvm::Constant *EvalNumericConstant(TypeRef type, ASTNode *node,
     return llvm::ConstantInt::get(llvm_type, std::get<uint64_t>(val), false);
   }
   ASSERT(llvm_type->isFloatingPointTy(), "Floating initializer type mismatch");
-  return llvm::ConstantFP::get(llvm_type, std::get<double>(val));
+  return llvm::ConstantFP::get(llvm_type, std::get<long double>(val));
 }

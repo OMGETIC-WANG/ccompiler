@@ -53,6 +53,9 @@ llvm::Type *LLVMTypeConverter::Convert(TypeRef type) {
     case BuiltinKind::Double:
       result = llvm::Type::getDoubleTy(_context);
       break;
+    case BuiltinKind::LongDouble:
+      result = llvm::Type::getX86_FP80Ty(_context);
+      break;
     case BuiltinKind::Long:
       result = llvm::Type::getInt64Ty(_context);
       break;

@@ -450,18 +450,23 @@ LValue ExprEmitter::EmitLValue(ASTNode *node) {
 RValue ExprEmitter::EmitRValue(ASTNode *node) {
   if (auto *literal_num = node->DynCast<LiteralNum>()) {
     if (std::holds_alternative<int64_t>(literal_num->value)) {
-      TypeRef type = context.Types().Builtin(BuiltinKind::Int);
-      return RValue{type, llvm::ConstantInt::get(
-                              context.LLVMType(type),
-                              std::get<int64_t>(literal_num->value), true)};
-    }
-    if (std::holds_alternative<double>(literal_num->value)) {
-      TypeRef type = context.Types().Builtin(BuiltinKind::Float);
       return RValue{
-          type, llvm::ConstantFP::get(context.LLVMType(type),
-                                      std::get<double>(literal_num->value))};
+          literal_num->type,
+          llvm::ConstantInt::get(context.LLVMType(literal_num->type),
+                                 std::get<int64_t>(literal_num->value), true)};
     }
-    RAISE_ERROR("Unsupported literal num type");
+    if (std::holds_alternative<uint64_t>(literal_num->value)) {
+      return RValue{literal_num->type,
+                    llvm::ConstantInt::get(
+                        context.LLVMType(literal_num->type),
+                        std::get<uint64_t>(literal_num->value), false)};
+    }
+    if (std::holds_alternative<long double>(literal_num->value)) {
+      return RValue{
+          literal_num->type,
+          llvm::ConstantFP::get(context.LLVMType(literal_num->type),
+                                std::get<long double>(literal_num->value))};
+    }
   }
   if (auto *literal_str = node->DynCast<LiteralString>()) {
     TypeRef type =

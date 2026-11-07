@@ -64,7 +64,7 @@ void GenEnumDecl(EnumDecl *decl, GenContext &context) {
     std::variant<int64_t, uint64_t> enum_val;
     if (element->value) {
       NumericValue val = EvalNumeric(element->value.get());
-      if (std::holds_alternative<double>(val)) {
+      if (std::holds_alternative<long double>(val)) {
         RAISE_ERROR("Enum value cannot be a floating point number");
       }
       if (std::holds_alternative<int64_t>(val)) {
