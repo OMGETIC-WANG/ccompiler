@@ -55,7 +55,7 @@ static void CheckConstAssignment(TypeRef target, TypeRef value) {
 
 static RValue CreateIndex(size_t index, GenContext &context) {
   return RValue{
-      context.Types().Builtin(BuiltinKind::Int),
+      context.Types().getInt(),
       llvm::ConstantInt::get(llvm::Type::getInt64Ty(context.LLVMContext()),
                              index, false)};
 }
@@ -235,8 +235,8 @@ struct ExprEmitter::detail {
 
   template <EvalAndOr eval_kind>
   static RValue EvalAndOr(ASTNode *left, ASTNode *right, ExprEmitter &self) {
-    TypeRef bool_type = ApplyTypeTag(
-        self.context.Types().Builtin(BuiltinKind::I1), TypeTag::Unsigned);
+    TypeRef bool_type =
+        ApplyTypeTag(self.context.Types().getI1(), TypeTag::Unsigned);
     RValue left_value = self.EmitRValue(left);
     llvm::BasicBlock *left_block = self.builder.GetInsertBlock();
     ASSERT(left_block, "Missing insertion block in logical expression");
@@ -333,8 +333,7 @@ struct ExprEmitter::detail {
         op_type == BinaryOpType::Le || op_type == BinaryOpType::Ge;
     TypeRef out_type =
         is_comparison
-            ? ApplyTypeTag(self.context.Types().Builtin(BuiltinKind::I1),
-                           TypeTag::Unsigned)
+            ? ApplyTypeTag(self.context.Types().getI1(), TypeTag::Unsigned)
             : result_type;
     return self.builder.CreateBinaryOp(op_type, left, right, out_type);
   }
@@ -470,8 +469,7 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     }
   }
   if (auto *literal_str = node->DynCast<LiteralString>()) {
-    TypeRef type =
-        context.Types().Pointer(context.Types().Builtin(BuiltinKind::Char));
+    TypeRef type = context.Types().Pointer(context.Types().getChar());
     return RValue{
         type, context.CreateStringConstant(
                   literal_str->value, literal_str->value.view().size() + 1)};
@@ -582,7 +580,7 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
   if (auto *va_start = node->DynCast<VaStart>()) {
     LValue va_list = EmitLValue(va_start->va_list.get());
     builder.CreateVaStart(va_list);
-    return RValue{context.Types().Builtin(BuiltinKind::Void), nullptr};
+    return RValue{context.Types().getVoid(), nullptr};
   }
   if (auto *va_arg = node->DynCast<VaArg>()) {
     LValue va_list = EmitLValue(va_arg->va_list.get());
@@ -591,7 +589,7 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
   if (auto *va_end = node->DynCast<VaEnd>()) {
     LValue va_list = EmitLValue(va_end->va_list.get());
     builder.CreateVaEnd(va_list);
-    return RValue{context.Types().Builtin(BuiltinKind::Void), nullptr};
+    return RValue{context.Types().getVoid(), nullptr};
   }
   if (auto *type_cast = node->DynCast<TypeCast>()) {
     RValue operand = EmitRValue(type_cast->operand.get());
@@ -661,7 +659,7 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
       RValue old_value = builder.CreateLoad(operand.c_type, operand);
 
       if (operand.c_type->Is<PointerType>()) {
-        RValue one{context.Types().Builtin(BuiltinKind::Int),
+        RValue one{context.Types().getInt(),
                    llvm::ConstantInt::get(
                        llvm::Type::getInt32Ty(context.LLVMContext()), 1)};
         LValue subscripted = builder.CreateSubscript(

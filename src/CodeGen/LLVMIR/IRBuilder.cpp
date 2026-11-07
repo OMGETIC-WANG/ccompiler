@@ -134,8 +134,7 @@ void IRBuilder::CreateVoidRet() {
 }
 
 RValue IRBuilder::CreateBoolCond(const RValue &value) {
-  TypeRef bool_type = ApplyTypeTag(_context.Types().Builtin(BuiltinKind::I1),
-                                   TypeTag::Unsigned);
+  TypeRef bool_type = ApplyTypeTag(_context.Types().getI1(), TypeTag::Unsigned);
   llvm::Value *cond = nullptr;
   if (value.c_type->Is<PointerType>()) {
     cond = _builder.CreateICmpNE(
@@ -155,8 +154,7 @@ RValue IRBuilder::CreateBoolCond(const RValue &value) {
 }
 
 RValue IRBuilder::CreateInvBoolCond(const RValue &value) {
-  TypeRef bool_type = ApplyTypeTag(_context.Types().Builtin(BuiltinKind::I1),
-                                   TypeTag::Unsigned);
+  TypeRef bool_type = ApplyTypeTag(_context.Types().getI1(), TypeTag::Unsigned);
   llvm::Value *cond = nullptr;
   if (value.c_type->Is<PointerType>()) {
     cond = _builder.CreateICmpEQ(
@@ -372,8 +370,7 @@ RValue IRBuilder::CreateFuncInvoke(const RValue &func,
         }
       } else if (IsFloatingType(arg.c_type) &&
                  arg.c_type->As<BuiltinType>()->Kind() == BuiltinKind::Float) {
-        arg = CreateNumericCast(arg,
-                                _context.Types().Builtin(BuiltinKind::Double));
+        arg = CreateNumericCast(arg, _context.Types().getDouble());
         arg_ir_value = arg.ir_value;
       }
     }

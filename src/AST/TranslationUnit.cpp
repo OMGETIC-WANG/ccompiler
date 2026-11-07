@@ -492,7 +492,7 @@ std::unique_ptr<EnumDecl> ParseEnumDecl(FilteredLexer &lexer,
            "Expected integer type for enum underlying type");
     ED->underlying_type = parsed_type;
   } else {
-    ED->underlying_type = context.Types().Builtin(BuiltinKind::Int);
+    ED->underlying_type = context.Types().getInt();
   }
   if (lexer.PeekNextToken().type == TokenType::LBrace) {
     ED->is_definition = true;
@@ -525,12 +525,10 @@ static void AddVaList(CompileContext &context) {
   auto *va_list_type = context.Types().GetOrCreateStruct(
       context.CurrentScopeId(), "__builtin_va_list_type");
   StructField fields[] = {
-      {"", context.Types().Builtin(BuiltinKind::Int), 0},
-      {"", context.Types().Pointer(context.Types().Builtin(BuiltinKind::Void)),
-       1},
-      {"", context.Types().Pointer(context.Types().Builtin(BuiltinKind::Void)),
-       2},
-      {"", context.Types().Builtin(BuiltinKind::Int), 3}};
+      {"", context.Types().getInt(), 0},
+      {"", context.Types().Pointer(context.Types().getVoid()), 1},
+      {"", context.Types().Pointer(context.Types().getVoid()), 2},
+      {"", context.Types().getInt(), 3}};
   context.Types().CompleteStruct(va_list_type, fields);
   context.CurrentLayer().AddTypedef("va_list", va_list_type);
 }

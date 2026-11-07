@@ -192,9 +192,8 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
   if (auto *ptr_type = type->DynCast<PointerType>()) {
     auto *val_init = initializer->DynCast<ValueInitializer>();
     ASSERT(val_init, "Pointer type requires ValueInitializer");
-    auto *intptr =
-        EvalNumericConstant(context.Types().Builtin(BuiltinKind::Int),
-                            val_init->value.get(), context);
+    auto *intptr = EvalNumericConstant(context.Types().getInt(),
+                                       val_init->value.get(), context);
     return llvm::ConstantExpr::getIntToPtr(intptr, context.LLVMType(ptr_type));
   }
 

@@ -193,10 +193,10 @@ TypeRef PromoteInteger(TypeRef type, TypeContext &types) {
     return type;
   }
 
-  const TypeRef int_type = types.Builtin(BuiltinKind::Int);
+  const TypeRef int_type = types.getInt();
   if (HasTypeTag(type, TypeTag::Unsigned) && kind != BuiltinKind::I1 &&
       type->GetSize() >= int_type->GetSize()) {
-    return ApplyTypeTag(types.Builtin(BuiltinKind::Int), TypeTag::Unsigned);
+    return ApplyTypeTag(types.getInt(), TypeTag::Unsigned);
   }
   return int_type;
 }
@@ -212,9 +212,9 @@ TypeRef UsualArithmeticType(TypeRef left, TypeRef right, TypeContext &types) {
   if (IsFloatingType(left) || IsFloatingType(right)) {
     if (left_builtin->Kind() == BuiltinKind::Double ||
         right_builtin->Kind() == BuiltinKind::Double) {
-      return types.Builtin(BuiltinKind::Double);
+      return types.getDouble();
     }
-    return types.Builtin(BuiltinKind::Float);
+    return types.getFloat();
   }
 
   left = PromoteInteger(left, types);

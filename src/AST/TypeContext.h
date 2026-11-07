@@ -47,6 +47,9 @@ struct NominalKeyHash {
 
 } // namespace tcd
 
+#define MAKE_BUILTIN_TYPE_GETTER(kind)                                         \
+  BuiltinType *get##kind() const { return Builtin(BuiltinKind::kind); }
+
 // Owns and interns every type in one compilation unit. It must outlive all
 // TypeRef values stored in the AST and code generator.
 class TypeContext {
@@ -58,6 +61,8 @@ public:
 
   BuiltinType *Builtin(std::string_view name) const;
   BuiltinType *Builtin(BuiltinKind kind) const;
+
+  BUILTIN_KIND_VALUES(MAKE_BUILTIN_TYPE_GETTER)
 
   PointerType *Pointer(TypeRef pointee);
   ArrayType *Array(TypeRef element, std::optional<size_t> size);
