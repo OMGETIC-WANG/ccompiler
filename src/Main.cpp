@@ -4,6 +4,7 @@
 #include "AST/Type.h"
 #include "AST/TypeContext.h"
 #include "CodeGen/LLVMIR/Generator.h"
+#include "CodeGen/LLVMIR/Sizeof.h"
 #include "CodeGen/LLVMIR/Va.h"
 #include "JITRunner/JITRunner.h"
 #include "Lexer.h"
@@ -30,6 +31,10 @@ static void RegisterVaInstrinsic() {
   IntrinsicManager::RegisterIntrinsic(va_start_desc);
   IntrinsicManager::RegisterIntrinsic(va_arg_desc);
   IntrinsicManager::RegisterIntrinsic(va_end_desc);
+}
+
+static void RegisterSizeofIntrinsic() {
+  IntrinsicManager::RegisterIntrinsic(sizeof_desc);
 }
 
 CMDLINE_ARG(bool, show_ast, false);
@@ -67,6 +72,7 @@ int main(int argc, char **argv) {
   }
 
   RegisterVaInstrinsic();
+  RegisterSizeofIntrinsic();
 
   Lexer lexer(source);
   FilteredLexer filtered_lexer(lexer);

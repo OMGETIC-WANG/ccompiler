@@ -1,5 +1,6 @@
 #include "ConstantEval.h"
 #include "../../AST/AST.h"
+#include "../../AST/Intrinsic.h"
 #include "../../AST/Operations.h"
 
 #define MAKE_TRUE_CASE_BIN(op)                                                 \
@@ -10,14 +11,6 @@ static bool IsEvalable(BinaryOpType op_type) {
   switch (op_type) {
     BINARY_NUMERIC_ARITHMETIC_OP_VALUES(MAKE_TRUE_CASE_BIN)
     BINARY_BITWISE_ARITHMETIC_OP_VALUES(MAKE_TRUE_CASE_BIN)
-  default:
-    return false;
-  }
-}
-
-static bool IsNumericOp(BinaryOpType op_type) {
-  switch (op_type) {
-    BINARY_NUMERIC_ARITHMETIC_OP_VALUES(MAKE_TRUE_CASE_BIN)
   default:
     return false;
   }
@@ -104,16 +97,16 @@ struct shift_right {
   }
 };
 
-static NumericValue EvalNode(ASTNode *node);
+static NumericValue EvalNode(ASTNode *node, GenContext &context);
 
 static NumericValue EvalLiteral(LiteralNum *literal) { return literal->value; }
 
-static NumericValue EvalBinary(BinaryOp *bin_expr) {
+static NumericValue EvalBinary(BinaryOp *bin_expr, GenContext &context) {
   if (!IsEvalable(bin_expr->op_type)) {
     RAISE_ERROR("Cannot evaluate non-numeric binary operation");
   }
-  NumericValue left = EvalNode(bin_expr->left.get());
-  NumericValue right = EvalNode(bin_expr->right.get());
+  NumericValue left = EvalNode(bin_expr->left.get(), context);
+  NumericValue right = EvalNode(bin_expr->right.get(), context);
   if (IsBitwiseOp(bin_expr->op_type)) {
     ASSERT(HoldsInteger(left) && HoldsInteger(right),
            "Bitwise operations require integer operands");
@@ -157,11 +150,11 @@ static NumericValue EvalBinary(BinaryOp *bin_expr) {
   }
 }
 
-static NumericValue EvalUnary(UnaryOp *unary_expr) {
+static NumericValue EvalUnary(UnaryOp *unary_expr, GenContext &context) {
   if (!IsEvalable(unary_expr->op_type)) {
     RAISE_ERROR("Cannot evaluate non-numeric unary operation");
   }
-  NumericValue operand = EvalNode(unary_expr->operand.get());
+  NumericValue operand = EvalNode(unary_expr->operand.get(), context);
   switch (unary_expr->op_type) {
   case UnaryOpType::UnaryPlus:
     return operand;
@@ -186,38 +179,65 @@ static NumericValue EvalUnary(UnaryOp *unary_expr) {
   }
 }
 
-static NumericValue EvalConditional(ConditionalExpr *cond_expr) {
-  NumericValue condition = EvalNode(cond_expr->condition.get());
+static NumericValue EvalConditional(ConditionalExpr *cond_expr,
+                                    GenContext &context) {
+  NumericValue condition = EvalNode(cond_expr->condition.get(), context);
   bool bool_cond = std::visit([](auto v) -> bool { return !!v; }, condition);
   if (bool_cond) {
-    return EvalNode(cond_expr->true_expr.get());
+    return EvalNode(cond_expr->true_expr.get(), context);
   } else {
-    return EvalNode(cond_expr->false_expr.get());
+    return EvalNode(cond_expr->false_expr.get(), context);
   }
 }
 
-static NumericValue EvalNode(ASTNode *node) {
+static NumericValue EvalIntrinsic(IntrinsicCall *intrinsic_call,
+                                  GenContext &context) {
+  ASSERT(intrinsic_call->desc->is_constant_evalable,
+         "Unexpected non-constant-evalable intrinsic in constant evaluation");
+  RValue res = intrinsic_call->Eval(&context);
+  ASSERT(IsIntegerType(res.c_type) || IsFloatingType(res.c_type),
+         "Unexpected non-numeric result from constant-evalable intrinsic");
+  if (auto *integer = llvm::dyn_cast<llvm::ConstantInt>(res.ir_value)) {
+    if (HasTypeTag(res.c_type, TypeTag::Unsigned)) {
+      return integer->getZExtValue();
+    } else {
+      return integer->getSExtValue();
+    }
+  } else if (auto *floating = llvm::dyn_cast<llvm::ConstantFP>(res.ir_value)) {
+    return floating->getValueAPF().convertToDouble();
+  } else {
+    RAISE_ERROR(
+        "Unexpected non-numeric result from constant-evalable intrinsic");
+  }
+}
+
+static NumericValue EvalNode(ASTNode *node, GenContext &context) {
   if (auto *literal = node->DynCast<LiteralNum>()) {
     return EvalLiteral(literal);
   }
   if (auto *binary = node->DynCast<BinaryOp>()) {
-    return EvalBinary(binary);
+    return EvalBinary(binary, context);
   }
   if (auto *unary = node->DynCast<UnaryOp>()) {
-    return EvalUnary(unary);
+    return EvalUnary(unary, context);
   }
   if (auto *cond_expr = node->DynCast<ConditionalExpr>()) {
-    return EvalConditional(cond_expr);
+    return EvalConditional(cond_expr, context);
+  }
+  if (auto *intrinsic_call = node->DynCast<IntrinsicCall>()) {
+    return EvalIntrinsic(intrinsic_call, context);
   }
   RAISE_ERROR("Unexpected ASTNode type for constant evaluation: ",
               node->GetType());
 }
 
-NumericValue EvalNumeric(ASTNode *node) { return EvalNode(node); }
+NumericValue EvalNumeric(ASTNode *node, GenContext &context) {
+  return EvalNode(node, context);
+}
 
 llvm::Constant *EvalNumericConstant(TypeRef type, ASTNode *node,
                                     GenContext &context) {
-  NumericValue val = EvalNode(node);
+  NumericValue val = EvalNode(node, context);
 
   llvm::Type *llvm_type = context.LLVMType(type);
   if (std::holds_alternative<int64_t>(val)) {

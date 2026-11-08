@@ -1,4 +1,5 @@
 #include "AST.h"
+#include "Intrinsic.h"
 #include "Operations.h"
 
 std::string_view ASTNode::GetNodeTypeName() const {
@@ -24,6 +25,9 @@ bool IsConstantFoldable(const ASTNode *node) {
     return IsConstantFoldable(cond_expr->condition.get()) &&
            IsConstantFoldable(cond_expr->true_expr.get()) &&
            IsConstantFoldable(cond_expr->false_expr.get());
+  }
+  if (auto *intrinsic_call = node->DynCast<IntrinsicCall>()) {
+    return intrinsic_call->desc && intrinsic_call->desc->is_constant_evalable;
   }
   return false;
 }

@@ -583,8 +583,7 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
            "Intrinsic call is missing its descriptor");
     ASSERT(intrinsic_call->desc->evaluator != nullptr,
            "Intrinsic has no evaluator: ", intrinsic_call->desc->name);
-    return intrinsic_call->desc->evaluator(intrinsic_call->args, builder,
-                                           context);
+    return intrinsic_call->desc->evaluator(intrinsic_call->args, this);
   }
   if (auto *type_cast = node->DynCast<TypeCast>()) {
     RValue operand = EmitRValue(type_cast->operand.get());

@@ -10,8 +10,8 @@
 #include <variant>
 #include <vector>
 
+class ExprEmitter;
 class GenContext;
-class IRBuilder;
 
 using IntrinsicCallArg = std::variant<std::unique_ptr<ASTNode>, TypeRef>;
 
@@ -21,13 +21,17 @@ enum class IntrinsicCallArgKind {
   ExprOrType,
 };
 
-using IntrinsicEvaluator = RValue (*)(std::vector<IntrinsicCallArg> &args,
-                                      IRBuilder &builder, GenContext &context);
+// ExprEmitter* for non-constant-evalable intrinsics,
+// GenContext* for constant-evalable intrinsics
+using IntrinsicEvaluator =
+    RValue (*)(std::vector<IntrinsicCallArg> &args,
+               std::variant<ExprEmitter *, GenContext *> arg);
 
 struct IntrinsicDesc {
   std::string_view name;
   std::vector<IntrinsicCallArgKind> arg_kinds;
   IntrinsicEvaluator evaluator;
+  bool is_constant_evalable = false;
 
   struct Hash {
     using is_transparent = void;
@@ -59,6 +63,9 @@ class IntrinsicCall : public ASTNode {
   std::string ToString() const override {
     return desc ? std::string(desc->name) : "<unknown_intrinsic>";
   }
+
+  RValue Eval(ExprEmitter *emitter) { return desc->evaluator(args, emitter); }
+  RValue Eval(GenContext *context) { return desc->evaluator(args, context); }
 
 public:
   virtual std::vector<TreeNodePrintField> GetPrintFields() const override;

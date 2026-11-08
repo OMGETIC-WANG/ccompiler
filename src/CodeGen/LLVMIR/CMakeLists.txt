@@ -31,8 +31,14 @@ find_package(LLVM 23.1.3 EXACT CONFIG REQUIRED)
 
 target_sources(
   ccompiler
-  PRIVATE Generator.cpp GenContext.cpp GenDecl.cpp GenExpr.cpp IRBuilder.cpp
-          ConstantEval.cpp Va.cpp
+  PRIVATE Generator.cpp
+          GenContext.cpp
+          GenDecl.cpp
+          GenExpr.cpp
+          IRBuilder.cpp
+          ConstantEval.cpp
+          Va.cpp
+          Sizeof.cpp
           ${PROJECT_SOURCE_DIR}/src/JITRunner/JITRunner.cpp)
 
 target_include_directories(ccompiler PRIVATE ${LLVM_INCLUDE_DIRS})
