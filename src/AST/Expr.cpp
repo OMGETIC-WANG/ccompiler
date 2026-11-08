@@ -2,6 +2,7 @@
 #include "../Util/StringUtil.h"
 #include "AST.h"
 #include "Declaration.h"
+#include "Intrinsic.h"
 #include "Operations.h"
 #include <charconv>
 
@@ -431,54 +432,9 @@ std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer,
   }
   case TokenType::Identifier: {
     lexer.ConsumeToken(tok);
-    if (tok.value == "__builtin_va_start") {
-      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::LParen,
-                "Expected '(' after __builtin_va_start");
-      lexer.ConsumeNextToken();
-
-      auto va_start = std::make_unique<VaStart>();
-      va_start->va_list = ParseExpr(lexer, context);
-
-      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Comma,
-                "Expected ',' after va_list in __builtin_va_start");
-      lexer.ConsumeNextToken();
-
-      va_start->last_named_arg = ParseExpr(lexer, context);
-
-      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::RParen,
-                "Expected ')' after __builtin_va_start");
-      lexer.ConsumeNextToken();
-      return va_start;
-    } else if (tok.value == "__builtin_va_arg") {
-      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::LParen,
-                "Expected '(' after __builtin_va_arg");
-      lexer.ConsumeNextToken();
-
-      auto va_arg = std::make_unique<VaArg>();
-      va_arg->va_list = ParseExpr(lexer, context);
-
-      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Comma,
-                "Expected ',' after va_list in __builtin_va_arg");
-      lexer.ConsumeNextToken();
-
-      va_arg->type = ParseType(lexer, context);
-
-      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::RParen,
-                "Expected ')' after __builtin_va_arg");
-      lexer.ConsumeNextToken();
-      return va_arg;
-    } else if (tok.value == "__builtin_va_end") {
-      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::LParen,
-                "Expected '(' after __builtin_va_end");
-      lexer.ConsumeNextToken();
-
-      auto va_end = std::make_unique<VaEnd>();
-      va_end->va_list = ParseExpr(lexer, context);
-
-      ASSERT_EQ(lexer.PeekNextToken().type, TokenType::RParen,
-                "Expected ')' after __builtin_va_end");
-      lexer.ConsumeNextToken();
-      return va_end;
+    if (const IntrinsicDesc *desc =
+            IntrinsicManager::GetIntrinsicDesc(tok.value)) {
+      return ParseIntrinsicCall(desc, lexer, context);
     } else {
       auto var_ref = std::make_unique<VarRef>();
       var_ref->name = tok.value;

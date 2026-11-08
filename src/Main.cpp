@@ -1,8 +1,10 @@
 #include "AST/Declaration.h"
+#include "AST/Intrinsic.h"
 #include "AST/TranslationUnit.h"
 #include "AST/Type.h"
 #include "AST/TypeContext.h"
 #include "CodeGen/LLVMIR/Generator.h"
+#include "CodeGen/LLVMIR/Va.h"
 #include "JITRunner/JITRunner.h"
 #include "Lexer.h"
 #include "Util/CmdLine.h"
@@ -22,6 +24,12 @@ static std::string PrintModule(llvm::Module &module) {
   module.print(stream, nullptr);
   stream.flush();
   return output;
+}
+
+static void RegisterVaInstrinsic() {
+  IntrinsicManager::RegisterIntrinsic(va_start_desc);
+  IntrinsicManager::RegisterIntrinsic(va_arg_desc);
+  IntrinsicManager::RegisterIntrinsic(va_end_desc);
 }
 
 CMDLINE_ARG(bool, show_ast, false);
@@ -57,6 +65,8 @@ int main(int argc, char **argv) {
       }
     }
   }
+
+  RegisterVaInstrinsic();
 
   Lexer lexer(source);
   FilteredLexer filtered_lexer(lexer);

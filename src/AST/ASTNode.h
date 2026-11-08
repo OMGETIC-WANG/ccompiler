@@ -42,9 +42,7 @@
   x(TypeCast)\
   x(GetField)\
   x(PtrGetField)\
-  x(VaStart)\
-  x(VaArg)\
-  x(VaEnd)\
+  x(IntrinsicCall)\
   x(EmptyStmt)\
   x(ConditionalExpr)
 // clang-format on

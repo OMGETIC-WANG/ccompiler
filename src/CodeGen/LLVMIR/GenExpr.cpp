@@ -1,6 +1,7 @@
 #include "GenExpr.h"
 
 #include "../../AST/AST.h"
+#include "../../AST/Intrinsic.h"
 #include "../../AST/Operations.h"
 #include "../../AST/Type.h"
 #include "ConstantEval.h"
@@ -577,19 +578,13 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     RValue function = EmitRValue(func_invoke->function.get());
     return builder.CreateFuncInvoke(function, AsSpan(args));
   }
-  if (auto *va_start = node->DynCast<VaStart>()) {
-    LValue va_list = EmitLValue(va_start->va_list.get());
-    builder.CreateVaStart(va_list);
-    return RValue{context.Types().getVoid(), nullptr};
-  }
-  if (auto *va_arg = node->DynCast<VaArg>()) {
-    LValue va_list = EmitLValue(va_arg->va_list.get());
-    return builder.CreateVaArg(va_list, va_arg->type);
-  }
-  if (auto *va_end = node->DynCast<VaEnd>()) {
-    LValue va_list = EmitLValue(va_end->va_list.get());
-    builder.CreateVaEnd(va_list);
-    return RValue{context.Types().getVoid(), nullptr};
+  if (auto *intrinsic_call = node->DynCast<IntrinsicCall>()) {
+    ASSERT(intrinsic_call->desc != nullptr,
+           "Intrinsic call is missing its descriptor");
+    ASSERT(intrinsic_call->desc->evaluator != nullptr,
+           "Intrinsic has no evaluator: ", intrinsic_call->desc->name);
+    return intrinsic_call->desc->evaluator(intrinsic_call->args, builder,
+                                           context);
   }
   if (auto *type_cast = node->DynCast<TypeCast>()) {
     RValue operand = EmitRValue(type_cast->operand.get());

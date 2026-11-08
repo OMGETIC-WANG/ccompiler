@@ -303,32 +303,6 @@ public:
   std::string_view target;
 };
 
-class VaStart : public ASTNode {
-  ASTNodeImpl(VaStart);
-  TreeNodePrintFields(va_list, last_named_arg);
-
-public:
-  std::unique_ptr<ASTNode> va_list;
-  std::unique_ptr<ASTNode> last_named_arg;
-};
-
-class VaArg : public ASTNode {
-  ASTNodeImpl(VaArg);
-  TreeNodePrintFields(va_list, type);
-
-public:
-  std::unique_ptr<ASTNode> va_list;
-  TypeRef type;
-};
-
-class VaEnd : public ASTNode {
-  ASTNodeImpl(VaEnd);
-  TreeNodePrintFields(va_list);
-
-public:
-  std::unique_ptr<ASTNode> va_list;
-};
-
 class EmptyStmt : public ASTNode {
   ASTNodeImpl(EmptyStmt);
 };
