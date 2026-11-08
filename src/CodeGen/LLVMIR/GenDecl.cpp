@@ -111,6 +111,11 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
       ASSERT(array_init->initializers.size() <= array_size,
              "Array initializer has more elements than the array size");
 
+      if (!array_type->size.has_value()) {
+        array_type = context.Types().Array(array_type->element_type,
+                                           array_init->initializers.size());
+      }
+
       std::vector<llvm::Constant *> elements;
       elements.reserve(array_size);
       for (size_t i = 0; i < array_size; ++i) {
@@ -123,7 +128,7 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
               context.LLVMType(array_type->element_type)));
         }
       }
-      return llvm::ConstantArray::get(context.LLVMArrayType(type, array_size),
+      return llvm::ConstantArray::get(context.LLVMArrayType(array_type),
                                       elements);
     }
     if (IsLiteralStringInit(array_type, initializer)) {
@@ -201,19 +206,50 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
 }
 
 LValue GenGlobalVarDecl(VarDecl *decl, GenContext &context) {
-  auto *llvm_type = context.LLVMType(decl->type);
+  TypeRef type = decl->type;
+  if (type->Is<ArrayType>()) {
+    auto *array_type = type->As<ArrayType>();
+    if (!array_type->size.has_value() && decl->initializer) {
+      if (auto *array_init = decl->initializer->DynCast<ArrayInitializer>()) {
+        array_type = context.Types().Array(array_type->element_type,
+                                           array_init->initializers.size());
+        type = array_type;
+      } else if (decl->initializer->Is<ValueInitializer>() &&
+                 decl->initializer->As<ValueInitializer>()
+                     ->value->Is<LiteralString>()) {
+        ASSERT(
+            array_type->element_type->Is<BuiltinType>() &&
+                array_type->element_type->As<BuiltinType>()->Kind() ==
+                    BuiltinKind::Char,
+            "Array type must be a char array for string literal initializer");
+
+        auto *literal_str = decl->initializer->As<ValueInitializer>()
+                                ->value->As<LiteralString>();
+        array_type = context.Types().Array(
+            array_type->element_type, literal_str->value.view().size() + 1);
+        type = array_type;
+      }
+    }
+    if (!array_type->size.has_value()) {
+      RAISE_ERROR(
+          "Can't infer array size from initializer for global variable: ",
+          decl->name);
+    }
+  }
+
+  auto *llvm_type = context.LLVMType(type);
   if (!IsConstantFoldable(decl->initializer.get())) {
     RAISE_ERROR("Global variable initializer must be constant foldable");
   }
   llvm::Constant *initializer =
-      GenConstInitializer(decl->type, decl->initializer.get(), context);
+      GenConstInitializer(type, decl->initializer.get(), context);
   auto *global = new llvm::GlobalVariable(
-      context.Module(), llvm_type, HasTypeTag(decl->type, TypeTag::Const),
+      context.Module(), llvm_type, HasTypeTag(type, TypeTag::Const),
       llvm::GlobalValue::ExternalLinkage, initializer, decl->name);
   global->setDSOLocal(true);
-  global->setAlignment(llvm::Align(decl->type->GetAlign()));
+  global->setAlignment(llvm::Align(type->GetAlign()));
 
-  LValue value{decl->type, global};
+  LValue value{type, global};
   context.CurrLayer().variables[decl->name] = value;
   return value;
 }

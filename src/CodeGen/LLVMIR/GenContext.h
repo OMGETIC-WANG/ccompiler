@@ -42,7 +42,7 @@ public:
   llvm::FunctionType *ConvertFunction(FunctionType *type);
   llvm::StructType *ConvertStruct(StructType *type);
   llvm::StructType *ConvertUnion(UnionType *type);
-  llvm::ArrayType *ConvertArray(ArrayType *type, size_t size);
+  llvm::ArrayType *ConvertArray(ArrayType *type);
   llvm::Type *ConvertEnum(EnumType *type);
 
 private:
@@ -91,8 +91,8 @@ public:
   llvm::StructType *LLVMUnionType(TypeRef type) {
     return type_converter.ConvertUnion(type->As<UnionType>());
   }
-  llvm::ArrayType *LLVMArrayType(TypeRef type, size_t size) {
-    return type_converter.ConvertArray(type->As<ArrayType>(), size);
+  llvm::ArrayType *LLVMArrayType(TypeRef type) {
+    return type_converter.ConvertArray(type->As<ArrayType>());
   }
 
   std::vector<GenContextLayer> layers;

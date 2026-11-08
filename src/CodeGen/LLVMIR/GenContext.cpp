@@ -164,13 +164,15 @@ llvm::StructType *LLVMTypeConverter::ConvertUnion(UnionType *type) {
   return result;
 }
 
-llvm::ArrayType *LLVMTypeConverter::ConvertArray(ArrayType *type, size_t size) {
+llvm::ArrayType *LLVMTypeConverter::ConvertArray(ArrayType *type) {
   ASSERT(type != nullptr, "Expected a C array type");
   if (auto found = _types.find(type); found != _types.end()) {
     return llvm::cast<llvm::ArrayType>(found->second);
   }
 
-  auto *result = llvm::ArrayType::get(Convert(type->element_type), size);
+  ASSERT(type->size.has_value(), "Expected a complete array type");
+  auto *result =
+      llvm::ArrayType::get(Convert(type->element_type), type->size.value());
   _types.emplace(type, result);
   return result;
 }
