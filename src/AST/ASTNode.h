@@ -29,6 +29,7 @@
   x(IfStmt)\
   x(ReturnStmt)\
   x(WhileStmt)\
+  x(DoWhileStmt)\
   x(ForStmt)\
   x(SwitchStmt)\
   x(CaseStmt)\

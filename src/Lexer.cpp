@@ -281,6 +281,7 @@ static Token TryPeekAsKeyword(std::string_view s) {
       {"if", TokenType::KwIf},
       {"else", TokenType::KwElse},
       {"while", TokenType::KwWhile},
+      {"do", TokenType::KwDo},
       {"for", TokenType::KwFor},
       {"return", TokenType::KwReturn},
       {"continue", TokenType::KwContinue},

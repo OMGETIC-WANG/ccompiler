@@ -177,6 +177,15 @@ public:
   std::unique_ptr<ASTNode> body;
 };
 
+class DoWhileStmt : public ASTNode {
+  ASTNodeImpl(DoWhileStmt);
+  TreeNodePrintFields(condition, body);
+
+public:
+  std::unique_ptr<ASTNode> condition;
+  std::unique_ptr<ASTNode> body;
+};
+
 class ForStmt : public ASTNode {
   ASTNodeImpl(ForStmt);
   TreeNodePrintFields(init, condition, increment, body);

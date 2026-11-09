@@ -51,6 +51,7 @@
   x(KwIf)\
   x(KwElse)\
   x(KwWhile)\
+  x(KwDo)\
   x(KwFor)\
   x(KwReturn)\
   x(KwContinue)\

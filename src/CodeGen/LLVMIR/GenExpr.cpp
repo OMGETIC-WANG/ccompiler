@@ -878,6 +878,35 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     builder.SetInsertPoint(end_block);
     return;
   }
+  if (auto *dowhile_stmt = node->DynCast<DoWhileStmt>()) {
+    size_t label_id = context.counter();
+    auto *body_block = llvm::BasicBlock::Create(
+        context.LLVMContext(), std::format("dowhile.body.{}", label_id),
+        context.current_function);
+    auto *cond_block = llvm::BasicBlock::Create(
+        context.LLVMContext(), std::format("dowhile.cond.{}", label_id),
+        context.current_function);
+    auto *end_block = llvm::BasicBlock::Create(
+        context.LLVMContext(), std::format("dowhile.end.{}", label_id),
+        context.current_function);
+
+    GenContextLoopLayerGuard loop_guard(context);
+    context.CurrLoopLayer().continue_block = cond_block;
+    context.CurrLoopLayer().break_block = end_block;
+
+    builder.CreateBr(body_block);
+    builder.SetInsertPoint(body_block);
+    {
+      GenContextLayerGuard guard(context);
+      EmitStmt(dowhile_stmt->body.get());
+    }
+    builder.CreateBr(cond_block);
+    builder.SetInsertPoint(cond_block);
+    RValue condition = EmitRValue(dowhile_stmt->condition.get());
+    builder.CreateCondBr(condition, body_block, end_block);
+    builder.SetInsertPoint(end_block);
+    return;
+  }
   if (auto *for_stmt = node->DynCast<ForStmt>()) {
     GenContextLayerGuard guard(context);
     size_t label_id = context.counter();

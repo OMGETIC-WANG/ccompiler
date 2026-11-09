@@ -37,6 +37,9 @@ static std::unique_ptr<ASTNode> ParseIfStmt(FilteredLexer &lexer,
 static std::unique_ptr<WhileStmt> ParseWhileStmt(FilteredLexer &lexer,
                                                  CompileContext &context);
 
+static std::unique_ptr<DoWhileStmt> ParseDoWhileStmt(FilteredLexer &lexer,
+                                                     CompileContext &context);
+
 static std::unique_ptr<ForStmt> ParseForStmt(FilteredLexer &lexer,
                                              CompileContext &context);
 
@@ -129,6 +132,9 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(FilteredLexer &lexer,
       break;
     case TokenType::KwWhile:
       stmt = ParseWhileStmt(lexer, context);
+      break;
+    case TokenType::KwDo:
+      stmt = ParseDoWhileStmt(lexer, context);
       break;
     case TokenType::KwFor:
       stmt = ParseForStmt(lexer, context);
@@ -258,6 +264,18 @@ static std::unique_ptr<WhileStmt> ParseWhileStmt(FilteredLexer &lexer,
   while_stmt->condition = ParseControlCondExpr(lexer, context);
   while_stmt->body = ParseStmt(lexer, context);
   return while_stmt;
+}
+
+static std::unique_ptr<DoWhileStmt> ParseDoWhileStmt(FilteredLexer &lexer,
+                                                     CompileContext &context) {
+  auto do_while_stmt = std::make_unique<DoWhileStmt>();
+  lexer.ConsumeNextToken(); // consume "do"
+  do_while_stmt->body = ParseStmt(lexer, context);
+  ASSERT_EQ(lexer.PeekNextToken().type, TokenType::KwWhile,
+            "Expected 'while' after 'do' statement");
+  lexer.ConsumeNextToken();
+  do_while_stmt->condition = ParseControlCondExpr(lexer, context);
+  return do_while_stmt;
 }
 
 static std::unique_ptr<ForStmt> ParseForStmt(FilteredLexer &lexer,
