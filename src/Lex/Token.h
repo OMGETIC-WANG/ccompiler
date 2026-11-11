@@ -3,36 +3,6 @@
 #include "../Util/EnumRefl.h"
 
 // clang-format off
-#define BINARY_OP_TOKEN_VALUES(x)\
-  x(Equal)\
-  x(Add)\
-  x(Sub)\
-  x(Div)\
-  x(Mod)\
-  x(LShift)\
-  x(RShift)\
-  x(BitAnd)\
-  x(BitOr)\
-  x(BitXor)\
-  x(AddEqual)\
-  x(SubEqual)\
-  x(MulEqual)\
-  x(DivEqual)\
-  x(ModEqual)\
-  x(LShiftEqual)\
-  x(RShiftEqual)\
-  x(BitAndEqual)\
-  x(BitOrEqual)\
-  x(BitXorEqual)\
-  x(And)\
-  x(Or)\
-  x(Eq)\
-  x(Ne)\
-  x(Lt)\
-  x(Gt)\
-  x(Le)\
-  x(Ge)
-
 #define KEYWORD_TOKEN_VALUES(x)\
   x(KwIf)\
   x(KwElse)\
@@ -95,7 +65,34 @@
   x(DotDotDot)\
   x(RightArrow)\
   x(Question)\
-  BINARY_OP_TOKEN_VALUES(x)
+  x(Equal)\
+  x(Add)\
+  x(Sub)\
+  x(Div)\
+  x(Mod)\
+  x(LShift)\
+  x(RShift)\
+  x(BitAnd)\
+  x(BitOr)\
+  x(BitXor)\
+  x(AddEqual)\
+  x(SubEqual)\
+  x(MulEqual)\
+  x(DivEqual)\
+  x(ModEqual)\
+  x(LShiftEqual)\
+  x(RShiftEqual)\
+  x(BitAndEqual)\
+  x(BitOrEqual)\
+  x(BitXorEqual)\
+  x(And)\
+  x(Or)\
+  x(Eq)\
+  x(Ne)\
+  x(Lt)\
+  x(Gt)\
+  x(Le)\
+  x(Ge)
 // clang-format on
 
 MAKE_ENUM(TokenType, TOKEN_TYPE_VALUES)

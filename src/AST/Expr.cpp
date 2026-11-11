@@ -611,13 +611,38 @@ std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(Lexer &lexer,
   }
 }
 
-#define MAKE_BINARY_OP_CASE(op) case TokenType::op:
-
 static bool IsBinaryOp(TokenType type) {
   switch (type) {
-    BINARY_OP_TOKEN_VALUES(MAKE_BINARY_OP_CASE)
-    return true;
+  case TokenType::Equal:
+  case TokenType::Add:
+  case TokenType::Sub:
+  case TokenType::Star:
+  case TokenType::Div:
+  case TokenType::Mod:
+  case TokenType::LShift:
+  case TokenType::RShift:
+  case TokenType::BitAnd:
+  case TokenType::BitOr:
+  case TokenType::BitXor:
+  case TokenType::AddEqual:
+  case TokenType::SubEqual:
+  case TokenType::MulEqual:
+  case TokenType::DivEqual:
+  case TokenType::ModEqual:
+  case TokenType::LShiftEqual:
+  case TokenType::RShiftEqual:
+  case TokenType::BitAndEqual:
   case TokenType::Et:
+  case TokenType::BitOrEqual:
+  case TokenType::BitXorEqual:
+  case TokenType::And:
+  case TokenType::Or:
+  case TokenType::Eq:
+  case TokenType::Ne:
+  case TokenType::Lt:
+  case TokenType::Gt:
+  case TokenType::Le:
+  case TokenType::Ge:
     return true;
   default:
     return false;
