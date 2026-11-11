@@ -54,7 +54,7 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
           saw_unsigned) {
         break;
       }
-      spec.type_name = tok.value;
+      spec.type_name = context.Sources().GetText(tok);
       spec.is_named_type = true;
       lexer.ConsumeToken(tok);
       continue;
@@ -100,11 +100,12 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
       lexer.ConsumeToken(tok);
       tok = lexer.PeekNextToken();
       if (tok.type == TokenType::Identifier) {
-        spec.type_name = tok.value;
+        spec.type_name = context.Sources().GetText(tok);
         lexer.ConsumeToken(tok);
         if (lexer.PeekNextToken().type == TokenType::LBrace ||
             lexer.PeekNextToken().type == TokenType::Semicolon) {
-          auto struct_decl = ParseStructDecl(lexer, tok.value, context);
+          auto struct_decl =
+              ParseStructDecl(lexer, context.Sources().GetText(tok), context);
           decl_spec.decl = std::move(struct_decl);
         }
       } else if (tok.type == TokenType::LBrace) {
@@ -122,11 +123,12 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
       lexer.ConsumeToken(tok);
       tok = lexer.PeekNextToken();
       if (tok.type == TokenType::Identifier) {
-        spec.type_name = tok.value;
+        spec.type_name = context.Sources().GetText(tok);
         lexer.ConsumeToken(tok);
         if (lexer.PeekNextToken().type == TokenType::LBrace ||
             lexer.PeekNextToken().type == TokenType::Semicolon) {
-          auto union_decl = ParseUnionDecl(lexer, tok.value, context);
+          auto union_decl =
+              ParseUnionDecl(lexer, context.Sources().GetText(tok), context);
           decl_spec.decl = std::move(union_decl);
         }
       } else if (tok.type == TokenType::LBrace) {
@@ -144,16 +146,18 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
       lexer.ConsumeToken(tok);
       tok = lexer.PeekNextToken();
       if (tok.type == TokenType::Identifier) {
-        spec.type_name = tok.value;
+        spec.type_name = context.Sources().GetText(tok);
         lexer.ConsumeToken(tok);
         if (lexer.PeekNextToken().type == TokenType::LBrace ||
             lexer.PeekNextToken().type == TokenType::Colon) {
-          auto enum_decl = ParseEnumDecl(lexer, tok.value, context);
+          auto enum_decl =
+              ParseEnumDecl(lexer, context.Sources().GetText(tok), context);
           decl_spec.decl = std::move(enum_decl);
         } else if (lexer.PeekNextToken().type == TokenType::Semicolon) {
+          std::string_view enum_name = context.Sources().GetText(tok);
           auto enum_type = context.Types().GetOrCreateEnum(
-              context.CurrentScopeId(), tok.value);
-          context.AddEnum(tok.value, enum_type);
+              context.CurrentScopeId(), enum_name);
+          context.AddEnum(enum_name, enum_type);
         }
       } else if (tok.type == TokenType::LBrace ||
                  lexer.PeekNextToken().type == TokenType::Colon) {
@@ -166,7 +170,7 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
       break;
     case TokenType::KwExtern:
     case TokenType::KwRegister:
-      RAISE_ERROR("Unsupported storage class ", tok.value);
+      RAISE_ERROR("Unsupported storage class ", context.Sources().GetText(tok));
     default:
       static const std::unordered_map<TokenType, TypeMask> tok_type_to_mask = {
           {TokenType::KwInt, MInt},       {TokenType::KwChar, MChar},
@@ -316,7 +320,8 @@ static std::unique_ptr<ParamList> ParseParamList(Lexer &lexer,
   return param_list;
 }
 
-static std::unique_ptr<ArraySuffix> ParseArraySuffix(Lexer &lexer) {
+static std::unique_ptr<ArraySuffix> ParseArraySuffix(Lexer &lexer,
+                                                     CompileContext &context) {
   auto array_suffix = std::make_unique<ArraySuffix>();
   if (lexer.PeekNextToken().type == TokenType::RBracket) {
     return array_suffix;
@@ -324,7 +329,7 @@ static std::unique_ptr<ArraySuffix> ParseArraySuffix(Lexer &lexer) {
   Token tok = lexer.PeekNextToken();
   ASSERT(tok.type == TokenType::LiteralNum, "Expected number in array size");
   lexer.ConsumeToken(tok);
-  array_suffix->size = std::stoul(std::string(tok.value));
+  array_suffix->size = std::stoul(std::string(context.Sources().GetText(tok)));
   return array_suffix;
 }
 
@@ -335,7 +340,7 @@ ParseDirectDeclarator(Lexer &lexer, CompileContext &context) {
   if (tok.type == TokenType::Identifier) {
     lexer.ConsumeToken(tok);
     direct_declarator->declarator =
-        std::make_unique<IdentifierDeclarator>(tok.value);
+        std::make_unique<IdentifierDeclarator>(context.Sources().GetText(tok));
   } else if (tok.type == TokenType::LParen) {
     lexer.ConsumeToken(tok);
     direct_declarator->declarator = ParseDeclarator(lexer, context);
@@ -354,7 +359,7 @@ ParseDirectDeclarator(Lexer &lexer, CompileContext &context) {
              "Expected closing paren");
     } else if (tok.type == TokenType::LBracket) {
       lexer.ConsumeToken(tok);
-      direct_declarator->suffixes.push_back(ParseArraySuffix(lexer));
+      direct_declarator->suffixes.push_back(ParseArraySuffix(lexer, context));
       ASSERT(lexer.ConsumeNextToken().type == TokenType::RBracket,
              "Expected closing bracket");
     } else {
@@ -415,7 +420,7 @@ ParseFieldInitializer(Lexer &lexer, CompileContext &context) {
     ASSERT(tok.type == TokenType::Identifier,
            "Expected identifier in field initializer");
     lexer.ConsumeToken(tok);
-    std::string_view field_name = tok.value;
+    std::string_view field_name = context.Sources().GetText(tok);
 
     ASSERT(lexer.ConsumeNextToken().type == TokenType::Equal,
            "Expected equal in field initializer");
@@ -490,8 +495,9 @@ bool IsDeclarationSpecifier(Token tok, const CompileContext &context) {
     return true;
   }
   if (tok.type == TokenType::Identifier) {
-    if (context.Is(tok.value, ContextItemType::Typedef) ||
-        context.Is(tok.value, ContextItemType::Enum)) {
+    std::string_view name = context.Sources().GetText(tok);
+    if (context.Is(name, ContextItemType::Typedef) ||
+        context.Is(name, ContextItemType::Enum)) {
       return true;
     }
   }

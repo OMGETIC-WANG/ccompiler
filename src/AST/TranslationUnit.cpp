@@ -152,7 +152,7 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(Lexer &lexer,
       if (next_tok.type == TokenType::Colon) {
         lexer.ConsumeTokens(2);
         auto label_stmt = std::make_unique<LabelStmt>();
-        label_stmt->name = tok.value;
+        label_stmt->name = context.Sources().GetText(tok);
         context.AddLabel(label_stmt->name);
         stmt = std::move(label_stmt);
       } else {
@@ -374,7 +374,7 @@ static std::unique_ptr<ASTNode> ParseGotoStmt(Lexer &lexer,
   lexer.ConsumeNextToken(); // consume "goto"
   Token tok = lexer.ConsumeNextToken();
   ASSERT_EQ(tok.type, TokenType::Identifier, "Expected identifier after goto");
-  goto_stmt->target = tok.value;
+  goto_stmt->target = context.Sources().GetText(tok);
   return goto_stmt;
 }
 
@@ -465,7 +465,7 @@ static void ParseEnumContent(Lexer &lexer, CompileContext &context,
     }
 
     ASSERT_EQ(tok.type, TokenType::Identifier);
-    std::string_view name = tok.value;
+    std::string_view name = context.Sources().GetText(tok);
     lexer.ConsumeToken(tok);
 
     auto elem_decl = std::make_unique<EnumElemDecl>();
@@ -539,11 +539,11 @@ static void AddVaList(CompileContext &context) {
   context.CurrentLayer().AddTypedef("va_list", va_list_type);
 }
 
-std::unique_ptr<TranslationUnit> ParseTranslationUnit(Lexer &lexer,
-                                                      TypeContext &types) {
+std::unique_ptr<TranslationUnit>
+ParseTranslationUnit(Lexer &lexer, TypeContext &types, SourceManager &sources) {
   std::unique_ptr<TranslationUnit> TU = std::make_unique<TranslationUnit>();
   TU->body = std::make_unique<CompoundStmt>();
-  CompileContext context(types);
+  CompileContext context(types, sources);
   context.PushLayer();
   AddVaList(context);
   while (true) {

@@ -1,6 +1,9 @@
 #include "SourceManager.h"
+#include "Exception.h"
 
+#include <algorithm>
 #include <fstream>
+#include <limits>
 
 static std::string ReadFileContent(std::string_view path) {
   std::ifstream file(std::string(path), std::ios::binary | std::ios::ate);
@@ -42,20 +45,102 @@ static std::string RemoveLineContinuations(std::string_view src) {
   return result;
 }
 
-std::string_view SourceManager::LoadSource(std::string source) {
-  std::string content = RemoveLineContinuations(source);
-  _strings.push_back(std::move(content));
-  return _strings.back();
+SourceHandle SourceManager::AddSource(std::string name, std::string text) {
+  ASSERT(text.size() <= std::numeric_limits<std::uint32_t>::max(),
+         "Source file is too large for SourceLocation");
+  ASSERT(_sources.size() < std::numeric_limits<SourceId>::max(),
+         "Too many source files");
+
+  SourceId source_id = static_cast<SourceId>(_sources.size() + 1);
+
+  SourceEntry entry{
+      .id = source_id,
+      .name = std::move(name),
+      .text = std::move(text),
+      .line_starts = {0},
+  };
+  for (std::size_t i = 0; i < entry.text.size(); ++i) {
+    if (entry.text[i] == '\n') {
+      entry.line_starts.push_back(static_cast<std::uint32_t>(i + 1));
+    }
+  }
+
+  _sources.push_back(std::move(entry));
+  return {.id = source_id, .text = _sources.back().text};
 }
 
-std::string_view SourceManager::LoadSourceFrom(std::string_view path) {
-  std::string content = RemoveLineContinuations(ReadFileContent(path));
-  // std::string content = ReadFileContent(path);
-  auto [it, inserted] = _files.emplace(std::string(path), std::move(content));
-  return it->second;
+SourceHandle SourceManager::LoadSource(std::string source, std::string name) {
+  return AddSource(std::move(name), RemoveLineContinuations(source));
 }
 
-std::string_view SourceManager::AddString(std::string s) {
-  _strings.push_back(std::move(s));
-  return _strings.back();
+SourceHandle SourceManager::LoadSourceFrom(std::string_view path) {
+  auto found = _files.find(std::string(path));
+  if (found != _files.end()) {
+    const SourceEntry &entry = GetEntry(found->second);
+    return {.id = entry.id, .text = entry.text};
+  }
+
+  SourceHandle source = AddSource(
+      std::string(path), RemoveLineContinuations(ReadFileContent(path)));
+  _files.emplace(std::string(path), source.id);
+  return source;
+}
+
+SourceLocation SourceManager::AddSynthetic(std::string text, std::string name) {
+  SourceHandle source = AddSource(std::move(name), std::move(text));
+  return {
+      .source_id = source.id,
+      .begin = 0,
+      .end = static_cast<std::uint32_t>(source.text.size()),
+  };
+}
+
+const SourceManager::SourceEntry &
+SourceManager::GetEntry(SourceId source_id) const {
+  ASSERT(source_id != INVALID_SOURCE_ID && source_id <= _sources.size(),
+         "Invalid source id: ", source_id);
+  return _sources[source_id - 1];
+}
+
+std::string_view SourceManager::GetText(SourceLocation location) const {
+  if (!location.IsValid()) {
+    return {};
+  }
+
+  const SourceEntry &entry = GetEntry(location.source_id);
+  ASSERT(location.end <= entry.text.size(),
+         "Source location is outside of its source: [", location.begin, ", ",
+         location.end, ")");
+  return std::string_view(entry.text)
+      .substr(location.begin,
+              static_cast<std::size_t>(location.end) - location.begin);
+}
+
+std::string_view SourceManager::GetFileName(SourceLocation location) const {
+  if (!location.IsValid()) {
+    return {};
+  }
+  return GetEntry(location.source_id).name;
+}
+
+SourcePosition SourceManager::GetLineColumn(SourceLocation location) const {
+  if (!location.IsValid()) {
+    return {};
+  }
+
+  const SourceEntry &entry = GetEntry(location.source_id);
+  ASSERT(location.begin <= entry.text.size(),
+         "Source location is outside of its source: offset ", location.begin);
+
+  auto line_it = std::upper_bound(entry.line_starts.begin(),
+                                  entry.line_starts.end(), location.begin);
+  ASSERT(line_it != entry.line_starts.begin(),
+         "Source line table must include offset 0");
+  --line_it;
+
+  return {
+      .line =
+          static_cast<std::uint32_t>(line_it - entry.line_starts.begin() + 1),
+      .column = static_cast<std::uint32_t>(location.begin - *line_it + 1),
+  };
 }

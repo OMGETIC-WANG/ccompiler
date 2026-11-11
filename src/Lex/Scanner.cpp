@@ -4,6 +4,11 @@
 #include <algorithm>
 #include <ranges>
 
+struct ScannedToken {
+  TokenType type = TokenType::Unknown;
+  size_t length = 0;
+};
+
 static bool IsBlank(char c) {
   return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
@@ -72,11 +77,6 @@ static size_t GetHTrimmedPos(std::string_view s, size_t start = 0) {
     }
   }
   return pos;
-}
-
-static std::string_view TrimBlank(std::string_view s, size_t start = 0) {
-  size_t pos = GetTrimmedPos(s, start);
-  return s.substr(pos);
 }
 
 static std::array<TokenType, 256> BuildSingleCharTokens() {
@@ -237,18 +237,18 @@ static std::string_view TryAddPostfix(std::string_view s,
 
 #pragma endregion literal_num_detail
 
-static Token TryPeekAsLiteralNum(std::string_view s) {
+static ScannedToken TryPeekAsLiteralNum(std::string_view s) {
   if (auto hex = TryPeekAsLiteralHex(s)) {
-    return Token{TokenType::LiteralNum, TryAddPostfix(s, hex.value())};
+    return {TokenType::LiteralNum, TryAddPostfix(s, hex.value()).size()};
   }
   if (auto bin = TryPeekAsLiteralBin(s)) {
-    return Token{TokenType::LiteralNum, TryAddPostfix(s, bin.value())};
+    return {TokenType::LiteralNum, TryAddPostfix(s, bin.value()).size()};
   }
   // Treat oct as dec in lexer
   if (auto dec = TryPeekAsLiteralDec(s)) {
-    return Token{TokenType::LiteralNum, TryAddPostfix(s, dec.value())};
+    return {TokenType::LiteralNum, TryAddPostfix(s, dec.value()).size()};
   }
-  return Token{TokenType::Unknown};
+  return {};
 }
 
 static bool IsIdentifierStart(char c) {
@@ -311,23 +311,23 @@ TokenType TryGetKeywordTokenType(std::string_view s) {
   return TokenType::Unknown;
 }
 
-static Token TryPeekAsKeyword(std::string_view s) {
+static ScannedToken TryPeekAsKeyword(std::string_view s) {
   TokenType type = TryGetKeywordTokenType(s);
   if (type != TokenType::Unknown) {
-    return Token{type, s};
+    return {type, s.size()};
   }
-  return Token{TokenType::Unknown};
+  return {};
 }
 
-static Token ResolveIdentifier(std::string_view s) {
-  Token kw = TryPeekAsKeyword(s);
+static ScannedToken ResolveIdentifier(std::string_view s) {
+  ScannedToken kw = TryPeekAsKeyword(s);
   if (kw.type != TokenType::Unknown) {
     return kw;
   }
-  return Token{TokenType::Identifier, s};
+  return {TokenType::Identifier, s.size()};
 }
 
-static Token TryPeekAsOperator(std::string_view s) {
+static ScannedToken TryPeekAsOperator(std::string_view s) {
   static std::pair<std::string_view, TokenType> prefix_tokens[] = {
       {"==", TokenType::Eq},           {"!=", TokenType::Ne},
       {"<=", TokenType::Le},           {">=", TokenType::Ge},
@@ -341,22 +341,22 @@ static Token TryPeekAsOperator(std::string_view s) {
       {"^=", TokenType::BitXorEqual},  {"<<=", TokenType::LShiftEqual},
       {">>=", TokenType::RShiftEqual}, {"->", TokenType::RightArrow}};
 
-  Token result{TokenType::Unknown};
+  ScannedToken result;
   for (const auto &p : prefix_tokens) {
-    if (s.starts_with(p.first) && p.first.size() > result.value.size()) {
-      result = Token{p.second, p.first};
+    if (s.starts_with(p.first) && p.first.size() > result.length) {
+      result = {p.second, p.first.size()};
     }
   }
   return result;
 }
 
-static Token PeekAsLiterlChar(std::string_view s) {
+static ScannedToken PeekAsLiterlChar(std::string_view s) {
   if (s.size() >= 3) {
     if (s[0] == '\'' && s[2] == '\'') {
-      return Token{TokenType::LiteralChar, s.substr(1, 1)};
+      return {TokenType::LiteralChar, 3};
     }
   }
-  return Token{TokenType::Unknown};
+  return {};
 }
 
 #pragma region literal_string_detail
@@ -422,41 +422,41 @@ static size_t GetLiteralStringEnd(std::string_view s, size_t start = 0) {
 
 #pragma endregion literal_string_detail
 
-static Token PeekAsLiteralString(std::string_view s) {
+static ScannedToken PeekAsLiteralString(std::string_view s) {
   if (s.empty())
-    return Token{TokenType::Unknown};
+    return {};
   if (s[0] != '"')
-    return Token{TokenType::Unknown};
+    return {};
   size_t end = GetLiteralStringEnd(s);
   if (end == (size_t)-1)
-    return Token{TokenType::Unknown};
-  return Token{TokenType::LiteralString, s.substr(0, end)};
+    return {};
+  return {TokenType::LiteralString, end};
 }
 
 std::pair<std::string_view, bool> Scanner::TrimSourceBlank() {
   size_t old_pos = _pos;
-  size_t pos = GetTrimmedPos(_source, _pos);
+  size_t pos = GetTrimmedPos(_source.text, _pos);
   _pos = pos;
-  return {_source.substr(_pos), pos == old_pos};
+  return {_source.text.substr(_pos), pos == old_pos};
 }
 
 std::pair<std::string_view, bool> Scanner::TrimSourceBlankH() {
   size_t old_pos = _pos;
-  size_t pos = GetHTrimmedPos(_source, _pos);
+  size_t pos = GetHTrimmedPos(_source.text, _pos);
   _pos = pos;
-  return {_source.substr(_pos), pos == old_pos};
+  return {_source.text.substr(_pos), pos == old_pos};
 }
 
-static Token ScanToken(std::string_view rest) {
+static ScannedToken ScanToken(std::string_view rest) {
   if (rest.starts_with("##")) {
-    return Token{TokenType::SharpSharp, rest.substr(0, 2)};
+    return {TokenType::SharpSharp, 2};
   }
 
   if (rest[0] == '.') {
     if (1 < rest.size() && isdigit(rest[1])) {
       return TryPeekAsLiteralNum(rest);
     } else {
-      return {TokenType::Dot, rest.substr(0, 1)};
+      return {TokenType::Dot, 1};
     }
   }
 
@@ -477,42 +477,87 @@ static Token ScanToken(std::string_view rest) {
     return TryPeekAsLiteralNum(rest);
   }
 
-  Token op_tok = TryPeekAsOperator(rest);
+  ScannedToken op_tok = TryPeekAsOperator(rest);
   if (op_tok.type != TokenType::Unknown) {
     return op_tok;
   }
 
   if (single_char_tokens[rest[0]] != TokenType::Unknown) {
-    return Token{single_char_tokens[rest[0]], rest.substr(0, 1)};
+    return {single_char_tokens[rest[0]], 1};
   }
 
   RAISE_ERROR("Unknown char: ", rest[0]);
 }
 
+static Token MakeToken(const SourceHandle &source, size_t begin,
+                       ScannedToken scanned, bool has_leading_space) {
+  if (scanned.type == TokenType::Unknown || scanned.length == 0) {
+    return Token{scanned.type, {}, has_leading_space};
+  }
+
+  ASSERT(begin <= source.text.size() &&
+             scanned.length <= source.text.size() - begin,
+         "Invalid token range at offset ", begin);
+  return Token{
+      scanned.type,
+      {
+          .source_id = source.id,
+          .begin = static_cast<std::uint32_t>(begin),
+          .end = static_cast<std::uint32_t>(begin + scanned.length),
+      },
+      has_leading_space,
+  };
+}
+
 Token Scanner::PeekNextToken() {
   auto [rest, has_leading_space] = TrimSourceBlank();
   if (rest.empty()) {
-    return Token{TokenType::EndOfFile};
+    return Token{
+        TokenType::EndOfFile,
+        {
+            .source_id = _source.id,
+            .begin = static_cast<std::uint32_t>(_pos),
+            .end = static_cast<std::uint32_t>(_pos),
+        },
+    };
   }
 
-  Token tok = ScanToken(rest);
-  tok.has_leading_space = has_leading_space;
-  return tok;
+  size_t token_begin = _pos;
+  return MakeToken(_source, token_begin, ScanToken(rest), has_leading_space);
 }
 
 Token Scanner::PeekNextTokenH() {
   auto [rest, has_leading_space] = TrimSourceBlankH();
   if (rest.empty()) {
-    return Token{TokenType::EndOfFile};
-  }
-  if (rest[0] == '\n') {
-    return Token{TokenType::NextLine, rest.substr(0, 1), has_leading_space};
-  }
-  if (rest.starts_with("\r\n")) {
-    return Token{TokenType::NextLine, rest.substr(0, 2), has_leading_space};
+    return Token{
+        TokenType::EndOfFile,
+        {
+            .source_id = _source.id,
+            .begin = static_cast<std::uint32_t>(_pos),
+            .end = static_cast<std::uint32_t>(_pos),
+        },
+    };
   }
 
-  Token tok = ScanToken(rest);
-  tok.has_leading_space = has_leading_space;
-  return tok;
+  size_t token_begin = _pos;
+  if (rest[0] == '\n') {
+    return MakeToken(_source, token_begin, {TokenType::NextLine, 1},
+                     has_leading_space);
+  }
+  if (rest.starts_with("\r\n")) {
+    return MakeToken(_source, token_begin, {TokenType::NextLine, 2},
+                     has_leading_space);
+  }
+
+  return MakeToken(_source, token_begin, ScanToken(rest), has_leading_space);
+}
+
+void Scanner::ConsumeToken(Token tok) {
+  ASSERT(tok.location.IsValid() && tok.location.source_id == _source.id,
+         "Cannot consume a token from a different source");
+  ASSERT(tok.location.begin == _pos,
+         "Cannot consume a token that is not at the current scanner position");
+  ASSERT(tok.location.end <= _source.text.size(),
+         "Token end is outside of the source buffer");
+  _pos = tok.location.end;
 }

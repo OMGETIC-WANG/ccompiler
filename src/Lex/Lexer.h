@@ -29,11 +29,11 @@ class CompileContext;
 
 class RawLexer : public IRawLexer {
 public:
-  RawLexer(std::string_view source, MacroContext &macro_context,
+  RawLexer(SourceHandle source, MacroContext &macro_context,
            SourceManager &source_manager, CompileContext &compile_context)
       : _source_manager(source_manager), _macro_context(macro_context),
         _compile_context(compile_context) {
-    _scanners.push_back(std::make_unique<Scanner>(source));
+    _scanners.push_back(std::make_unique<Scanner>(std::move(source)));
   }
 
   Token EmitToken() override;

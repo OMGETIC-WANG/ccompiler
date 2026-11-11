@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Exception.h"
+#include "../SourceManager.h"
 #include "../Util/EnumRefl.h"
 #include "../Util/Util.h"
 #include "TypeContext.h"
@@ -69,8 +70,8 @@ struct CompileContextLayer {
 // Lexical symbol table and name-to-type bindings used while building the AST.
 class CompileContext {
 public:
-  explicit CompileContext(TypeContext &types)
-      : _types(types), _next_scope_id(1) {}
+  explicit CompileContext(TypeContext &types, SourceManager &source_manager)
+      : _types(types), _source_manager(source_manager), _next_scope_id(1) {}
 
   std::vector<CompileContextLayer> layers;
 
@@ -83,6 +84,9 @@ public:
 
   TypeContext &Types() { return _types; }
   const TypeContext &Types() const { return _types; }
+
+  SourceManager &Sources() { return _source_manager; }
+  const SourceManager &Sources() const { return _source_manager; }
 
   ScopeId CurrentScopeId() { return _next_scope_id++; }
 
@@ -147,6 +151,7 @@ public:
 
 private:
   TypeContext &_types;
+  SourceManager &_source_manager;
   ScopeId _next_scope_id;
 };
 

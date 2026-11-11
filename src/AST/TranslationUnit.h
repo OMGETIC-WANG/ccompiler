@@ -20,5 +20,5 @@ std::unique_ptr<UnionDecl> ParseUnionDecl(Lexer &lexer, std::string_view name,
 std::unique_ptr<EnumDecl> ParseEnumDecl(Lexer &lexer, std::string_view name,
                                         CompileContext &context);
 
-std::unique_ptr<TranslationUnit> ParseTranslationUnit(Lexer &lexer,
-                                                      TypeContext &types);
+std::unique_ptr<TranslationUnit>
+ParseTranslationUnit(Lexer &lexer, TypeContext &types, SourceManager &sources);

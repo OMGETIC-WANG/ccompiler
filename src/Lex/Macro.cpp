@@ -1,8 +1,8 @@
 #include "Macro.h"
 #include "../Exception.h"
 
-static std::string_view CreateArgLiteralString(std::vector<Token> &tokens,
-                                               SourceManager &source_manager) {
+static SourceLocation CreateArgLiteralString(std::vector<Token> &tokens,
+                                             SourceManager &source_manager) {
   std::string str = "\"";
 
   for (size_t i = 0; i < tokens.size(); ++i) {
@@ -12,7 +12,7 @@ static std::string_view CreateArgLiteralString(std::vector<Token> &tokens,
       str += ' ';
     }
 
-    for (char c : tok.value) {
+    for (char c : source_manager.GetText(tok)) {
       if (c == '\\' || c == '\"') {
         str += '\\';
       }
@@ -22,11 +22,11 @@ static std::string_view CreateArgLiteralString(std::vector<Token> &tokens,
 
   str += "\"";
 
-  return source_manager.AddString(std::move(str));
+  return source_manager.AddSynthetic(std::move(str));
 }
 
-static bool IsMacroArgConcatable(Token t) {
-  for (char c : t.value) {
+static bool IsMacroArgConcatable(Token t, SourceManager &source_manager) {
+  for (char c : source_manager.GetText(t)) {
     if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
           (c >= '0' && c <= '9') || c == '_')) {
       return false;
@@ -44,8 +44,8 @@ MacroScanner::IsArgConcatPrefix() const {
     if (tok0.type == TokenType::Identifier &&
         tok1.type == TokenType::SharpSharp &&
         tok2.type == TokenType::Identifier) {
-      size_t param0_idx = _def.GetParamIndex(tok0.value);
-      size_t param1_idx = _def.GetParamIndex(tok2.value);
+      size_t param0_idx = _def.GetParamIndex(_source_manager.GetText(tok0));
+      size_t param1_idx = _def.GetParamIndex(_source_manager.GetText(tok2));
       if (param0_idx != (size_t)-1 && param1_idx != (size_t)-1) {
         return std::make_pair(param0_idx, param1_idx);
       }
@@ -77,13 +77,15 @@ Token MacroScanner::PeekNextToken() {
     ASSERT(_idx + 1 < _def.body.size(), "Expected token after # in macro body");
     Token next_tok = _def.body[_idx + 1];
 
-    size_t param_idx = _def.GetParamIndex(next_tok.value);
+    size_t param_idx = _def.GetParamIndex(_source_manager.GetText(next_tok));
     ASSERT(param_idx != (size_t)-1,
-           "Unknown macro parameter: ", next_tok.value);
+           "Unknown macro parameter: ", _source_manager.GetText(next_tok));
 
-    Token res{TokenType::LiteralString,
-              CreateArgLiteralString(_args[param_idx], _source_manager),
-              curr_body_tok.has_leading_space};
+    Token res{
+        TokenType::LiteralString,
+        CreateArgLiteralString(_args[param_idx], _source_manager),
+        curr_body_tok.has_leading_space,
+    };
     // _idx: #
     // _idx+1: param
     _idx += 1;
@@ -101,15 +103,17 @@ Token MacroScanner::PeekNextToken() {
     Token arg0 = arg0s[0];
     Token arg1 = arg1s[0];
     ASSERT(
-        IsMacroArgConcatable(arg0) && IsMacroArgConcatable(arg1),
+        IsMacroArgConcatable(arg0, _source_manager) &&
+            IsMacroArgConcatable(arg1, _source_manager),
         "Macro argument concatenation only supports identifiers and keywords");
 
-    std::string_view connected =
-        _source_manager.AddString(std::format("{}{}", arg0.value, arg1.value));
+    SourceLocation connected = _source_manager.AddSynthetic(std::format(
+        "{}{}", _source_manager.GetText(arg0), _source_manager.GetText(arg1)));
     Token res{TokenType::Identifier, connected,
               curr_body_tok.has_leading_space};
 
-    TokenType as_keyword_type = TryGetKeywordTokenType(connected);
+    TokenType as_keyword_type =
+        TryGetKeywordTokenType(_source_manager.GetText(connected));
     if (as_keyword_type != TokenType::Unknown) {
       res.type = as_keyword_type;
     }
@@ -121,7 +125,8 @@ Token MacroScanner::PeekNextToken() {
     return res;
   }
   if (curr_body_tok.type == TokenType::Identifier) {
-    if (auto param_idx = _def.GetParamIndex(curr_body_tok.value);
+    if (auto param_idx =
+            _def.GetParamIndex(_source_manager.GetText(curr_body_tok));
         param_idx != (size_t)-1) {
       auto &arg = _args[param_idx];
       if (arg.empty()) {

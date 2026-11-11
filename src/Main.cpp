@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
 
   SourceManager source_manager;
 
-  std::string_view source;
+  SourceHandle source;
   if (rest.size() > 0) {
     source = source_manager.LoadSourceFrom(std::string(rest[0]));
   } else {
@@ -70,13 +70,13 @@ int main(int argc, char **argv) {
   if (show_tokens || lex_only) {
     MacroContext macro_context;
     TypeContext types;
-    CompileContext compile_context(types);
+    CompileContext compile_context(types, source_manager);
     RawLexer raw_lexer(source, macro_context, source_manager, compile_context);
     Lexer lexer(raw_lexer);
     while (true) {
       Token tok = lexer.ConsumeNextToken();
-      std::cout << EnumRefl<TokenType>::GetName(tok.type) << "]" << tok.value
-                << "\n";
+      std::cout << EnumRefl<TokenType>::GetName(tok.type) << "]"
+                << source_manager.GetText(tok) << "\n";
       if (tok.type == TokenType::EndOfFile) {
         break;
       }
@@ -92,10 +92,10 @@ int main(int argc, char **argv) {
 
   MacroContext macro_context;
   TypeContext types;
-  CompileContext compile_context(types);
+  CompileContext compile_context(types, source_manager);
   RawLexer lexer(source, macro_context, source_manager, compile_context);
   Lexer filtered_lexer(lexer);
-  auto TU = ParseTranslationUnit(filtered_lexer, types);
+  auto TU = ParseTranslationUnit(filtered_lexer, types, source_manager);
 
   if (show_ast) {
     TU->Print(std::cout);

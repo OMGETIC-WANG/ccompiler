@@ -416,27 +416,28 @@ std::unique_ptr<ASTNode> ParsePrimary(Lexer &lexer, CompileContext &context) {
   switch (tok.type) {
   case TokenType::LiteralNum: {
     lexer.ConsumeToken(tok);
-    return ParseLiteralNum(tok.value, context);
+    return ParseLiteralNum(context.Sources().GetText(tok), context);
   }
   case TokenType::LiteralString: {
     lexer.ConsumeToken(tok);
     auto literal_string = std::make_unique<LiteralString>();
-    CowString s = ParseLiteralStringValue(tok.value);
+    CowString s = ParseLiteralStringValue(context.Sources().GetText(tok));
     while (lexer.PeekNextToken().type == TokenType::LiteralString) {
+      Token next = lexer.ConsumeNextToken();
       s.string() +=
-          ParseLiteralStringValue(lexer.ConsumeNextToken().value).view();
+          ParseLiteralStringValue(context.Sources().GetText(next)).view();
     }
     literal_string->value = std::move(s);
     return literal_string;
   }
   case TokenType::Identifier: {
     lexer.ConsumeToken(tok);
-    if (const IntrinsicDesc *desc =
-            IntrinsicManager::GetIntrinsicDesc(tok.value)) {
+    std::string_view name = context.Sources().GetText(tok);
+    if (const IntrinsicDesc *desc = IntrinsicManager::GetIntrinsicDesc(name)) {
       return ParseIntrinsicCall(desc, lexer, context);
     } else {
       auto var_ref = std::make_unique<VarRef>();
-      var_ref->name = tok.value;
+      var_ref->name = name;
       return var_ref;
     }
   }
@@ -493,7 +494,7 @@ std::unique_ptr<ASTNode> ParsePostfix(Lexer &lexer, CompileContext &context,
       get_field_op->operand = std::move(primary);
       Token field_tok = lexer.ConsumeNextToken();
       ASSERT(field_tok.type == TokenType::Identifier, "Expected field name");
-      get_field_op->field_name = field_tok.value;
+      get_field_op->field_name = context.Sources().GetText(field_tok);
       primary = std::move(get_field_op);
       break;
     }
@@ -503,7 +504,7 @@ std::unique_ptr<ASTNode> ParsePostfix(Lexer &lexer, CompileContext &context,
       get_field_op->operand = std::move(primary);
       Token field_tok = lexer.ConsumeNextToken();
       ASSERT(field_tok.type == TokenType::Identifier, "Expected field name");
-      get_field_op->field_name = field_tok.value;
+      get_field_op->field_name = context.Sources().GetText(field_tok);
       primary = std::move(get_field_op);
       break;
     }
