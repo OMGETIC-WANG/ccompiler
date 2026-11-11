@@ -68,10 +68,13 @@ int main(int argc, char **argv) {
   }
 
   if (show_tokens || lex_only) {
-    RawLexer lexer(source, source_manager);
+    MacroContext macro_context;
+    TypeContext types;
+    CompileContext compile_context(types);
+    RawLexer raw_lexer(source, macro_context, source_manager, compile_context);
+    Lexer lexer(raw_lexer);
     while (true) {
-      Token tok = lexer.PeekNextToken();
-      lexer.ConsumeToken(tok);
+      Token tok = lexer.ConsumeNextToken();
       std::cout << EnumRefl<TokenType>::GetName(tok.type) << "]" << tok.value
                 << "\n";
       if (tok.type == TokenType::EndOfFile) {
@@ -87,9 +90,11 @@ int main(int argc, char **argv) {
   RegisterVaInstrinsic();
   RegisterSizeofIntrinsic();
 
-  RawLexer lexer(source, source_manager);
-  Lexer filtered_lexer(lexer);
+  MacroContext macro_context;
   TypeContext types;
+  CompileContext compile_context(types);
+  RawLexer lexer(source, macro_context, source_manager, compile_context);
+  Lexer filtered_lexer(lexer);
   auto TU = ParseTranslationUnit(filtered_lexer, types);
 
   if (show_ast) {

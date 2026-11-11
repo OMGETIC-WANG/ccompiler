@@ -60,7 +60,7 @@ public:
     }
   }
 
-  const T *get() const { return _ptr; }
+  T *get() const { return _ptr; }
 
   bool own() const { return _own; }
 
