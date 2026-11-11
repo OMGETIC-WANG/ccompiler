@@ -26,6 +26,8 @@ class SourceManager {
 public:
   SourceHandle LoadSource(std::string source, std::string name = "<stdin>");
   SourceHandle LoadSourceFrom(std::string_view path);
+  SourceHandle LoadSourceFrom(std::string_view curr_file,
+                              std::string_view relative_path);
 
   SourceLocation AddSynthetic(std::string text,
                               std::string name = "<macro expansion>");

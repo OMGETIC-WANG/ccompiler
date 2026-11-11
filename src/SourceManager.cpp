@@ -2,8 +2,18 @@
 #include "Exception.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <limits>
+
+static std::string MakeAbsolutePath(std::string_view path) {
+  if (path == "<stdin>") {
+    return "<stdin>";
+  }
+  return std::filesystem::absolute(std::filesystem::path(path))
+      .lexically_normal()
+      .string();
+}
 
 static std::string ReadFileContent(std::string_view path) {
   std::ifstream file(std::string(path), std::ios::binary | std::ios::ate);
@@ -55,7 +65,7 @@ SourceHandle SourceManager::AddSource(std::string name, std::string text) {
 
   SourceEntry entry{
       .id = source_id,
-      .name = std::move(name),
+      .name = MakeAbsolutePath(name),
       .text = std::move(text),
       .line_starts = {0},
   };
@@ -74,16 +84,25 @@ SourceHandle SourceManager::LoadSource(std::string source, std::string name) {
 }
 
 SourceHandle SourceManager::LoadSourceFrom(std::string_view path) {
-  auto found = _files.find(std::string(path));
+  std::string absolute_path = MakeAbsolutePath(path);
+  auto found = _files.find(absolute_path);
   if (found != _files.end()) {
     const SourceEntry &entry = GetEntry(found->second);
     return {.id = entry.id, .text = entry.text};
   }
 
   SourceHandle source = AddSource(
-      std::string(path), RemoveLineContinuations(ReadFileContent(path)));
-  _files.emplace(std::string(path), source.id);
+      absolute_path, RemoveLineContinuations(ReadFileContent(absolute_path)));
+  _files.emplace(GetEntry(source.id).name, source.id);
   return source;
+}
+
+SourceHandle SourceManager::LoadSourceFrom(std::string_view curr_file,
+                                           std::string_view relative_path) {
+  std::filesystem::path include_path =
+      std::filesystem::path(curr_file).parent_path() /
+      std::filesystem::path(relative_path);
+  return LoadSourceFrom(include_path.string());
 }
 
 SourceLocation SourceManager::AddSynthetic(std::string text, std::string name) {
