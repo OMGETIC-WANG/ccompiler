@@ -1,8 +1,7 @@
 #pragma once
 
-#include "../Lexer.h"
+#include "../Lex/Lexer.h"
 #include "ASTNode.h"
 #include "Context.h"
 
-std::unique_ptr<ASTNode> ParseExpr(FilteredLexer &lexer,
-                                   CompileContext &context);
+std::unique_ptr<ASTNode> ParseExpr(Lexer &lexer, CompileContext &context);

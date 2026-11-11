@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "../Exception.h"
-#include "../Lexer.h"
+#include "../Lex/Lexer.h"
 #include "../Util/EnumRefl.h"
 #include "../Util/TaggedPointer.h"
 #include "../Util/Tree.h"
@@ -527,4 +527,4 @@ TypeRef ResolveTypeSpecifier(const TypeSpecifier &specifier,
 std::vector<ParsedType> ParseType(const Declaration *decl,
                                   CompileContext &context);
 
-TypeRef ParseType(FilteredLexer &lexer, CompileContext &context);
+TypeRef ParseType(Lexer &lexer, CompileContext &context);

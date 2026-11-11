@@ -1,1 +1,1 @@
-target_sources(ccompiler PRIVATE File.cpp Tree.cpp CmdLine.cpp)
+target_sources(ccompiler PRIVATE Tree.cpp CmdLine.cpp)

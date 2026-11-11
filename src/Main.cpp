@@ -7,17 +7,20 @@
 #include "CodeGen/LLVMIR/Sizeof.h"
 #include "CodeGen/LLVMIR/Va.h"
 #include "JITRunner/JITRunner.h"
-#include "Lexer.h"
+#include "Lex/Lexer.h"
+#include "SourceManager.h"
 #include "Util/CmdLine.h"
-#include "Util/File.h"
-#include <filesystem>
-#include <fstream>
-#include <iostream>
+
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_ostream.h>
+
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 #include <string>
+#include <string_view>
 
 static std::string PrintModule(llvm::Module &module) {
   std::string output;
@@ -39,30 +42,36 @@ static void RegisterSizeofIntrinsic() {
 
 CMDLINE_ARG(bool, show_ast, false);
 CMDLINE_ARG(bool, show_tokens, false);
+CMDLINE_ARG(bool, lex_only, false);
 CMDLINE_ARG(bool, jit_run, false);
 CMDLINE_ARG(std::string, output_file, "o", "");
 
 int main(int argc, char **argv) {
   std::vector<std::string_view> rest = CmdLine::Parse(argc, argv);
 
-  std::string source;
+  SourceManager source_manager;
+
+  std::string_view source;
   if (rest.size() > 0) {
-    source = ReadFileContent(std::string(rest[0]));
+    source = source_manager.LoadSourceFrom(std::string(rest[0]));
   } else {
+    std::string s;
     std::string line;
     while (std::getline(std::cin, line)) {
       if (line == ";;;") {
         break;
       }
-      source += line;
-      source += '\n';
+      s += line;
+      s += '\n';
     }
+    source = source_manager.LoadSource(std::move(s));
   }
 
-  if (show_tokens) {
-    Lexer lexer(source);
+  if (show_tokens || lex_only) {
+    RawLexer lexer(source, source_manager);
     while (true) {
-      Token tok = lexer.ConsumeNextToken();
+      Token tok = lexer.PeekNextToken();
+      lexer.ConsumeToken(tok);
       std::cout << EnumRefl<TokenType>::GetName(tok.type) << "]" << tok.value
                 << "\n";
       if (tok.type == TokenType::EndOfFile) {
@@ -71,11 +80,15 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (lex_only) {
+    return 0;
+  }
+
   RegisterVaInstrinsic();
   RegisterSizeofIntrinsic();
 
-  Lexer lexer(source);
-  FilteredLexer filtered_lexer(lexer);
+  RawLexer lexer(source, source_manager);
+  Lexer filtered_lexer(lexer);
   TypeContext types;
   auto TU = ParseTranslationUnit(filtered_lexer, types);
 

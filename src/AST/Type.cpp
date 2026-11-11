@@ -282,7 +282,7 @@ std::vector<ParsedType> ParseType(const Declaration *decl,
   return results;
 }
 
-TypeRef ParseType(FilteredLexer &lexer, CompileContext &context) {
+TypeRef ParseType(Lexer &lexer, CompileContext &context) {
   auto decl = ParseDeclaration(lexer, context);
   TypeRef base_type = context.GetType(decl->declaration_specifier.type_spec);
   if (!base_type) {

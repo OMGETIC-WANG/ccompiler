@@ -17,8 +17,8 @@ GenerateAnoymousSymbol(std::string_view symbol = "symbol") {
   return anoymous_symbols.back();
 }
 
-static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec,
-                               FilteredLexer &lexer, CompileContext &context) {
+static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
+                               CompileContext &context) {
   TypeSpecifier &spec = decl_spec.type_spec;
   spec.scope_id = context.CurrentScopeId();
 
@@ -260,18 +260,17 @@ end:;
   }
 }
 
-DeclarationSpecifier ParseDeclarationSpecifier(FilteredLexer &lexer,
+DeclarationSpecifier ParseDeclarationSpecifier(Lexer &lexer,
                                                CompileContext &context) {
   DeclarationSpecifier decl_spec;
   ParseTypeSpecifier(decl_spec, lexer, context);
   return decl_spec;
 }
 
-static std::unique_ptr<Declarator> ParseDeclarator(FilteredLexer &lexer,
+static std::unique_ptr<Declarator> ParseDeclarator(Lexer &lexer,
                                                    CompileContext &context);
 
-static ParamListItem ParseParamListItem(FilteredLexer &lexer,
-                                        CompileContext &context) {
+static ParamListItem ParseParamListItem(Lexer &lexer, CompileContext &context) {
   ParamListItem item;
   item.specifier = ParseDeclarationSpecifier(lexer, context);
   ASSERT(item.specifier.storage_class == StorageClass::None,
@@ -285,7 +284,7 @@ static ParamListItem ParseParamListItem(FilteredLexer &lexer,
   return item;
 }
 
-static std::unique_ptr<ParamList> ParseParamList(FilteredLexer &lexer,
+static std::unique_ptr<ParamList> ParseParamList(Lexer &lexer,
                                                  CompileContext &context) {
   auto param_list = std::make_unique<ParamList>();
   Token tok = lexer.PeekNextToken();
@@ -317,7 +316,7 @@ static std::unique_ptr<ParamList> ParseParamList(FilteredLexer &lexer,
   return param_list;
 }
 
-static std::unique_ptr<ArraySuffix> ParseArraySuffix(FilteredLexer &lexer) {
+static std::unique_ptr<ArraySuffix> ParseArraySuffix(Lexer &lexer) {
   auto array_suffix = std::make_unique<ArraySuffix>();
   if (lexer.PeekNextToken().type == TokenType::RBracket) {
     return array_suffix;
@@ -330,7 +329,7 @@ static std::unique_ptr<ArraySuffix> ParseArraySuffix(FilteredLexer &lexer) {
 }
 
 static std::unique_ptr<DirectDeclarator>
-ParseDirectDeclarator(FilteredLexer &lexer, CompileContext &context) {
+ParseDirectDeclarator(Lexer &lexer, CompileContext &context) {
   auto direct_declarator = std::make_unique<DirectDeclarator>();
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::Identifier) {
@@ -366,7 +365,7 @@ ParseDirectDeclarator(FilteredLexer &lexer, CompileContext &context) {
   return direct_declarator;
 }
 
-static std::unique_ptr<Declarator> ParseDeclarator(FilteredLexer &lexer,
+static std::unique_ptr<Declarator> ParseDeclarator(Lexer &lexer,
                                                    CompileContext &context) {
   auto declarator = std::make_unique<Declarator>();
   while (true) {
@@ -391,14 +390,14 @@ static std::unique_ptr<Declarator> ParseDeclarator(FilteredLexer &lexer,
 }
 
 static std::unique_ptr<ValueInitializer>
-ParseValueInitializer(FilteredLexer &lexer, CompileContext &context) {
+ParseValueInitializer(Lexer &lexer, CompileContext &context) {
   auto value_initializer = std::make_unique<ValueInitializer>();
   value_initializer->value = ParseExpr(lexer, context);
   return value_initializer;
 }
 
 static std::unique_ptr<FieldInitializer>
-ParseFieldInitializer(FilteredLexer &lexer, CompileContext &context) {
+ParseFieldInitializer(Lexer &lexer, CompileContext &context) {
   auto initializer = std::make_unique<FieldInitializer>();
   while (true) {
     Token tok = lexer.PeekNextToken();
@@ -429,7 +428,7 @@ ParseFieldInitializer(FilteredLexer &lexer, CompileContext &context) {
 }
 
 static std::unique_ptr<ArrayInitializer>
-ParseArrayInitializer(FilteredLexer &lexer, CompileContext &context) {
+ParseArrayInitializer(Lexer &lexer, CompileContext &context) {
   auto initializer = std::make_unique<ArrayInitializer>();
   while (true) {
     if (lexer.PeekNextToken().type == TokenType::RBrace) {
@@ -449,7 +448,7 @@ ParseArrayInitializer(FilteredLexer &lexer, CompileContext &context) {
   return initializer;
 }
 
-static std::unique_ptr<Initializer> ParseInitializer(FilteredLexer &lexer,
+static std::unique_ptr<Initializer> ParseInitializer(Lexer &lexer,
                                                      CompileContext &context) {
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::EndOfFile || tok.type == TokenType::Semicolon ||
@@ -475,7 +474,7 @@ static std::unique_ptr<Initializer> ParseInitializer(FilteredLexer &lexer,
 }
 
 static std::unique_ptr<InitDeclarator>
-ParseInitDeclarator(FilteredLexer &lexer, CompileContext &context) {
+ParseInitDeclarator(Lexer &lexer, CompileContext &context) {
   auto init_declarator = std::make_unique<InitDeclarator>();
   init_declarator->declarator = ParseDeclarator(lexer, context);
   Token tok = lexer.PeekNextToken();
@@ -499,7 +498,7 @@ bool IsDeclarationSpecifier(Token tok, const CompileContext &context) {
   return false;
 }
 
-std::unique_ptr<Declaration> ParseDeclaration(FilteredLexer &lexer,
+std::unique_ptr<Declaration> ParseDeclaration(Lexer &lexer,
                                               CompileContext &context) {
   auto declaration = std::make_unique<Declaration>();
   declaration->declaration_specifier =

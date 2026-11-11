@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Lexer.h"
+#include "../Lex/Lexer.h"
 #include "../Util/Tree.h"
 #include "ASTNode.h"
 #include "Context.h"
@@ -213,10 +213,10 @@ public:
 
 bool IsDeclarationSpecifier(Token tok, const CompileContext &context);
 
-DeclarationSpecifier ParseDeclarationSpecifier(FilteredLexer &lexer,
+DeclarationSpecifier ParseDeclarationSpecifier(Lexer &lexer,
                                                CompileContext &context);
 
-std::unique_ptr<Declaration> ParseDeclaration(FilteredLexer &lexer,
+std::unique_ptr<Declaration> ParseDeclaration(Lexer &lexer,
                                               CompileContext &context);
 
 bool IsConstantFoldable(const Initializer *initializer);

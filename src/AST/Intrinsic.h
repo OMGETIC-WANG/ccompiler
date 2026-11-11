@@ -103,5 +103,5 @@ private:
 };
 
 std::unique_ptr<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,
-                                                  FilteredLexer &lexer,
+                                                  Lexer &lexer,
                                                   CompileContext &context);

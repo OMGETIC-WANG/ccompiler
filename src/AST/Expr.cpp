@@ -138,7 +138,7 @@ static BinaryOpType GetBinaryOpType(TokenType type) {
   }
 }
 
-std::vector<std::unique_ptr<ASTNode>> ParseQuotedExpr(FilteredLexer &lexer,
+std::vector<std::unique_ptr<ASTNode>> ParseQuotedExpr(Lexer &lexer,
                                                       CompileContext &context) {
   std::vector<std::unique_ptr<ASTNode>> results;
   while (true) {
@@ -411,8 +411,7 @@ has_escape:;
   return res;
 }
 
-std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer,
-                                      CompileContext &context) {
+std::unique_ptr<ASTNode> ParsePrimary(Lexer &lexer, CompileContext &context) {
   Token tok = lexer.PeekNextToken();
   switch (tok.type) {
   case TokenType::LiteralNum: {
@@ -459,8 +458,7 @@ std::unique_ptr<ASTNode> ParsePrimary(FilteredLexer &lexer,
   }
 }
 
-std::unique_ptr<ASTNode> ParsePostfix(FilteredLexer &lexer,
-                                      CompileContext &context,
+std::unique_ptr<ASTNode> ParsePostfix(Lexer &lexer, CompileContext &context,
                                       std::unique_ptr<ASTNode> primary) {
   while (true) {
     Token tok = lexer.PeekNextToken();
@@ -551,7 +549,7 @@ static std::unordered_map<TokenType, UnaryOpType> tok_to_unary_op_type = {
     {TokenType::BitNot, UnaryOpType::BitNot},
     {TokenType::Not, UnaryOpType::Not}};
 
-std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(FilteredLexer &lexer,
+std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(Lexer &lexer,
                                                 CompileContext &context) {
   std::unique_ptr<UnaryOp> prefix;
   UnaryOp *last_prefix = nullptr;
@@ -644,8 +642,7 @@ static bool IsRightCombineOp(TokenType op) {
   }
 }
 
-std::unique_ptr<ASTNode> ParseSingleExpr(FilteredLexer &lexer,
-                                         CompileContext &context,
+std::unique_ptr<ASTNode> ParseSingleExpr(Lexer &lexer, CompileContext &context,
                                          int min_prec = 0) {
   auto lhs = ParsePrefixPostfixExpr(lexer, context);
   while (true) {
@@ -682,8 +679,7 @@ std::unique_ptr<ASTNode> ParseSingleExpr(FilteredLexer &lexer,
   return lhs;
 }
 
-std::unique_ptr<ASTNode> ParseExpr(FilteredLexer &lexer,
-                                   CompileContext &context) {
+std::unique_ptr<ASTNode> ParseExpr(Lexer &lexer, CompileContext &context) {
   auto expr = ParseSingleExpr(lexer, context);
   if (lexer.PeekNextToken().type == TokenType::Question) {
     lexer.ConsumeNextToken();

@@ -23,7 +23,7 @@ std::vector<TreeNodePrintField> IntrinsicCall::GetPrintFields() const {
 }
 
 std::unique_ptr<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,
-                                                  FilteredLexer &lexer,
+                                                  Lexer &lexer,
                                                   CompileContext &context) {
   auto call = std::make_unique<IntrinsicCall>();
   call->desc = desc;

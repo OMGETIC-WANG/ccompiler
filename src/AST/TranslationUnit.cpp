@@ -5,21 +5,19 @@
 #include "Expr.h"
 
 static std::unique_ptr<FunctionDecl>
-ParseFunctionDecl(FilteredLexer &lexer, ParsedType type,
-                  StorageClass storage_class, CompileContext &context);
+ParseFunctionDecl(Lexer &lexer, ParsedType type, StorageClass storage_class,
+                  CompileContext &context);
 
-std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
-                                            std::string_view name,
+std::unique_ptr<StructDecl> ParseStructDecl(Lexer &lexer, std::string_view name,
                                             CompileContext &context);
 
-std::unique_ptr<EnumDecl> ParseEnumDecl(FilteredLexer &lexer,
-                                        std::string_view name,
+std::unique_ptr<EnumDecl> ParseEnumDecl(Lexer &lexer, std::string_view name,
                                         CompileContext &context);
 
-std::unique_ptr<CompoundStmt> ParseCompoundStmt(FilteredLexer &lexer,
+std::unique_ptr<CompoundStmt> ParseCompoundStmt(Lexer &lexer,
                                                 CompileContext &context);
 
-static std::unique_ptr<ASTNode> ParseControlCondExpr(FilteredLexer &lexer,
+static std::unique_ptr<ASTNode> ParseControlCondExpr(Lexer &lexer,
                                                      CompileContext &context) {
   Token tok = lexer.PeekNextToken();
   ASSERT_EQ(tok.type, TokenType::LParen, "Expected (");
@@ -31,39 +29,32 @@ static std::unique_ptr<ASTNode> ParseControlCondExpr(FilteredLexer &lexer,
   return expr;
 }
 
-static std::unique_ptr<ASTNode> ParseIfStmt(FilteredLexer &lexer,
+static std::unique_ptr<ASTNode> ParseIfStmt(Lexer &lexer,
                                             CompileContext &context);
 
-static std::unique_ptr<WhileStmt> ParseWhileStmt(FilteredLexer &lexer,
+static std::unique_ptr<WhileStmt> ParseWhileStmt(Lexer &lexer,
                                                  CompileContext &context);
 
-static std::unique_ptr<DoWhileStmt> ParseDoWhileStmt(FilteredLexer &lexer,
+static std::unique_ptr<DoWhileStmt> ParseDoWhileStmt(Lexer &lexer,
                                                      CompileContext &context);
 
-static std::unique_ptr<ForStmt> ParseForStmt(FilteredLexer &lexer,
+static std::unique_ptr<ForStmt> ParseForStmt(Lexer &lexer,
                                              CompileContext &context);
 
-static std::unique_ptr<SwitchStmt> ParseSwitchStmt(FilteredLexer &lexer,
+static std::unique_ptr<SwitchStmt> ParseSwitchStmt(Lexer &lexer,
                                                    CompileContext &context);
 
-static std::unique_ptr<ASTNode> ParseReturnStmt(FilteredLexer &lexer,
+static std::unique_ptr<ASTNode> ParseReturnStmt(Lexer &lexer,
                                                 CompileContext &context);
 
-static std::unique_ptr<ASTNode> ParseGotoStmt(FilteredLexer &lexer,
+static std::unique_ptr<ASTNode> ParseGotoStmt(Lexer &lexer,
                                               CompileContext &context);
 
-static std::unique_ptr<ASTNode> ParseStmtOnly(FilteredLexer &lexer,
+static std::unique_ptr<ASTNode> ParseStmtOnly(Lexer &lexer,
                                               CompileContext &context) {
   std::unique_ptr<ASTNode> stmt;
   Token tok = lexer.PeekNextToken();
-  if (tok.type == TokenType::RawLLVMIR) {
-    lexer.ConsumeToken(tok);
-    auto raw_ir = std::make_unique<RawLLVMIR>();
-    size_t start = begin_raw_ir_label.size();
-    size_t end = tok.value.size() - end_raw_ir_label.size();
-    raw_ir->ir = tok.value.substr(start + 1, end - start - 1);
-    stmt = std::move(raw_ir);
-  } else if (IsDeclarationSpecifier(tok, context)) {
+  if (IsDeclarationSpecifier(tok, context)) {
     auto decl = ParseDeclaration(lexer, context);
     auto decl_types = ParseType(decl.get(), context);
     auto type_spec = std::move(decl->declaration_specifier.type_spec);
@@ -195,7 +186,7 @@ static bool StmtNeedsSemicolon(const ASTNode *stmt) {
 }
 
 // Parse one statement or a compound statement.
-static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
+static std::unique_ptr<ASTNode> ParseStmt(Lexer &lexer,
                                           CompileContext &context) {
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::LBrace) {
@@ -222,7 +213,7 @@ static std::unique_ptr<ASTNode> ParseStmt(FilteredLexer &lexer,
   return stmt;
 }
 
-std::unique_ptr<CompoundStmt> ParseCompoundStmt(FilteredLexer &lexer,
+std::unique_ptr<CompoundStmt> ParseCompoundStmt(Lexer &lexer,
                                                 CompileContext &context) {
   auto tok = lexer.PeekNextToken();
   ASSERT_EQ(tok.type, TokenType::LBrace, "Expected {");
@@ -243,7 +234,7 @@ std::unique_ptr<CompoundStmt> ParseCompoundStmt(FilteredLexer &lexer,
   return CS;
 }
 
-static std::unique_ptr<ASTNode> ParseIfStmt(FilteredLexer &lexer,
+static std::unique_ptr<ASTNode> ParseIfStmt(Lexer &lexer,
                                             CompileContext &context) {
   auto if_stmt = std::make_unique<IfStmt>();
   lexer.ConsumeNextToken(); // consume "if"
@@ -257,7 +248,7 @@ static std::unique_ptr<ASTNode> ParseIfStmt(FilteredLexer &lexer,
   return if_stmt;
 }
 
-static std::unique_ptr<WhileStmt> ParseWhileStmt(FilteredLexer &lexer,
+static std::unique_ptr<WhileStmt> ParseWhileStmt(Lexer &lexer,
                                                  CompileContext &context) {
   auto while_stmt = std::make_unique<WhileStmt>();
   lexer.ConsumeNextToken(); // consume "while"
@@ -266,7 +257,7 @@ static std::unique_ptr<WhileStmt> ParseWhileStmt(FilteredLexer &lexer,
   return while_stmt;
 }
 
-static std::unique_ptr<DoWhileStmt> ParseDoWhileStmt(FilteredLexer &lexer,
+static std::unique_ptr<DoWhileStmt> ParseDoWhileStmt(Lexer &lexer,
                                                      CompileContext &context) {
   auto do_while_stmt = std::make_unique<DoWhileStmt>();
   lexer.ConsumeNextToken(); // consume "do"
@@ -278,7 +269,7 @@ static std::unique_ptr<DoWhileStmt> ParseDoWhileStmt(FilteredLexer &lexer,
   return do_while_stmt;
 }
 
-static std::unique_ptr<ForStmt> ParseForStmt(FilteredLexer &lexer,
+static std::unique_ptr<ForStmt> ParseForStmt(Lexer &lexer,
                                              CompileContext &context) {
   auto for_stmt = std::make_unique<ForStmt>();
   lexer.ConsumeNextToken();
@@ -318,7 +309,7 @@ static bool IsCaseEnd(TokenType type) {
          type == TokenType::RBrace;
 }
 
-static std::unique_ptr<SwitchStmt> ParseSwitchStmt(FilteredLexer &lexer,
+static std::unique_ptr<SwitchStmt> ParseSwitchStmt(Lexer &lexer,
                                                    CompileContext &context) {
   auto switch_stmt = std::make_unique<SwitchStmt>();
   lexer.ConsumeNextToken(); // consume "switch"
@@ -369,7 +360,7 @@ static std::unique_ptr<SwitchStmt> ParseSwitchStmt(FilteredLexer &lexer,
   }
 }
 
-static std::unique_ptr<ASTNode> ParseReturnStmt(FilteredLexer &lexer,
+static std::unique_ptr<ASTNode> ParseReturnStmt(Lexer &lexer,
                                                 CompileContext &context) {
   auto ret_stmt = std::make_unique<ReturnStmt>();
   lexer.ConsumeNextToken(); // consume "return"
@@ -377,7 +368,7 @@ static std::unique_ptr<ASTNode> ParseReturnStmt(FilteredLexer &lexer,
   return ret_stmt;
 }
 
-static std::unique_ptr<ASTNode> ParseGotoStmt(FilteredLexer &lexer,
+static std::unique_ptr<ASTNode> ParseGotoStmt(Lexer &lexer,
                                               CompileContext &context) {
   auto goto_stmt = std::make_unique<GotoStmt>();
   lexer.ConsumeNextToken(); // consume "goto"
@@ -387,8 +378,7 @@ static std::unique_ptr<ASTNode> ParseGotoStmt(FilteredLexer &lexer,
   return goto_stmt;
 }
 
-std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
-                                            std::string_view name,
+std::unique_ptr<StructDecl> ParseStructDecl(Lexer &lexer, std::string_view name,
                                             CompileContext &context) {
   auto SD = std::make_unique<StructDecl>();
   SD->name = name;
@@ -425,8 +415,7 @@ std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
   return SD;
 }
 
-std::unique_ptr<UnionDecl> ParseUnionDecl(FilteredLexer &lexer,
-                                          std::string_view name,
+std::unique_ptr<UnionDecl> ParseUnionDecl(Lexer &lexer, std::string_view name,
                                           CompileContext &context) {
   auto UD = std::make_unique<UnionDecl>();
   UD->name = name;
@@ -463,7 +452,7 @@ std::unique_ptr<UnionDecl> ParseUnionDecl(FilteredLexer &lexer,
   return UD;
 }
 
-static void ParseEnumContent(FilteredLexer &lexer, CompileContext &context,
+static void ParseEnumContent(Lexer &lexer, CompileContext &context,
                              EnumDecl *decl) {
   while (true) {
     Token tok = lexer.PeekNextToken();
@@ -494,8 +483,7 @@ static void ParseEnumContent(FilteredLexer &lexer, CompileContext &context,
   }
 }
 
-std::unique_ptr<EnumDecl> ParseEnumDecl(FilteredLexer &lexer,
-                                        std::string_view name,
+std::unique_ptr<EnumDecl> ParseEnumDecl(Lexer &lexer, std::string_view name,
                                         CompileContext &context) {
   auto ED = std::make_unique<EnumDecl>();
   ED->name = name;
@@ -523,8 +511,8 @@ std::unique_ptr<EnumDecl> ParseEnumDecl(FilteredLexer &lexer,
 }
 
 static std::unique_ptr<FunctionDecl>
-ParseFunctionDecl(FilteredLexer &lexer, ParsedType type,
-                  StorageClass storage_class, CompileContext &context) {
+ParseFunctionDecl(Lexer &lexer, ParsedType type, StorageClass storage_class,
+                  CompileContext &context) {
   auto FD = std::make_unique<FunctionDecl>();
   FD->name = type.declarator_name;
   FD->parameter_names = std::move(type.parameter_names);
@@ -551,7 +539,7 @@ static void AddVaList(CompileContext &context) {
   context.CurrentLayer().AddTypedef("va_list", va_list_type);
 }
 
-std::unique_ptr<TranslationUnit> ParseTranslationUnit(FilteredLexer &lexer,
+std::unique_ptr<TranslationUnit> ParseTranslationUnit(Lexer &lexer,
                                                       TypeContext &types) {
   std::unique_ptr<TranslationUnit> TU = std::make_unique<TranslationUnit>();
   TU->body = std::make_unique<CompoundStmt>();

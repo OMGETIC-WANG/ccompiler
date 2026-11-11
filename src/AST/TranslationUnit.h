@@ -11,17 +11,14 @@ public:
   std::unique_ptr<CompoundStmt> body;
 };
 
-std::unique_ptr<StructDecl> ParseStructDecl(FilteredLexer &lexer,
-                                            std::string_view name,
+std::unique_ptr<StructDecl> ParseStructDecl(Lexer &lexer, std::string_view name,
                                             CompileContext &context);
 
-std::unique_ptr<UnionDecl> ParseUnionDecl(FilteredLexer &lexer,
-                                          std::string_view name,
+std::unique_ptr<UnionDecl> ParseUnionDecl(Lexer &lexer, std::string_view name,
                                           CompileContext &context);
 
-std::unique_ptr<EnumDecl> ParseEnumDecl(FilteredLexer &lexer,
-                                        std::string_view name,
+std::unique_ptr<EnumDecl> ParseEnumDecl(Lexer &lexer, std::string_view name,
                                         CompileContext &context);
 
-std::unique_ptr<TranslationUnit> ParseTranslationUnit(FilteredLexer &lexer,
+std::unique_ptr<TranslationUnit> ParseTranslationUnit(Lexer &lexer,
                                                       TypeContext &types);
