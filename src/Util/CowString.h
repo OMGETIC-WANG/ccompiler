@@ -1,5 +1,6 @@
 #pragma once
 
+#include <format>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -35,4 +36,10 @@ public:
 
 private:
   std::variant<std::string_view, std::string> _data;
+};
+
+template <> struct std::formatter<CowString> : std::formatter<char> {
+  auto format(const CowString &s, std::format_context &ctx) const {
+    return std::format_to(ctx.out(), "{}", s.view());
+  }
 };

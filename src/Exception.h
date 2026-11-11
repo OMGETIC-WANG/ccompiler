@@ -34,19 +34,7 @@ template <> struct std::formatter<Exception> : std::formatter<char> {
 };
 
 template <typename T> void _AppendChunk(std::string &msg, const T &chunk) {
-  if constexpr (std::convertible_to<T, std::string_view>) {
-    msg += std::string_view(chunk);
-  } else if constexpr (EnumRefl<T>::registered) {
-    msg += EnumRefl<T>::GetName(chunk);
-  } else if constexpr (std::is_same_v<T, char>) {
-    msg += '\'';
-    msg += chunk;
-    msg += '\'';
-  } else if constexpr (std::formattable<T, char>) {
-    msg += std::format("{}", chunk);
-  } else {
-    static_assert(sizeof(T) == 0, "Unsupported chunk type for Assert message");
-  }
+  msg += std::format("{}", chunk);
 }
 
 template <class... MsgChunk>
