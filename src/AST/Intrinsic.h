@@ -103,5 +103,6 @@ private:
 };
 
 std::unique_ptr<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,
+                                                  Token name_token,
                                                   Lexer &lexer,
                                                   CompileContext &context);

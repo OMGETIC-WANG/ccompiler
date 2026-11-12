@@ -23,6 +23,7 @@ std::vector<TreeNodePrintField> IntrinsicCall::GetPrintFields() const {
 }
 
 std::unique_ptr<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,
+                                                  Token name_token,
                                                   Lexer &lexer,
                                                   CompileContext &context) {
   auto call = std::make_unique<IntrinsicCall>();
@@ -55,6 +56,7 @@ std::unique_ptr<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,
   }
   ASSERT(lexer.PeekNextToken().type == TokenType::RParen,
          "Expected ')' after intrinsic arguments");
-  lexer.ConsumeNextToken();
+  Token rparen = lexer.ConsumeNextToken();
+  call->location = CombineLocation(name_token.location, rparen.location);
   return call;
 }

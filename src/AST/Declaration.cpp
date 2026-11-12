@@ -98,29 +98,37 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
              "Multiple base types in declaration specifier");
       spec.is_struct = true;
       lexer.ConsumeToken(tok);
-      tok = lexer.PeekNextToken();
-      if (tok.type == TokenType::Identifier) {
-        spec.type_name = context.Sources().GetText(tok);
-        lexer.ConsumeToken(tok);
-        if (lexer.PeekNextToken().type == TokenType::LBrace ||
-            lexer.PeekNextToken().type == TokenType::Semicolon) {
-          auto struct_decl =
-              ParseStructDecl(lexer, context.Sources().GetText(tok), context);
-          decl_spec.decl = std::move(struct_decl);
+      {
+        Token struct_token = tok;
+        tok = lexer.PeekNextToken();
+        if (tok.type == TokenType::Identifier) {
+          spec.type_name = context.Sources().GetText(tok);
+          lexer.ConsumeToken(tok);
+          if (lexer.PeekNextToken().type == TokenType::LBrace ||
+              lexer.PeekNextToken().type == TokenType::Semicolon) {
+            auto struct_decl =
+                ParseStructDecl(lexer, context.Sources().GetText(tok), context);
+            struct_decl->location = CombineLocation(
+                struct_token.location, lexer.GetLastConsumedLocation());
+            decl_spec.decl = std::move(struct_decl);
+          }
+        } else if (tok.type == TokenType::LBrace) {
+          std::string_view name = GenerateAnoymousSymbol("struct");
+          decl_spec.decl = ParseStructDecl(lexer, name, context);
+          decl_spec.decl->location = CombineLocation(
+              struct_token.location, lexer.GetLastConsumedLocation());
+          spec.type_name = name;
+        } else {
+          RAISE_ERROR("Expected struct name or definition");
         }
-      } else if (tok.type == TokenType::LBrace) {
-        std::string_view name = GenerateAnoymousSymbol("struct");
-        decl_spec.decl = ParseStructDecl(lexer, name, context);
-        spec.type_name = name;
-      } else {
-        RAISE_ERROR("Expected struct name or definition");
       }
       break;
-    case TokenType::KwUnion:
+    case TokenType::KwUnion: {
       ASSERT(!has_nominal_type() && !has_builtin_type(),
              "Multiple base types in declaration specifier");
       spec.is_union = true;
       lexer.ConsumeToken(tok);
+      Token union_token = tok;
       tok = lexer.PeekNextToken();
       if (tok.type == TokenType::Identifier) {
         spec.type_name = context.Sources().GetText(tok);
@@ -129,43 +137,55 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
             lexer.PeekNextToken().type == TokenType::Semicolon) {
           auto union_decl =
               ParseUnionDecl(lexer, context.Sources().GetText(tok), context);
+          union_decl->location = CombineLocation(
+              union_token.location, lexer.GetLastConsumedLocation());
           decl_spec.decl = std::move(union_decl);
         }
       } else if (tok.type == TokenType::LBrace) {
         std::string_view name = GenerateAnoymousSymbol("union");
         decl_spec.decl = ParseUnionDecl(lexer, name, context);
+        decl_spec.decl->location = CombineLocation(
+            union_token.location, lexer.GetLastConsumedLocation());
         spec.type_name = name;
       } else {
         RAISE_ERROR("Expected union name or definition");
       }
       break;
+    }
     case TokenType::KwEnum:
       ASSERT(!has_nominal_type() && !has_builtin_type(),
              "Multiple base types in declaration specifier");
       spec.is_enum = true;
       lexer.ConsumeToken(tok);
-      tok = lexer.PeekNextToken();
-      if (tok.type == TokenType::Identifier) {
-        spec.type_name = context.Sources().GetText(tok);
-        lexer.ConsumeToken(tok);
-        if (lexer.PeekNextToken().type == TokenType::LBrace ||
-            lexer.PeekNextToken().type == TokenType::Colon) {
-          auto enum_decl =
-              ParseEnumDecl(lexer, context.Sources().GetText(tok), context);
-          decl_spec.decl = std::move(enum_decl);
-        } else if (lexer.PeekNextToken().type == TokenType::Semicolon) {
-          std::string_view enum_name = context.Sources().GetText(tok);
-          auto enum_type = context.Types().GetOrCreateEnum(
-              context.CurrentScopeId(), enum_name);
-          context.AddEnum(enum_name, enum_type);
+      {
+        Token enum_token = tok;
+        tok = lexer.PeekNextToken();
+        if (tok.type == TokenType::Identifier) {
+          spec.type_name = context.Sources().GetText(tok);
+          lexer.ConsumeToken(tok);
+          if (lexer.PeekNextToken().type == TokenType::LBrace ||
+              lexer.PeekNextToken().type == TokenType::Colon) {
+            auto enum_decl =
+                ParseEnumDecl(lexer, context.Sources().GetText(tok), context);
+            enum_decl->location = CombineLocation(
+                enum_token.location, lexer.GetLastConsumedLocation());
+            decl_spec.decl = std::move(enum_decl);
+          } else if (lexer.PeekNextToken().type == TokenType::Semicolon) {
+            std::string_view enum_name = context.Sources().GetText(tok);
+            auto enum_type = context.Types().GetOrCreateEnum(
+                context.CurrentScopeId(), enum_name);
+            context.AddEnum(enum_name, enum_type);
+          }
+        } else if (tok.type == TokenType::LBrace ||
+                   lexer.PeekNextToken().type == TokenType::Colon) {
+          std::string_view name = GenerateAnoymousSymbol("enum");
+          decl_spec.decl = ParseEnumDecl(lexer, name, context);
+          decl_spec.decl->location = CombineLocation(
+              enum_token.location, lexer.GetLastConsumedLocation());
+          spec.type_name = name;
+        } else {
+          RAISE_ERROR("Expected enum name or definition");
         }
-      } else if (tok.type == TokenType::LBrace ||
-                 lexer.PeekNextToken().type == TokenType::Colon) {
-        std::string_view name = GenerateAnoymousSymbol("enum");
-        decl_spec.decl = ParseEnumDecl(lexer, name, context);
-        spec.type_name = name;
-      } else {
-        RAISE_ERROR("Expected enum name or definition");
       }
       break;
     case TokenType::KwExtern:
@@ -323,6 +343,8 @@ static std::unique_ptr<ParamList> ParseParamList(Lexer &lexer,
 static std::unique_ptr<ArraySuffix> ParseArraySuffix(Lexer &lexer,
                                                      CompileContext &context) {
   auto array_suffix = std::make_unique<ArraySuffix>();
+  Token start_token = lexer.PeekNextToken();
+  array_suffix->location = start_token.location;
   if (lexer.PeekNextToken().type == TokenType::RBracket) {
     return array_suffix;
   }
@@ -330,6 +352,7 @@ static std::unique_ptr<ArraySuffix> ParseArraySuffix(Lexer &lexer,
   ASSERT(tok.type == TokenType::LiteralNum, "Expected number in array size");
   lexer.ConsumeToken(tok);
   array_suffix->size = std::stoul(std::string(context.Sources().GetText(tok)));
+  array_suffix->location = CombineLocation(start_token.location, tok.location);
   return array_suffix;
 }
 
@@ -337,10 +360,12 @@ static std::unique_ptr<DirectDeclarator>
 ParseDirectDeclarator(Lexer &lexer, CompileContext &context) {
   auto direct_declarator = std::make_unique<DirectDeclarator>();
   Token tok = lexer.PeekNextToken();
+  Token start_token = tok;
   if (tok.type == TokenType::Identifier) {
     lexer.ConsumeToken(tok);
     direct_declarator->declarator =
         std::make_unique<IdentifierDeclarator>(context.Sources().GetText(tok));
+    direct_declarator->declarator->location = tok.location;
   } else if (tok.type == TokenType::LParen) {
     lexer.ConsumeToken(tok);
     direct_declarator->declarator = ParseDeclarator(lexer, context);
@@ -355,24 +380,31 @@ ParseDirectDeclarator(Lexer &lexer, CompileContext &context) {
     if (tok.type == TokenType::LParen) {
       lexer.ConsumeToken(tok);
       direct_declarator->suffixes.push_back(ParseParamList(lexer, context));
-      ASSERT(lexer.ConsumeNextToken().type == TokenType::RParen,
-             "Expected closing paren");
+      Token rparen = lexer.ConsumeNextToken();
+      ASSERT(rparen.type == TokenType::RParen, "Expected closing paren");
+      direct_declarator->suffixes.back()->location =
+          CombineLocation(tok.location, rparen.location);
     } else if (tok.type == TokenType::LBracket) {
       lexer.ConsumeToken(tok);
       direct_declarator->suffixes.push_back(ParseArraySuffix(lexer, context));
-      ASSERT(lexer.ConsumeNextToken().type == TokenType::RBracket,
-             "Expected closing bracket");
+      Token rbracket = lexer.ConsumeNextToken();
+      ASSERT(rbracket.type == TokenType::RBracket, "Expected closing bracket");
+      direct_declarator->suffixes.back()->location =
+          CombineLocation(tok.location, rbracket.location);
     } else {
       break;
     }
   }
 
+  direct_declarator->location =
+      CombineLocation(start_token.location, lexer.GetLastConsumedLocation());
   return direct_declarator;
 }
 
 static std::unique_ptr<Declarator> ParseDeclarator(Lexer &lexer,
                                                    CompileContext &context) {
   auto declarator = std::make_unique<Declarator>();
+  Token start_token = lexer.PeekNextToken();
   while (true) {
     Token tok = lexer.PeekNextToken();
     if (tok.type == TokenType::Star) {
@@ -391,6 +423,8 @@ static std::unique_ptr<Declarator> ParseDeclarator(Lexer &lexer,
     }
   }
   declarator->direct_declarator = ParseDirectDeclarator(lexer, context);
+  declarator->location =
+      CombineLocation(start_token.location, lexer.GetLastConsumedLocation());
   return declarator;
 }
 
@@ -398,12 +432,16 @@ static std::unique_ptr<ValueInitializer>
 ParseValueInitializer(Lexer &lexer, CompileContext &context) {
   auto value_initializer = std::make_unique<ValueInitializer>();
   value_initializer->value = ParseExpr(lexer, context);
+  value_initializer->location = value_initializer->value
+                                    ? value_initializer->value->location
+                                    : lexer.GetLastConsumedLocation();
   return value_initializer;
 }
 
 static std::unique_ptr<FieldInitializer>
 ParseFieldInitializer(Lexer &lexer, CompileContext &context) {
   auto initializer = std::make_unique<FieldInitializer>();
+  Token start_token = lexer.PeekNextToken();
   while (true) {
     Token tok = lexer.PeekNextToken();
     if (tok.type == TokenType::RBrace) {
@@ -429,12 +467,15 @@ ParseFieldInitializer(Lexer &lexer, CompileContext &context) {
     initializer->field_initializers.push_back(
         {field_name, std::move(value_initializer)});
   }
+  initializer->location =
+      CombineLocation(start_token.location, lexer.GetLastConsumedLocation());
   return initializer;
 }
 
 static std::unique_ptr<ArrayInitializer>
 ParseArrayInitializer(Lexer &lexer, CompileContext &context) {
   auto initializer = std::make_unique<ArrayInitializer>();
+  Token start_token = lexer.PeekNextToken();
   while (true) {
     if (lexer.PeekNextToken().type == TokenType::RBrace) {
       break;
@@ -450,6 +491,8 @@ ParseArrayInitializer(Lexer &lexer, CompileContext &context) {
     auto val_initializer = ParseValueInitializer(lexer, context);
     initializer->initializers.push_back(std::move(val_initializer));
   }
+  initializer->location =
+      CombineLocation(start_token.location, lexer.GetLastConsumedLocation());
   return initializer;
 }
 
@@ -462,15 +505,18 @@ static std::unique_ptr<Initializer> ParseInitializer(Lexer &lexer,
   }
   if (tok.type == TokenType::LBrace) {
     lexer.ConsumeToken(tok);
+    Token lbrace = tok;
     if (lexer.PeekNextToken().type == TokenType::Dot) {
       auto res = ParseFieldInitializer(lexer, context);
-      ASSERT_EQ(lexer.ConsumeNextToken().type, TokenType::RBrace,
-                "Expected closing brace");
+      Token rbrace = lexer.ConsumeNextToken();
+      ASSERT_EQ(rbrace.type, TokenType::RBrace, "Expected closing brace");
+      res->location = CombineLocation(lbrace.location, rbrace.location);
       return res;
     } else {
       auto res = ParseArrayInitializer(lexer, context);
-      ASSERT_EQ(lexer.ConsumeNextToken().type, TokenType::RBrace,
-                "Expected closing brace");
+      Token rbrace = lexer.ConsumeNextToken();
+      ASSERT_EQ(rbrace.type, TokenType::RBrace, "Expected closing brace");
+      res->location = CombineLocation(lbrace.location, rbrace.location);
       return res;
     }
   } else {
@@ -481,12 +527,17 @@ static std::unique_ptr<Initializer> ParseInitializer(Lexer &lexer,
 static std::unique_ptr<InitDeclarator>
 ParseInitDeclarator(Lexer &lexer, CompileContext &context) {
   auto init_declarator = std::make_unique<InitDeclarator>();
+  Token start_token = lexer.PeekNextToken();
   init_declarator->declarator = ParseDeclarator(lexer, context);
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::Equal) {
     lexer.ConsumeToken(tok);
     init_declarator->initializer = ParseInitializer(lexer, context);
   }
+  init_declarator->location = CombineLocation(
+      start_token.location, init_declarator->initializer
+                                ? init_declarator->initializer->location
+                                : init_declarator->declarator->location);
   return init_declarator;
 }
 
@@ -507,10 +558,13 @@ bool IsDeclarationSpecifier(Token tok, const CompileContext &context) {
 std::unique_ptr<Declaration> ParseDeclaration(Lexer &lexer,
                                               CompileContext &context) {
   auto declaration = std::make_unique<Declaration>();
+  Token start_token = lexer.PeekNextToken();
   declaration->declaration_specifier =
       ParseDeclarationSpecifier(lexer, context);
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::Semicolon || tok.type == TokenType::LBrace) {
+    declaration->location =
+        CombineLocation(start_token.location, lexer.GetLastConsumedLocation());
     return declaration;
   }
   while (true) {
@@ -524,6 +578,8 @@ std::unique_ptr<Declaration> ParseDeclaration(Lexer &lexer,
     ASSERT(tok.type == TokenType::Comma, "Expected comma in declaration");
     lexer.ConsumeToken(tok);
   }
+  declaration->location = CombineLocation(
+      start_token.location, declaration->init_declarators.back()->location);
   return declaration;
 }
 

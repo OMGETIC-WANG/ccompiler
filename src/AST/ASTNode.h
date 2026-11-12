@@ -4,6 +4,7 @@
 #include <string_view>
 
 #include "../Exception.h"
+#include "../Lex/Token.h"
 #include "../Util/EnumRefl.h"
 #include "../Util/Tree.h"
 
@@ -51,9 +52,12 @@
 MAKE_ENUM(ASTNodeType, AST_NODE_TYPE_VALUES)
 REGISTER_ENUM(ASTNodeType, AST_NODE_TYPE_VALUES)
 
-class ASTNode;
+class LocatableNode : public TreeNode {
+public:
+  SourceLocation location;
+};
 
-class ASTNode : public TreeNode {
+class ASTNode : public LocatableNode {
 public:
   virtual ~ASTNode() = default;
 

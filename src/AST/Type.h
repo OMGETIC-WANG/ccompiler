@@ -515,6 +515,7 @@ class Declaration;
 
 struct ParsedType {
   TypeRef type = nullptr;
+  SourceLocation location;
   std::string_view declarator_name;
   std::vector<std::string_view> parameter_names;
 };

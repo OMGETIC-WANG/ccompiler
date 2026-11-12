@@ -76,6 +76,7 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
   if (!direct) {
     return {
         .type = curr_type,
+        .location = declarator->location,
         .declarator_name = {},
         .parameter_names = {},
     };
@@ -134,6 +135,7 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
   if (!direct_declarator) {
     return {
         .type = curr_type,
+        .location = declarator->location,
         .declarator_name = {},
         .parameter_names = {},
     };
@@ -142,6 +144,7 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
     const auto *identifier = direct_declarator->As<IdentifierDeclarator>();
     return {
         .type = curr_type,
+        .location = declarator->location,
         .declarator_name = identifier->identifier,
         .parameter_names = curr_type->Is<FunctionType>()
                                ? std::move(function_parameter_names)
@@ -269,12 +272,21 @@ std::vector<ParsedType> ParseType(const Declaration *decl,
   if (decl->init_declarators.size()) {
     results.reserve(decl->init_declarators.size());
     for (const auto &init_declarator : decl->init_declarators) {
-      results.push_back(
-          ParseInitDeclarator(base_type, init_declarator.get(), context));
+      ParsedType parsed =
+          ParseInitDeclarator(base_type, init_declarator.get(), context);
+      SourceLocation declaration_start{
+          .source_id = decl->location.source_id,
+          .begin = decl->location.begin,
+          .end = decl->location.begin,
+      };
+      parsed.location =
+          CombineLocation(declaration_start, init_declarator->location);
+      results.push_back(std::move(parsed));
     }
   } else {
     results.push_back({
         .type = base_type,
+        .location = decl->location,
         .declarator_name = {},
         .parameter_names = {},
     });

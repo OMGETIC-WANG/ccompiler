@@ -61,6 +61,10 @@ public:
   DeclStmtBuilder() = default;
 
   void Add(std::unique_ptr<ASTNode> decl) {
+    if (!decl) {
+      return;
+    }
+    _location = CombineLocation(_location, decl->location);
     if (std::holds_alternative<std::monostate>(_decls)) {
       _decls = std::move(decl);
     } else if (std::holds_alternative<std::unique_ptr<ASTNode>>(_decls)) {
@@ -83,6 +87,7 @@ public:
       auto decls =
           std::move(std::get<std::vector<std::unique_ptr<ASTNode>>>(_decls));
       auto decl_stmt = std::make_unique<DeclStmt>();
+      decl_stmt->location = _location;
       decl_stmt->decls = std::move(decls);
       return decl_stmt;
     }
@@ -92,6 +97,7 @@ private:
   std::variant<std::monostate, std::unique_ptr<ASTNode>,
                std::vector<std::unique_ptr<ASTNode>>>
       _decls;
+  SourceLocation _location;
 };
 
 class VarDecl : public ASTNode {

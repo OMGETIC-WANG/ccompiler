@@ -42,7 +42,10 @@ target_sources(
           ${PROJECT_SOURCE_DIR}/src/JITRunner/JITRunner.cpp)
 
 target_include_directories(ccompiler PRIVATE ${LLVM_INCLUDE_DIRS})
+target_include_directories(ccompiler_frontend PRIVATE ${LLVM_INCLUDE_DIRS})
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND "${LLVM_DEFINITIONS}")
 target_compile_definitions(ccompiler PRIVATE ${LLVM_DEFINITIONS_LIST})
+target_compile_definitions(ccompiler_frontend PRIVATE ${LLVM_DEFINITIONS_LIST})
 llvm_map_components_to_libnames(LLVM_COMPONENT_LIBS core support native orcjit)
+target_link_libraries(ccompiler_frontend PUBLIC ${LLVM_COMPONENT_LIBS})
 target_link_libraries(ccompiler PRIVATE ${LLVM_COMPONENT_LIBS})

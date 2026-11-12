@@ -34,7 +34,7 @@ struct DeclarationSpecifier {
 MAKE_ENUM(DeclType, DECL_TYPE_VALUES)
 REGISTER_ENUM(DeclType, DECL_TYPE_VALUES)
 
-class DeclBase : public TreeNode {
+class DeclBase : public LocatableNode {
 public:
   virtual ~DeclBase() = default;
 

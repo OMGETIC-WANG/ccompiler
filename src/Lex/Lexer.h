@@ -93,6 +93,7 @@ public:
   Token ConsumeNextToken() {
     Token tok = PeekNextToken();
     _parsed_tokens.pop_front();
+    _last_consumed_location = tok.location;
     return tok;
   }
 
@@ -105,10 +106,16 @@ public:
   void ConsumeToken(Token token) {
     ASSERT(token == PeekNextToken(), "Token mismatch while consuming");
     _parsed_tokens.pop_front();
+    _last_consumed_location = token.location;
+  }
+
+  SourceLocation GetLastConsumedLocation() const {
+    return _last_consumed_location;
   }
 
 private:
   IRawLexer &_lexer;
 
   std::deque<Token> _parsed_tokens;
+  SourceLocation _last_consumed_location;
 };
