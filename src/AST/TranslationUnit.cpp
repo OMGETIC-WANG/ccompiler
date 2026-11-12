@@ -603,10 +603,9 @@ static void AddVaList(CompileContext &context) {
 std::unique_ptr<TranslationUnit>
 ParseTranslationUnit(Lexer &lexer, TypeContext &types, SourceManager &sources) {
   std::unique_ptr<TranslationUnit> TU = std::make_unique<TranslationUnit>();
-  TU->body = std::make_unique<CompoundStmt>();
   Token first_token = lexer.PeekNextToken();
   SourceLocation translation_unit_location = first_token.location;
-  bool has_body = false;
+  bool has_decls = false;
   CompileContext context(types, sources);
   context.PushLayer();
   AddVaList(context);
@@ -616,17 +615,16 @@ ParseTranslationUnit(Lexer &lexer, TypeContext &types, SourceManager &sources) {
       break;
     }
     std::unique_ptr<ASTNode> stmt = ParseStmt(lexer, context);
-    if (stmt) {
+    if (stmt && stmt->GetType() != ASTNodeType::EmptyStmt) {
       translation_unit_location =
           CombineLocation(translation_unit_location, stmt->location);
-      has_body = true;
-      TU->body->AddStmt(std::move(stmt));
+      has_decls = true;
+      TU->decls.push_back(std::move(stmt));
     }
   }
-  if (!has_body) {
+  if (!has_decls) {
     translation_unit_location = first_token.location;
   }
   TU->location = translation_unit_location;
-  TU->body->location = translation_unit_location;
   return TU;
 }

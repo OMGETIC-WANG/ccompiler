@@ -3,12 +3,15 @@
 #include "AST.h"
 #include "TypeContext.h"
 
+#include <memory>
+#include <vector>
+
 class TranslationUnit : public ASTNode {
   ASTNodeImpl(TranslationUnit);
-  TreeNodePrintFields(body);
+  TreeNodePrintFields(decls);
 
 public:
-  std::unique_ptr<CompoundStmt> body;
+  std::vector<std::unique_ptr<ASTNode>> decls;
 };
 
 std::unique_ptr<StructDecl> ParseStructDecl(Lexer &lexer, std::string_view name,

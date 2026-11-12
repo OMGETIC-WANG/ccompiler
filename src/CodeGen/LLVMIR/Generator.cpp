@@ -153,7 +153,7 @@ void GenTopLevelStmt(ASTNode *stmt, GenContext &context, IRBuilder &builder) {
 std::unique_ptr<llvm::Module>
 GenerateLLVMModule(const TranslationUnit *tu, TypeContext &types,
                    llvm::LLVMContext &llvm_context) {
-  ASSERT(tu != nullptr && tu->body, "Translation unit must have a body");
+  ASSERT(tu != nullptr, "Translation unit must not be null");
 
   auto module = std::make_unique<llvm::Module>("ccompiler", llvm_context);
 
@@ -178,7 +178,7 @@ GenerateLLVMModule(const TranslationUnit *tu, TypeContext &types,
   context.PushLayer();
   IRBuilder builder(context);
 
-  for (const auto &stmt : tu->body->statements) {
+  for (const auto &stmt : tu->decls) {
     GenTopLevelStmt(stmt.get(), context, builder);
   }
 
