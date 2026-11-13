@@ -43,7 +43,6 @@ until the parser behavior can satisfy a stable positive assertion.
 | `IntrinsicCall` | Covered | `Intrinsics/Sizeof`, `Intrinsics/VaBuiltins` |
 | `EmptyStmt` | Runtime filtered | `Statements/Empty` verifies filtering from `CompoundStmt` |
 | `ConditionalExpr` | Covered | `Expressions/Conditional` |
-| `RawLLVMIR` | Not source-reachable | Legacy node retained for compatibility |
 
 ## Types
 

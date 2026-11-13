@@ -119,9 +119,6 @@ void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
 
 void GenTopLevelStmt(ASTNode *stmt, GenContext &context, IRBuilder &builder) {
   switch (stmt->GetType()) {
-  case ASTNodeType::RawLLVMIR:
-    RAISE_ERROR("RawLLVMIR is no longer supported by LLVM API code "
-                "generation");
   case ASTNodeType::FunctionDecl:
     GenFunction(stmt->As<FunctionDecl>(), builder, context);
     break;

@@ -5,26 +5,6 @@
 #include "Declaration.h"
 #include "Type.h"
 
-class RawLLVMIR : public ASTNode {
-  ASTNodeImpl(RawLLVMIR);
-
-public:
-  std::string ToString() const override {
-    std::string res;
-    res.reserve(ir.size() + 16);
-    for (size_t i = 0; i < ir.size(); i++) {
-      if (ir[i] == '\n') {
-        res += "\\n";
-      } else {
-        res += ir[i];
-      }
-    }
-    return res;
-  }
-
-  std::string_view ir;
-};
-
 class LiteralString : public ASTNode {
   ASTNodeImpl(LiteralString);
   TreeNodeFieldAsString(value);

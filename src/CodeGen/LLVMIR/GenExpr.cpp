@@ -754,12 +754,6 @@ static bool IsValidSwitchValue(const TypeBase *type) {
 }
 
 void ExprEmitter::EmitStmt(ASTNode *node) {
-  if (auto *raw_ir = node->DynCast<RawLLVMIR>()) {
-    (void)raw_ir;
-    RAISE_ERROR("RawLLVMIR is no longer supported by LLVM API code "
-                "generation");
-  }
-
   if (builder.IsTerminated()) {
     if (auto *label_stmt = node->DynCast<LabelStmt>()) {
       builder.SetInsertPoint(GetOrCreateLabelBlock(label_stmt->name));

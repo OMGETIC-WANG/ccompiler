@@ -428,11 +428,6 @@ VERIFY_FIELDS("decls")
 VERIFY_FIELD(decls)
 END_VERIFY_NODE()
 
-BEGIN_VERIFY_NODE(RawLLVMIR)
-VERIFY_FIELDS("ir")
-VERIFY_FIELD(ir)
-END_VERIFY_NODE()
-
 BEGIN_VERIFY_NODE(DeclStmt)
 VERIFY_FIELDS("decls")
 VERIFY_FIELD(decls)
@@ -809,7 +804,6 @@ const bool context_verifiers_registered = [] {
 #define REGISTER_CONTEXT_VERIFIER(NODE)                                        \
   ContextVerifiers().emplace(#NODE, Verify##NODE)
   REGISTER_CONTEXT_VERIFIER(TranslationUnit);
-  REGISTER_CONTEXT_VERIFIER(RawLLVMIR);
   REGISTER_CONTEXT_VERIFIER(DeclStmt);
   REGISTER_CONTEXT_VERIFIER(CompoundStmt);
   REGISTER_CONTEXT_VERIFIER(FunctionDecl);

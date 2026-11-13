@@ -11,7 +11,6 @@
 // clang-format off
 #define AST_NODE_TYPE_VALUES(x)\
   x(Unknown)\
-  x(RawLLVMIR)\
   x(TranslationUnit)\
   x(FunctionDecl)\
   x(StructDecl)\
