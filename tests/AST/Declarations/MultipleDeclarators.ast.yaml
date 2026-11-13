@@ -1,0 +1,23 @@
+TranslationUnit:
+  decls:
+    - DeclStmt:
+        decls:
+          - StructDecl:
+              name: Pair
+          - VarDecl:
+              name: first
+              type: {StructType: {type_name: Pair}}
+          - VarDecl:
+              name: second
+              type: {StructType: {type_name: Pair}}
+    - DeclStmt:
+        decls:
+          - VarDecl:
+              name: a
+              type: {BuiltinType: {type_name: int}}
+          - VarDecl:
+              name: b
+              type: {BuiltinType: {type_name: int}}
+              initializer:
+                ValueInitializer:
+                  value: {LiteralNum: {value: 2}}

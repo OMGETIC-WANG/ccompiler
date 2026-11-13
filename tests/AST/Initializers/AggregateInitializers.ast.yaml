@@ -1,0 +1,33 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: values
+        type:
+          ArrayType:
+            size: null
+            element_type: {BuiltinType: {type_name: int}}
+        initializer:
+          ArrayInitializer:
+            initializers:
+              - ValueInitializer:
+                  value: {LiteralNum: {value: 1}}
+              - ValueInitializer:
+                  value: {LiteralNum: {value: 2}}
+              - ValueInitializer:
+                  value: {LiteralNum: {value: 3}}
+    - StructDecl:
+        name: Point
+    - VarDecl:
+        name: point
+        type: {StructType: {type_name: Point}}
+        initializer:
+          FieldInitializer:
+            field_initializers:
+              - name: x
+                value:
+                  ValueInitializer:
+                    value: {LiteralNum: {value: 1}}
+              - name: y
+                value:
+                  ValueInitializer:
+                    value: {LiteralNum: {value: 2}}

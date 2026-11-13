@@ -1,0 +1,12 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: sequence
+        initializer:
+          ValueInitializer:
+            value:
+              SequenceEval:
+                expressions:
+                  - {LiteralNum: {value: 1}}
+                  - {LiteralNum: {value: 2}}
+                  - {LiteralNum: {value: 3}}

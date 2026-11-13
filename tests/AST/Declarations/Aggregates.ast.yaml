@@ -1,0 +1,79 @@
+TranslationUnit:
+  decls:
+    - StructDecl:
+        name: Record
+        type:
+          StructType:
+            type_name: Record
+            is_complete: true
+            fields:
+              - name: id
+                type: {BuiltinType: {type_name: int}}
+              - name: name
+                type:
+                  PointerType:
+                    pointee_type: {BuiltinType: {type_name: char}}
+              - name: tags
+                type:
+                  ArrayType:
+                    size: 2
+                    element_type:
+                      {BuiltinType: {type_name: long, tags: [unsigned]}}
+        fields:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: id
+                  type: {BuiltinType: {type_name: int}}
+              - VarDecl:
+                  name: name
+                  type:
+                    PointerType:
+                      pointee_type: {BuiltinType: {type_name: char}}
+              - VarDecl:
+                  name: tags
+                  type:
+                    ArrayType:
+                      size: 2
+                      element_type:
+                        {BuiltinType: {type_name: long, tags: [unsigned]}}
+    - UnionDecl:
+        name: Number
+        type:
+          UnionType:
+            type_name: Number
+            is_complete: true
+            fields:
+              - name: integer
+                type: {BuiltinType: {type_name: int}}
+              - name: real
+                type: {BuiltinType: {type_name: double}}
+        fields:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: integer
+                  type: {BuiltinType: {type_name: int}}
+              - VarDecl:
+                  name: real
+                  type: {BuiltinType: {type_name: double}}
+    - EnumDecl:
+        name: Color
+        type:
+          EnumType:
+            enum_name: Color
+            is_complete: false
+            underlying_type: null
+        underlying_type:
+          {BuiltinType: {type_name: int, tags: [unsigned]}}
+        is_definition: true
+        values:
+          - EnumElemDecl:
+              name: Red
+              value: {LiteralNum: {value: 1}}
+          - EnumElemDecl:
+              name: Green
+              value: null
+          - EnumElemDecl:
+              name: Blue
+              value: {LiteralNum: {value: 4}}

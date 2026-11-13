@@ -1,0 +1,24 @@
+TranslationUnit:
+  decls:
+    - VarDecl: {name: lhs}
+    - VarDecl: {name: rhs}
+    - VarDecl:
+        initializer:
+          ValueInitializer:
+            value:
+              ConditionalExpr:
+                condition: {VarRef: {name: lhs}}
+                true_expr: {VarRef: {name: rhs}}
+                false_expr: {LiteralNum: {value: 0}}
+    - VarDecl:
+        initializer:
+          ValueInitializer:
+            value:
+              ConditionalExpr:
+                condition: {VarRef: {name: lhs}}
+                true_expr: {LiteralNum: {value: 1}}
+                false_expr:
+                  ConditionalExpr:
+                    condition: {VarRef: {name: rhs}}
+                    true_expr: {LiteralNum: {value: 2}}
+                    false_expr: {LiteralNum: {value: 3}}

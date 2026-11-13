@@ -1,0 +1,28 @@
+TranslationUnit:
+  decls:
+    - StructDecl:
+        name: S
+    - VarDecl:
+        name: object
+        type: {StructType: {type_name: S}}
+    - VarDecl:
+        name: pointer
+        type:
+          PointerType:
+            pointee_type: {StructType: {type_name: S}}
+    - VarDecl:
+        name: member
+        initializer:
+          ValueInitializer:
+            value:
+              GetField:
+                field_name: field
+                operand: {VarRef: {name: object}}
+    - VarDecl:
+        name: pointer_member
+        initializer:
+          ValueInitializer:
+            value:
+              PtrGetField:
+                field_name: field
+                operand: {VarRef: {name: pointer}}

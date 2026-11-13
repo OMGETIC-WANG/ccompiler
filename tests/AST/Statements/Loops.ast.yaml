@@ -1,0 +1,59 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        name: loops
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: a
+                  initializer:
+                    ValueInitializer:
+                      value: {LiteralNum: {value: 0}}
+              - WhileStmt:
+                  condition:
+                    BinaryExpr:
+                      op_type: Lt
+                      left: {VarRef: {name: a}}
+                      right: {LiteralNum: {value: 2}}
+                  body:
+                    CompoundStmt:
+                      statements:
+                        - UnaryExpr:
+                            op_type: IncAfterUse
+                            operand: {VarRef: {name: a}}
+              - DoWhileStmt:
+                  body:
+                    CompoundStmt:
+                      statements:
+                        - UnaryExpr:
+                            op_type: DecAfterUse
+                            operand: {VarRef: {name: a}}
+                  condition: {VarRef: {name: a}}
+              - ForStmt:
+                  init:
+                    BinaryExpr:
+                      op_type: Assignment
+                      left: {VarRef: {name: a}}
+                      right: {LiteralNum: {value: 0}}
+                  condition:
+                    BinaryExpr:
+                      op_type: Lt
+                      left: {VarRef: {name: a}}
+                      right: {LiteralNum: {value: 3}}
+                  increment:
+                    UnaryExpr:
+                      op_type: IncAfterUse
+                      operand: {VarRef: {name: a}}
+                  body:
+                    CompoundStmt:
+                      statements:
+                        - ContinueStmt: {}
+              - ForStmt:
+                  init: null
+                  condition: null
+                  increment: null
+                  body:
+                    CompoundStmt:
+                      statements:
+                        - BreakStmt: {}

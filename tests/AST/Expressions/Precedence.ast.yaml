@@ -1,0 +1,52 @@
+TranslationUnit:
+  decls:
+    - VarDecl: {name: lhs}
+    - VarDecl: {name: rhs}
+    - VarDecl:
+        initializer:
+          ValueInitializer:
+            value:
+              BinaryExpr:
+                op_type: Add
+                left: {LiteralNum: {value: 1}}
+                right:
+                  BinaryExpr:
+                    op_type: Mul
+                    left: {LiteralNum: {value: 2}}
+                    right: {LiteralNum: {value: 3}}
+    - VarDecl:
+        initializer:
+          ValueInitializer:
+            value:
+              BinaryExpr:
+                op_type: Sub
+                left:
+                  BinaryExpr:
+                    op_type: Sub
+                    left: {LiteralNum: {value: 1}}
+                    right: {LiteralNum: {value: 2}}
+                right: {LiteralNum: {value: 3}}
+    - VarDecl:
+        initializer:
+          ValueInitializer:
+            value:
+              BinaryExpr:
+                op_type: Mul
+                left:
+                  BinaryExpr:
+                    op_type: Add
+                    left: {LiteralNum: {value: 1}}
+                    right: {LiteralNum: {value: 2}}
+                right: {LiteralNum: {value: 3}}
+    - VarDecl:
+        initializer:
+          ValueInitializer:
+            value:
+              BinaryExpr:
+                op_type: Assignment
+                left: {VarRef: {name: lhs}}
+                right:
+                  BinaryExpr:
+                    op_type: Assignment
+                    left: {VarRef: {name: rhs}}
+                    right: {LiteralNum: {value: 1}}

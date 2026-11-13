@@ -1,0 +1,4 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        body: null

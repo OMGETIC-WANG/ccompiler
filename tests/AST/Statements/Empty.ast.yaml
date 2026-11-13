@@ -1,0 +1,7 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        name: empty
+        body:
+          CompoundStmt:
+            statements: []

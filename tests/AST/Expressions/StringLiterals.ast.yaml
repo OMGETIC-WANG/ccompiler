@@ -1,0 +1,16 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: text
+        type:
+          ArrayType:
+            size: null
+            element_type: {BuiltinType: {type_name: char}}
+        initializer:
+          ValueInitializer:
+            value: {LiteralString: {value: "line\n"}}
+    - VarDecl:
+        name: joined
+        initializer:
+          ValueInitializer:
+            value: {LiteralString: {value: "abcd"}}

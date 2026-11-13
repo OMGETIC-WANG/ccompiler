@@ -1,0 +1,31 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        name: no_args
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}
+            parameters: []
+        parameter_names: []
+    - FunctionDecl:
+        name: named
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}
+            parameters:
+              - {BuiltinType: {type_name: int}}
+              - PointerType:
+                  pointee_type:
+                    PointerType:
+                      pointee_type: {BuiltinType: {type_name: char}}
+        parameter_names: [left, argv]
+    - FunctionDecl:
+        name: returns_pointer
+        function_type:
+          FunctionType:
+            return_type:
+              PointerType:
+                pointee_type: {BuiltinType: {type_name: int}}
+            parameters:
+              - {BuiltinType: {type_name: double}}
+        parameter_names: [value]

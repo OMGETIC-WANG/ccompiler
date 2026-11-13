@@ -15,6 +15,9 @@ public:
   constexpr static bool registered = false;
 };
 
+template <typename E>
+concept EnumReflRegistered = EnumRefl<E>::registered;
+
 // MAKE_ENUM
 #define __EXTRACT_ENUM_VALUES_1(item) item,
 #define __EXTRACT_ENUM_VALUES_2(item, value) item = value,
@@ -77,6 +80,14 @@ public:
       return _Values;                                                          \
     }                                                                          \
     static size_t EnumCount() { return GetValues().size(); }                   \
+    static bool IsValidEnumName(std::string_view _Name) {                      \
+      for (const auto &[_Enum_val, _Enum_str] : GetValues()) {                 \
+        if (_Name == _Enum_str) {                                              \
+          return true;                                                         \
+        }                                                                      \
+      }                                                                        \
+      return false;                                                            \
+    }                                                                          \
   };                                                                           \
   template <> struct std::formatter<enum_name> : std::formatter<char> {        \
     static auto format(enum_name e, std::format_context &ctx) {                \

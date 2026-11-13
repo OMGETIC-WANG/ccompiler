@@ -1,0 +1,44 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        name: take_void
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: void}}
+            parameters: []
+    - VarDecl:
+        name: sc
+        type: {BuiltinType: {type_name: char}}
+    - VarDecl:
+        name: uc
+        type: {BuiltinType: {type_name: char, tags: [unsigned]}}
+    - VarDecl:
+        name: s
+        type: {BuiltinType: {type_name: short}}
+    - VarDecl:
+        name: us
+        type: {BuiltinType: {type_name: short, tags: [unsigned]}}
+    - VarDecl:
+        name: i
+        type: {BuiltinType: {type_name: int}}
+    - VarDecl:
+        name: ui
+        type: {BuiltinType: {type_name: int, tags: [unsigned]}}
+    - VarDecl:
+        name: l
+        type: {BuiltinType: {type_name: long}}
+    - VarDecl:
+        name: ul
+        type: {BuiltinType: {type_name: long, tags: [unsigned]}}
+    - VarDecl:
+        name: ll
+        type: {BuiltinType: {type_name: long long}}
+    - VarDecl:
+        name: ull
+        type: {BuiltinType: {type_name: long long, tags: [unsigned]}}
+    - VarDecl:
+        name: f
+        type: {BuiltinType: {type_name: float}}
+    - VarDecl:
+        name: d
+        type: {BuiltinType: {type_name: double}}

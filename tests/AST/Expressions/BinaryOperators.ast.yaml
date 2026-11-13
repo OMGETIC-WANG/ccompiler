@@ -1,0 +1,155 @@
+TranslationUnit:
+  decls:
+    - VarDecl: {name: lhs}
+    - VarDecl: {name: rhs}
+    - VarDecl: {name: values}
+    - VarDecl:
+        name: assign_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: Assignment}}
+    - VarDecl:
+        name: add_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: Add}}
+    - VarDecl:
+        name: sub_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: Sub}}
+    - VarDecl:
+        name: mul_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: Mul}}
+    - VarDecl:
+        name: div_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: Div}}
+    - VarDecl:
+        name: mod_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: Mod}}
+    - VarDecl:
+        name: eq_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: Eq}}
+    - VarDecl:
+        name: ne_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: Ne}}
+    - VarDecl:
+        name: lt_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: Lt}}
+    - VarDecl:
+        name: gt_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: Gt}}
+    - VarDecl:
+        name: le_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: Le}}
+    - VarDecl:
+        name: ge_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: Ge}}
+    - VarDecl:
+        name: bitand_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: BitAnd}}
+    - VarDecl:
+        name: bitor_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: BitOr}}
+    - VarDecl:
+        name: bitxor_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: BitXor}}
+    - VarDecl:
+        name: lshift_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: LShift}}
+    - VarDecl:
+        name: rshift_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: RShift}}
+    - VarDecl:
+        name: add_assign_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: AddAssign}}
+    - VarDecl:
+        name: sub_assign_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: SubAssign}}
+    - VarDecl:
+        name: mul_assign_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: MulAssign}}
+    - VarDecl:
+        name: div_assign_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: DivAssign}}
+    - VarDecl:
+        name: mod_assign_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: ModAssign}}
+    - VarDecl:
+        name: bitand_assign_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: BitAndAssign}}
+    - VarDecl:
+        name: bitor_assign_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: BitOrAssign}}
+    - VarDecl:
+        name: bitxor_assign_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: BitXorAssign}}
+    - VarDecl:
+        name: lshift_assign_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: LShiftAssign}}
+    - VarDecl:
+        name: rshift_assign_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: RShiftAssign}}
+    - VarDecl:
+        name: subscript_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: Subscript}}
+    - VarDecl:
+        name: and_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: And}}
+    - VarDecl:
+        name: or_expr
+        initializer:
+          ValueInitializer:
+            value: {BinaryExpr: {op_type: Or}}

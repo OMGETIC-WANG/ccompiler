@@ -1,0 +1,30 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        name: choose
+        body:
+          CompoundStmt:
+            statements:
+              - SwitchStmt:
+                  value: {VarRef: {name: value}}
+                  cases:
+                    - CaseStmt:
+                        case_vals:
+                          - {LiteralNum: {value: 1}}
+                          - {LiteralNum: {value: 2}}
+                        body:
+                          - ReturnStmt:
+                              ret_value: {LiteralNum: {value: 2}}
+                    - CaseStmt:
+                        case_vals:
+                          - {LiteralNum: {value: 3}}
+                        body:
+                          - BinaryExpr:
+                              op_type: Assignment
+                              left: {VarRef: {name: value}}
+                              right: {LiteralNum: {value: 4}}
+                          - BreakStmt: {}
+                    - DefaultStmt:
+                        body:
+                          - ReturnStmt:
+                              ret_value: {LiteralNum: {value: 0}}

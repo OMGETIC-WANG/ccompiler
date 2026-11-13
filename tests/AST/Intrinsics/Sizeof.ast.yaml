@@ -1,0 +1,21 @@
+TranslationUnit:
+  decls:
+    - VarDecl: {name: target}
+    - VarDecl:
+        name: type_size
+        initializer:
+          ValueInitializer:
+            value:
+              IntrinsicCall:
+                name: sizeof
+                args:
+                  - Type: {BuiltinType: {type_name: int}}
+    - VarDecl:
+        name: expression_size
+        initializer:
+          ValueInitializer:
+            value:
+              IntrinsicCall:
+                name: sizeof
+                args:
+                  - Expr: {VarRef: {name: target}}

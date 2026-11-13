@@ -1,0 +1,18 @@
+TranslationUnit:
+  decls:
+    - TypedefDecl:
+        name: word
+        type: {BuiltinType: {type_name: long, tags: [unsigned]}}
+    - TypedefDecl:
+        name: int_ptr
+        type:
+          PointerType:
+            pointee_type: {BuiltinType: {type_name: int}}
+    - VarDecl:
+        name: value
+        type: {BuiltinType: {type_name: long, tags: [unsigned]}}
+    - VarDecl:
+        name: pointer
+        type:
+          PointerType:
+            pointee_type: {BuiltinType: {type_name: int}}

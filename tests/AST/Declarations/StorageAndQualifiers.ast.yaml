@@ -1,0 +1,34 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: counter
+        type: {BuiltinType: {type_name: int}}
+        storage_class: Static
+    - FunctionDecl:
+        name: helper
+        storage_class: Static
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}
+            parameters: []
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: local
+                  type: {BuiltinType: {type_name: int}}
+                  storage_class: Static
+              - VarDecl:
+                  name: value
+                  type: {BuiltinType: {type_name: int, tags: [const]}}
+                  initializer:
+                    ValueInitializer:
+                      value: {LiteralNum: {value: 2}}
+              - ReturnStmt:
+                  ret_value: {VarRef: {name: value}}
+    - VarDecl:
+        name: pointer
+        type:
+          PointerType:
+            tags: [const]
+            pointee_type: {BuiltinType: {type_name: int, tags: [const]}}

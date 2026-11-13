@@ -1,0 +1,25 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        name: identity
+    - VarDecl:
+        name: call
+        initializer:
+          ValueInitializer:
+            value:
+              FunctionInvocation:
+                function: {VarRef: {name: identity}}
+                arguments:
+                  - {LiteralNum: {value: 1}}
+    - VarDecl:
+        name: nested_call
+        initializer:
+          ValueInitializer:
+            value:
+              FunctionInvocation:
+                function: {VarRef: {name: identity}}
+                arguments:
+                  - FunctionInvocation:
+                      function: {VarRef: {name: identity}}
+                      arguments:
+                        - {LiteralNum: {value: 2}}

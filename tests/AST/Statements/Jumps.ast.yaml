@@ -1,0 +1,12 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        name: jump
+        body:
+          CompoundStmt:
+            statements:
+              - LabelStmt: {name: start}
+              - GotoStmt: {target: done}
+              - LabelStmt: {name: done}
+              - ReturnStmt:
+                  ret_value: {LiteralNum: {value: 0}}

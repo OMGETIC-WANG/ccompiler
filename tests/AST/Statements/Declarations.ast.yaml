@@ -1,0 +1,26 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        name: declarations
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: a
+                  initializer:
+                    ValueInitializer:
+                      value: {LiteralNum: {value: 1}}
+              - DeclStmt:
+                  decls:
+                    - VarDecl: {name: b}
+                    - VarDecl:
+                        name: c
+                        initializer:
+                          ValueInitializer:
+                            value: {LiteralNum: {value: 2}}
+              - ReturnStmt:
+                  ret_value:
+                    BinaryExpr:
+                      op_type: Add
+                      left: {VarRef: {name: a}}
+                      right: {VarRef: {name: c}}

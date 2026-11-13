@@ -1,0 +1,10 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        body:
+          CompoundStmt:
+            statements:
+              - ReturnStmt:
+                  ret_value:
+                    LiteralNum:
+                      value: 41

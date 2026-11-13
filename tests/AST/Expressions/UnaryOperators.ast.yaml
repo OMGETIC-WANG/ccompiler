@@ -1,0 +1,63 @@
+TranslationUnit:
+  decls:
+    - VarDecl: {name: target}
+    - VarDecl: {name: pointer}
+    - VarDecl:
+        name: unary_plus
+        initializer:
+          ValueInitializer:
+            value: {UnaryExpr: {op_type: UnaryPlus}}
+    - VarDecl:
+        name: unary_minus
+        initializer:
+          ValueInitializer:
+            value: {UnaryExpr: {op_type: UnaryMinus}}
+    - VarDecl:
+        name: logical_not
+        initializer:
+          ValueInitializer:
+            value: {UnaryExpr: {op_type: Not}}
+    - VarDecl:
+        name: bit_not
+        initializer:
+          ValueInitializer:
+            value: {UnaryExpr: {op_type: BitNot}}
+    - VarDecl:
+        name: dereference
+        initializer:
+          ValueInitializer:
+            value: {UnaryExpr: {op_type: Deref}}
+    - VarDecl:
+        name: address
+        initializer:
+          ValueInitializer:
+            value: {UnaryExpr: {op_type: GetAddress}}
+    - VarDecl:
+        name: pre_increment
+        initializer:
+          ValueInitializer:
+            value: {UnaryExpr: {op_type: IncBeforeUse}}
+    - VarDecl:
+        name: pre_decrement
+        initializer:
+          ValueInitializer:
+            value: {UnaryExpr: {op_type: DecBeforeUse}}
+    - VarDecl:
+        name: post_increment
+        initializer:
+          ValueInitializer:
+            value: {UnaryExpr: {op_type: IncAfterUse}}
+    - VarDecl:
+        name: post_decrement
+        initializer:
+          ValueInitializer:
+            value: {UnaryExpr: {op_type: DecAfterUse}}
+    - VarDecl:
+        name: cast
+        initializer:
+          ValueInitializer:
+            value:
+              TypeCast:
+                op_type: TypeCast
+                target_type: {BuiltinType: {type_name: char}}
+                operand: {VarRef: {name: target}}

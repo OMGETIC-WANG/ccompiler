@@ -1,0 +1,23 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: callback
+        type:
+          PointerType:
+            pointee_type:
+              FunctionType:
+                return_type: {BuiltinType: {type_name: int}}
+                parameters:
+                  - {BuiltinType: {type_name: int}}
+                  - {BuiltinType: {type_name: double}}
+    - VarDecl:
+        name: handlers
+        type:
+          ArrayType:
+            size: 2
+            element_type:
+              PointerType:
+                pointee_type:
+                  FunctionType:
+                    return_type: {BuiltinType: {type_name: void}}
+                    parameters: []

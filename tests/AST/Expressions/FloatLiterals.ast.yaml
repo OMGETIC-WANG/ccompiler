@@ -1,0 +1,42 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: half
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: double}}
+                value: 0.5
+    - VarDecl:
+        name: one_half
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: float}}
+                value: 1.5
+    - VarDecl:
+        name: precise
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: long double}}
+                value: 1.0
+    - VarDecl:
+        name: exponent
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: double}}
+                value: 100.0
+    - VarDecl:
+        name: hexadecimal
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: double}}
+                value: 4.0

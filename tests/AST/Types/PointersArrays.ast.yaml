@@ -1,0 +1,44 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: value
+        type: {BuiltinType: {type_name: int}}
+    - VarDecl:
+        name: single
+        type:
+          PointerType:
+            pointee_type: {BuiltinType: {type_name: int}}
+    - VarDecl:
+        name: pointer_to_const
+        type:
+          PointerType:
+            pointee_type: {BuiltinType: {type_name: int, tags: [const]}}
+    - VarDecl:
+        name: const_pointer
+        type:
+          PointerType:
+            tags: [const]
+            pointee_type: {BuiltinType: {type_name: int}}
+    - VarDecl:
+        name: matrix
+        type:
+          ArrayType:
+            size: 2
+            element_type:
+              ArrayType:
+                size: 3
+                element_type: {BuiltinType: {type_name: int}}
+    - VarDecl:
+        name: incomplete
+        type:
+          ArrayType:
+            size: null
+            element_type: {BuiltinType: {type_name: int}}
+    - VarDecl:
+        name: array_of_pointers
+        type:
+          ArrayType:
+            size: 4
+            element_type:
+              PointerType:
+                pointee_type: {BuiltinType: {type_name: int}}

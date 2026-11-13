@@ -19,3 +19,8 @@ add_subdirectory(src/CodeGen)
 target_compile_options(ccompiler PRIVATE -Wall -Wreturn-type)
 target_compile_options(ccompiler_frontend PRIVATE -Wall -Wreturn-type)
 target_link_libraries(ccompiler PRIVATE ccompiler_frontend)
+
+include(CTest)
+if(BUILD_TESTING)
+  add_subdirectory(tests)
+endif()

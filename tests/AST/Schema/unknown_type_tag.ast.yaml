@@ -1,0 +1,8 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        function_type:
+          FunctionType:
+            return_type:
+              BuiltinType:
+                tags: [packed]

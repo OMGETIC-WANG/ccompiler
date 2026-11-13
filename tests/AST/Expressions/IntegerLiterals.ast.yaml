@@ -1,0 +1,42 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: decimal
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: int}}
+                value: 42
+    - VarDecl:
+        name: hexadecimal
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: int, tags: [unsigned]}}
+                value: 16
+    - VarDecl:
+        name: octal
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: long}}
+                value: 8
+    - VarDecl:
+        name: binary
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: long long}}
+                value: 5
+    - VarDecl:
+        name: large
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: long long, tags: [unsigned]}}
+                value: 42

@@ -1,0 +1,13 @@
+int target;
+int *pointer;
+int unary_plus = +target;
+int unary_minus = -target;
+int logical_not = !target;
+int bit_not = ~target;
+int dereference = *pointer;
+int address = &target;
+int pre_increment = ++target;
+int pre_decrement = --target;
+int post_increment = target++;
+int post_decrement = target--;
+int cast = (char)target;

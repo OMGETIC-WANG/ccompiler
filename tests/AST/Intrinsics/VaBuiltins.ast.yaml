@@ -1,0 +1,30 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        name: function
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl: {name: ap}
+              - VarDecl: {name: last}
+              - IntrinsicCall:
+                  name: __builtin_va_start
+                  args:
+                    - Expr: {VarRef: {name: ap}}
+                    - Expr: {VarRef: {name: last}}
+              - VarDecl:
+                  name: value
+                  initializer:
+                    ValueInitializer:
+                      value:
+                        IntrinsicCall:
+                          name: __builtin_va_arg
+                          args:
+                            - Expr: {VarRef: {name: ap}}
+                            - Type: {BuiltinType: {type_name: int}}
+              - IntrinsicCall:
+                  name: __builtin_va_end
+                  args:
+                    - Expr: {VarRef: {name: ap}}
+              - ReturnStmt:
+                  ret_value: {VarRef: {name: value}}

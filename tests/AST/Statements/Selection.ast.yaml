@@ -1,0 +1,35 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        name: select
+        body:
+          CompoundStmt:
+            statements:
+              - IfStmt:
+                  condition: {VarRef: {name: value}}
+                  then_branch:
+                    CompoundStmt:
+                      statements:
+                        - ReturnStmt:
+                            ret_value: {LiteralNum: {value: 1}}
+                  else_branch:
+                    IfStmt:
+                      condition:
+                        BinaryExpr:
+                          op_type: Gt
+                          left: {VarRef: {name: value}}
+                          right: {LiteralNum: {value: 1}}
+                      then_branch:
+                        CompoundStmt:
+                          statements:
+                            - ReturnStmt:
+                                ret_value: {LiteralNum: {value: 2}}
+                      else_branch:
+                        CompoundStmt:
+                          statements:
+                            - BinaryExpr:
+                                op_type: Assignment
+                                left: {VarRef: {name: value}}
+                                right: {LiteralNum: {value: 3}}
+              - ReturnStmt:
+                  ret_value: {VarRef: {name: value}}
