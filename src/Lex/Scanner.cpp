@@ -455,6 +455,9 @@ static ScannedToken ScanToken(std::string_view rest) {
   if (rest[0] == '.') {
     if (1 < rest.size() && isdigit(rest[1])) {
       return TryPeekAsLiteralNum(rest);
+    }
+    if (rest.starts_with("...")) {
+      return {TokenType::DotDotDot, 3};
     } else {
       return {TokenType::Dot, 1};
     }
