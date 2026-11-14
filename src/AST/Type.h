@@ -72,6 +72,8 @@ public:
 
   virtual TypeBaseType GetType() const = 0;
 
+  virtual int GetColor() const override { return 0x3399ff; }
+
   std::string_view GetNodeTypeName() const override;
 
   size_t GetSize() const {

@@ -1,4 +1,5 @@
 #include "AST.h"
+#include "../Util/ColoredFormat.h"
 #include "Intrinsic.h"
 #include "Operations.h"
 
@@ -30,4 +31,11 @@ bool IsConstantFoldable(const ASTNode *node) {
     return intrinsic_call->desc && intrinsic_call->desc->is_constant_evalable;
   }
   return false;
+}
+
+std::string VarRef::ToString() const {
+  return ColoredFormat(
+      "{} {:NodeAddress;#x} {}",
+      std::make_pair(decl->GetNodeTypeName(), decl->GetColor()),
+      (uintptr_t)decl, decl->name);
 }

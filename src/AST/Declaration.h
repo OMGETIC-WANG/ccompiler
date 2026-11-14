@@ -42,6 +42,8 @@ public:
 
   std::string_view GetNodeTypeName() const override;
 
+  int GetColor() const override { return 0xc68dff; }
+
   template <std::derived_from<DeclBase> T> T *As() {
 #ifdef ENABLE_AS_TYPE_CHECK
     if (GetType() != T::__type) {

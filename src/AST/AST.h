@@ -37,7 +37,12 @@ public:
   std::variant<long double, uint64_t, int64_t> value;
 };
 
-class DeclStmt : public ASTNode {
+class Stmt : public ASTNode {
+public:
+  int GetColor() const override { return 0xcc00cc; }
+};
+
+class DeclStmt : public Stmt {
   ASTNodeImpl(DeclStmt);
   TreeNodePrintFields(decls);
 
@@ -91,7 +96,7 @@ private:
 
 class ParamDecl : public ValueDecl {
   ASTNodeImpl(ParamDecl);
-  TreeNodePrintFields(name, type);
+  TreeNodePrintFields(type);
 
 public:
   TypeRef type = nullptr;
@@ -99,7 +104,6 @@ public:
 
 class VarDecl : public ValueDecl {
   ASTNodeImpl(VarDecl);
-  TreeNodeFieldAsString(name);
   TreeNodePrintFields(type, initializer);
 
 public:
@@ -110,8 +114,7 @@ public:
 
 class TypedefDecl : public NamedDecl {
   ASTNodeImpl(TypedefDecl);
-  TreeNodeFieldAsString(name);
-  TreeNodePrintFields(name, type);
+  TreeNodePrintFields(type);
 
 public:
   TypeRef type = nullptr;
@@ -125,15 +128,12 @@ public:
     ASSERT(decl != nullptr, "VarRef requires a resolved declaration");
   }
 
-  std::string ToString() const override {
-    return std::format("{} 0x{:x} {}", decl->GetNodeTypeName(), (uintptr_t)decl,
-                       decl->name);
-  }
+  std::string ToString() const override;
 
   ValueDecl *const decl;
 };
 
-class CompoundStmt : public ASTNode {
+class CompoundStmt : public Stmt {
   ASTNodeImpl(CompoundStmt);
   TreeNodePrintFields(statements);
 
@@ -149,7 +149,7 @@ public:
 
 class StructDecl : public NamedDecl {
   ASTNodeImpl(StructDecl);
-  TreeNodePrintFields(name, type, fields);
+  TreeNodePrintFields(type, fields);
 
 public:
   TypeRef type = nullptr;
@@ -158,14 +158,14 @@ public:
 
 class UnionDecl : public NamedDecl {
   ASTNodeImpl(UnionDecl);
-  TreeNodePrintFields(name, type, fields);
+  TreeNodePrintFields(type, fields);
 
 public:
   TypeRef type = nullptr;
   std::unique_ptr<CompoundStmt> fields;
 };
 
-class IfStmt : public ASTNode {
+class IfStmt : public Stmt {
   ASTNodeImpl(IfStmt);
   TreeNodePrintFields(condition, then_branch, else_branch);
 
@@ -175,7 +175,7 @@ public:
   std::unique_ptr<ASTNode> else_branch;
 };
 
-class WhileStmt : public ASTNode {
+class WhileStmt : public Stmt {
   ASTNodeImpl(WhileStmt);
   TreeNodePrintFields(condition, body);
 
@@ -184,7 +184,7 @@ public:
   std::unique_ptr<ASTNode> body;
 };
 
-class DoWhileStmt : public ASTNode {
+class DoWhileStmt : public Stmt {
   ASTNodeImpl(DoWhileStmt);
   TreeNodePrintFields(condition, body);
 
@@ -193,7 +193,7 @@ public:
   std::unique_ptr<ASTNode> body;
 };
 
-class ForStmt : public ASTNode {
+class ForStmt : public Stmt {
   ASTNodeImpl(ForStmt);
   TreeNodePrintFields(init, condition, increment, body);
 
@@ -204,7 +204,7 @@ public:
   std::unique_ptr<ASTNode> body;
 };
 
-class CaseStmt : public ASTNode {
+class CaseStmt : public Stmt {
   ASTNodeImpl(CaseStmt);
   TreeNodePrintFields(case_vals, body);
 
@@ -213,7 +213,7 @@ public:
   std::vector<std::unique_ptr<ASTNode>> body;
 };
 
-class DefaultStmt : public ASTNode {
+class DefaultStmt : public Stmt {
   ASTNodeImpl(DefaultStmt);
   TreeNodePrintFields(body);
 
@@ -221,7 +221,7 @@ public:
   std::vector<std::unique_ptr<ASTNode>> body;
 };
 
-class SwitchStmt : public ASTNode {
+class SwitchStmt : public Stmt {
   ASTNodeImpl(SwitchStmt);
   TreeNodePrintFields(value, cases);
 
@@ -239,15 +239,15 @@ public:
   std::vector<std::unique_ptr<ASTNode>> cases;
 };
 
-class BreakStmt : public ASTNode {
+class BreakStmt : public Stmt {
   ASTNodeImpl(BreakStmt);
 };
 
-class ContinueStmt : public ASTNode {
+class ContinueStmt : public Stmt {
   ASTNodeImpl(ContinueStmt);
 };
 
-class ReturnStmt : public ASTNode {
+class ReturnStmt : public Stmt {
   ASTNodeImpl(ReturnStmt);
   TreeNodePrintFields(ret_value);
 
@@ -257,23 +257,9 @@ public:
 
 class FunctionDecl : public ValueDecl {
   ASTNodeImpl(FunctionDecl);
-  TreeNodeFieldAsString(name);
+  TreeNodePrintFields(parameters, body);
 
 public:
-  std::vector<TreeNodePrintField> GetPrintFields() const override {
-    std::vector<TreeNodePrintField> print_fields;
-    AppendTreeNodePrintField(print_fields, "name", name);
-    AppendTreeNodePrintField(print_fields, "function_type", function_type);
-    for (const auto &parameter : parameters) {
-      print_fields.push_back(
-          {"parameter_name", parameter->name.empty()
-                                 ? "<anonymous>"
-                                 : std::string(parameter->name)});
-    }
-    AppendTreeNodePrintField(print_fields, "body", body);
-    return print_fields;
-  }
-
   std::vector<std::unique_ptr<ParamDecl>> parameters;
   TypeRef function_type = nullptr;
   StorageClass storage_class = StorageClass::None;
@@ -282,8 +268,7 @@ public:
 
 class EnumElemDecl : public ValueDecl {
   ASTNodeImpl(EnumElemDecl);
-  TreeNodeFieldAsString(name);
-  TreeNodePrintFields(name, value);
+  TreeNodePrintFields(value);
 
 public:
   std::unique_ptr<ASTNode> value;
@@ -291,7 +276,7 @@ public:
 
 class EnumDecl : public NamedDecl {
   ASTNodeImpl(EnumDecl);
-  TreeNodePrintFields(name, type, underlying_type, values);
+  TreeNodePrintFields(type, underlying_type, values);
 
 public:
   TypeRef type = nullptr;
@@ -300,7 +285,7 @@ public:
   std::vector<std::unique_ptr<EnumElemDecl>> values;
 };
 
-class LabelStmt : public ASTNode {
+class LabelStmt : public Stmt {
   ASTNodeImpl(LabelStmt);
   TreeNodeFieldAsString(name);
 
@@ -308,7 +293,7 @@ public:
   std::string_view name;
 };
 
-class GotoStmt : public ASTNode {
+class GotoStmt : public Stmt {
   ASTNodeImpl(GotoStmt);
   TreeNodeFieldAsString(target);
 
@@ -316,7 +301,7 @@ public:
   std::string_view target;
 };
 
-class EmptyStmt : public ASTNode {
+class EmptyStmt : public Stmt {
   ASTNodeImpl(EmptyStmt);
 };
 

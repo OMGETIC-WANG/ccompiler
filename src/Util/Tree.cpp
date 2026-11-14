@@ -1,4 +1,5 @@
 #include "Tree.h"
+#include "ColoredFormat.h"
 
 #include <variant>
 
@@ -12,7 +13,7 @@ static void PrintTreeChildren(const Node *node,
     const auto *child = &children[child_index];
     const bool is_last = child_index + 1 == children.size();
 
-    out << prefix << (is_last ? "`-" : "+-") << get_string(child) << '\n';
+    out << prefix << (is_last ? "`-" : "|-") << get_string(child) << '\n';
 
     const std::string next_prefix = prefix + (is_last ? "  " : "| ");
     PrintTreeChildren(child, get_children, get_string, out, next_prefix);
@@ -32,13 +33,15 @@ static void PrintTree(const Node *root, const FnGetChildren &get_children,
 static std::string
 GetTreeNodePrintFieldString(const TreeNodePrintField *field) {
   std::string result;
-  if (!field->name.empty()) {
-    result += std::format("[{}] ", field->name);
-  }
+  // if (!field->name.empty()) {
+  //   result += ColoredFormat("[{}] ", field->name);
+  // }
 
   if (const auto *node = std::get_if<const TreeNode *>(&field->value)) {
-    result += std::format("{} 0x{:x} {}", (*node)->GetNodeTypeName(),
-                          (uintptr_t)(*node), (*node)->ToString());
+    result += ColoredFormat(
+        "{} {:NodeAddress;#x} {:NodeString;}",
+        std::make_pair((*node)->GetNodeTypeName(), (*node)->GetColor()),
+        (uintptr_t)(*node), (*node)->ToString());
   } else {
     result += std::get<std::string>(field->value);
   }

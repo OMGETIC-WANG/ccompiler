@@ -63,6 +63,8 @@ public:
 
   virtual ASTNodeType GetType() const = 0;
 
+  virtual int GetColor() const override { return 0x00cc00; }
+
   std::string_view GetNodeTypeName() const override;
 
   template <std::derived_from<ASTNode> T> T *As() {

@@ -28,6 +28,8 @@ public:
 
   virtual std::vector<TreeNodePrintField> GetPrintFields() const { return {}; }
 
+  virtual int GetColor() const { return -1; }
+
   void Print(std::ostream &out) const;
 };
 
@@ -87,6 +89,8 @@ inline void AppendTreeNodePrintField(std::vector<TreeNodePrintField> &fields,
 #define __AddTreeNodePrintField(field)                                         \
   AppendTreeNodePrintField(print_fields, #field, this->field);
 
+// TreeNodeFieldAsString() declares a field already rendered in the node
+// summary. Do not list that field again in TreeNodePrintFields().
 #define TreeNodePrintFields(...)                                               \
 public:                                                                        \
   std::vector<TreeNodePrintField> GetPrintFields() const override {            \

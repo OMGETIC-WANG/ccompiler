@@ -27,8 +27,8 @@ concept EnumReflRegistered = EnumRefl<E>::registered;
   __GET_EXTRACT_ENUM_VALUES(__VA_ARGS__, __EXTRACT_ENUM_VALUES_2,              \
                             __EXTRACT_ENUM_VALUES_1)(__VA_ARGS__)
 
-#define MAKE_ENUM(name, values)                                                \
-  enum class name { values(__EXTRACT_ENUM_VALUES) };
+#define MAKE_ENUM(enum_name, values)                                           \
+  enum class enum_name { values(__EXTRACT_ENUM_VALUES) };
 
 // MAKE_ENUM_COUNT
 #define __EXTRACT_ENUM_AS_ADD_ONE_1(item) +1
@@ -52,9 +52,13 @@ concept EnumReflRegistered = EnumRefl<E>::registered;
 
 #define REGISTER_ENUM(enum_name, values)                                       \
   template <> class EnumRefl<enum_name> final {                                \
+    using _EnumAlias = enum_name;                                              \
+    static constexpr std::pair<enum_name, std::string_view> _values[] = {      \
+        values(__EXTRACT_ENUM_NAME_VALUE)};                                    \
+                                                                               \
   public:                                                                      \
     constexpr static bool registered = true;                                   \
-    static std::string_view GetName(enum_name _Val) {                          \
+    static constexpr std::string_view GetName(enum_name _Val) {                \
       for (const auto &[_Enum_val, _Enum_str] : GetValues()) {                 \
         if (_Val == _Enum_val) {                                               \
           return _Enum_str;                                                    \
@@ -63,7 +67,7 @@ concept EnumReflRegistered = EnumRefl<E>::registered;
       throw EnumReflException("Value not found");                              \
       return {};                                                               \
     }                                                                          \
-    static enum_name GetValue(std::string_view _Name) {                        \
+    static constexpr enum_name GetValue(std::string_view _Name) {              \
       for (const auto &[_Enum_val, _Enum_str] : GetValues()) {                 \
         if (_Name == _Enum_str) {                                              \
           return _Enum_val;                                                    \
@@ -72,15 +76,12 @@ concept EnumReflRegistered = EnumRefl<E>::registered;
       throw EnumReflException("Name not found");                               \
       return {};                                                               \
     }                                                                          \
-    static std::span<const std::pair<enum_name, std::string_view>>             \
+    static constexpr std::span<const std::pair<enum_name, std::string_view>>   \
     GetValues() {                                                              \
-      using _EnumAlias = enum_name;                                            \
-      static const std::pair<enum_name, std::string_view> _Values[] = {        \
-          values(__EXTRACT_ENUM_NAME_VALUE)};                                  \
-      return _Values;                                                          \
+      return _values;                                                          \
     }                                                                          \
-    static size_t EnumCount() { return GetValues().size(); }                   \
-    static bool IsValidEnumName(std::string_view _Name) {                      \
+    static constexpr size_t EnumCount() { return GetValues().size(); }         \
+    static constexpr bool IsValidEnumName(std::string_view _Name) {            \
       for (const auto &[_Enum_val, _Enum_str] : GetValues()) {                 \
         if (_Name == _Enum_str) {                                              \
           return true;                                                         \
