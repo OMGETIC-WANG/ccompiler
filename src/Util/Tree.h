@@ -56,6 +56,9 @@ concept _MapElemLike = requires(const Elem &elem) {
 template <_TreeNodePtrLike Ptr>
 void AppendTreeNodePrintField(std::vector<TreeNodePrintField> &fields,
                               std::string_view name, const Ptr &node) {
+  if (!node) {
+    return;
+  }
   if (auto ptr = std::to_address(node)) {
     fields.push_back({name, ptr});
   }

@@ -132,6 +132,10 @@ struct ExprEmitter::detail {
                                    self.builder.GetElementPtr(value, field));
         }
       }
+      if (auto *value_init = initializer->DynCast<ValueInitializer>()) {
+        RValue val = self.EmitRValue(value_init->value.get());
+        self.builder.CreateStore(val, value);
+      }
       return;
     }
 

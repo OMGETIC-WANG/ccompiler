@@ -990,7 +990,9 @@ private:
         }
         return;
       }
-      if (initializer->Is<ValueInitializer>()) {
+      if (auto *value_init = initializer->DynCast<ValueInitializer>()) {
+        ExprInfo value = AnalyzeExpr(value_init->value);
+        ConvertExpr(value_init->value, value, type, value_init->location);
         return;
       }
     }
