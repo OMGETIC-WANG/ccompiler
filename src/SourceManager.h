@@ -37,6 +37,8 @@ public:
   std::string_view GetFileName(SourceLocation location) const;
   SourcePosition GetLineColumn(SourceLocation location) const;
 
+  std::string FormatLocation(SourceLocation location) const;
+
 private:
   struct SourceEntry {
     SourceId id = INVALID_SOURCE_ID;

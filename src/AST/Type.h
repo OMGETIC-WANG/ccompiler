@@ -22,6 +22,7 @@ class TypeBase;
 class TypeContext;
 
 struct TypeSpecifier {
+  SourceLocation location;
   std::string_view type_name;
   ScopeId scope_id = 0;
   bool is_struct = false;

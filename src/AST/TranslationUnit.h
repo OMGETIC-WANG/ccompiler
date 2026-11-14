@@ -24,4 +24,5 @@ std::unique_ptr<EnumDecl> ParseEnumDecl(Lexer &lexer, std::string_view name,
                                         CompileContext &context);
 
 std::unique_ptr<TranslationUnit>
-ParseTranslationUnit(Lexer &lexer, TypeContext &types, SourceManager &sources);
+ParseTranslationUnit(Lexer &lexer, TypeContext &types, SourceManager &sources,
+                     DiagnosticContext &diagnostics);

@@ -2,6 +2,7 @@
 
 #include "../Exception.h"
 #include "../SourceManager.h"
+#include "../Util/Diagnostic.h"
 #include "../Util/EnumRefl.h"
 #include "../Util/Util.h"
 #include "TypeContext.h"
@@ -70,8 +71,10 @@ struct CompileContextLayer {
 // Lexical symbol table and name-to-type bindings used while building the AST.
 class CompileContext {
 public:
-  explicit CompileContext(TypeContext &types, SourceManager &source_manager)
-      : _types(types), _source_manager(source_manager), _next_scope_id(1) {}
+  explicit CompileContext(TypeContext &types, SourceManager &source_manager,
+                          DiagnosticContext &diagnostics)
+      : _types(types), _source_manager(source_manager),
+        _diagnostics(diagnostics), _next_scope_id(1) {}
 
   std::vector<CompileContextLayer> layers;
 
@@ -88,15 +91,16 @@ public:
   SourceManager &Sources() { return _source_manager; }
   const SourceManager &Sources() const { return _source_manager; }
 
+  DiagnosticContext &Diagnostics() { return _diagnostics; }
+  const DiagnosticContext &Diagnostics() const { return _diagnostics; }
+
   ScopeId CurrentScopeId() { return _next_scope_id++; }
 
   TYPED_CONTEXT_ITEM_TYPE_VALUES(MAKE_CompileContext_Find_x)
 
   void PushLayer() { layers.emplace_back(); }
   void PopLayer() {
-    if (layers.empty()) {
-      RAISE_ERROR("No context layer to remove");
-    }
+    ASSERT(!layers.empty(), "No context layer to remove");
     layers.pop_back();
   }
 
@@ -152,6 +156,7 @@ public:
 private:
   TypeContext &_types;
   SourceManager &_source_manager;
+  DiagnosticContext &_diagnostics;
   ScopeId _next_scope_id;
 };
 

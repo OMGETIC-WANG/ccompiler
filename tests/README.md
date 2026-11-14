@@ -22,6 +22,21 @@ Run one fixture directly when inspecting a mismatch:
 build/tests/ccompiler_tests tests/AST/Declarations/FunctionSignatures.c
 ```
 
+## Diagnostic tests
+
+The `diagnostics` label covers user-facing error handling. Source fixtures live
+under `tests/Diagnostics/` and are run through the `ccompiler` executable by
+`ExpectDiagnostic.cmake`, which checks the exact `file:line:column: error:`
+line, empty stdout, and nonzero exit status. Driver cases verify errors without
+a source location use the `ccompiler: error:` prefix.
+
+`Diagnostics.Formatting` directly checks `DiagnosticContext` formatting and the
+payload carried by `DiagnosticError`.
+
+```bash
+ctest --test-dir build -L diagnostics --output-on-failure
+```
+
 The expected YAML path defaults to the source path with `.c` replaced by
 `.ast.yaml`.
 

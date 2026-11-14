@@ -28,9 +28,12 @@ std::unique_ptr<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,
                                                   CompileContext &context) {
   auto call = std::make_unique<IntrinsicCall>();
   call->desc = desc;
-  ASSERT(lexer.PeekNextToken().type == TokenType::LParen,
-         "Expected '(' after intrinsic name");
-  lexer.ConsumeNextToken();
+  Token lparen = lexer.PeekNextToken();
+  if (lparen.type != TokenType::LParen) {
+    context.Diagnostics().RaiseError(lparen.location,
+                                     "Expected '(' after intrinsic name");
+  }
+  lexer.ConsumeToken(lparen);
   for (size_t i = 0; i < desc->arg_kinds.size(); i++) {
     IntrinsicCallArgKind kind = desc->arg_kinds[i];
     switch (kind) {
@@ -49,14 +52,20 @@ std::unique_ptr<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,
     } break;
     }
     if (i != desc->arg_kinds.size() - 1) {
-      ASSERT(lexer.PeekNextToken().type == TokenType::Comma,
-             "Expected ',' between intrinsic arguments");
-      lexer.ConsumeNextToken();
+      Token comma = lexer.PeekNextToken();
+      if (comma.type != TokenType::Comma) {
+        context.Diagnostics().RaiseError(
+            comma.location, "Expected ',' between intrinsic arguments");
+      }
+      lexer.ConsumeToken(comma);
     }
   }
-  ASSERT(lexer.PeekNextToken().type == TokenType::RParen,
-         "Expected ')' after intrinsic arguments");
-  Token rparen = lexer.ConsumeNextToken();
+  Token rparen = lexer.PeekNextToken();
+  if (rparen.type != TokenType::RParen) {
+    context.Diagnostics().RaiseError(rparen.location,
+                                     "Expected ')' after intrinsic arguments");
+  }
+  lexer.ConsumeToken(rparen);
   call->location = CombineLocation(name_token.location, rparen.location);
   return call;
 }

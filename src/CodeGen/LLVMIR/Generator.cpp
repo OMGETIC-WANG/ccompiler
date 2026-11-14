@@ -1,5 +1,6 @@
 #include "Generator.h"
 
+#include "../../Util/Diagnostic.h"
 #include "GenDecl.h"
 #include "GenExpr.h"
 #include "IRBuilder.h"
@@ -66,8 +67,10 @@ void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
 
   llvm::Function *function = context.Module().getFunction(decl->name);
   if (function) {
-    ASSERT(function->getFunctionType() == llvm_function_type,
-           "Conflicting declaration for function ", decl->name);
+    if (function->getFunctionType() != llvm_function_type) {
+      context.Diagnostics().RaiseError(
+          decl->location, "Conflicting declaration for function ", decl->name);
+    }
   } else {
     function = llvm::Function::Create(llvm_function_type, linkage, decl->name,
                                       context.Module());
@@ -88,7 +91,10 @@ void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
   if (!decl->body) {
     return;
   }
-  ASSERT(function->empty(), "Multiple definitions of function ", decl->name);
+  if (!function->empty()) {
+    context.Diagnostics().RaiseError(
+        decl->location, "Multiple definitions of function ", decl->name);
+  }
 
   GenContextLayerGuard guard(context);
   context.current_function = function;
@@ -143,13 +149,15 @@ void GenTopLevelStmt(ASTNode *stmt, GenContext &context, IRBuilder &builder) {
     break;
   }
   default:
-    RAISE_ERROR("Unsupported top-level AST node: ", stmt->GetType());
+    context.Diagnostics().RaiseError(
+        stmt->location, "Unsupported top-level AST node: ", stmt->GetType());
   }
 }
 
 std::unique_ptr<llvm::Module>
 GenerateLLVMModule(const TranslationUnit *tu, TypeContext &types,
-                   llvm::LLVMContext &llvm_context) {
+                   llvm::LLVMContext &llvm_context,
+                   DiagnosticContext &diagnostics) {
   ASSERT(tu != nullptr, "Translation unit must not be null");
 
   auto module = std::make_unique<llvm::Module>("ccompiler", llvm_context);
@@ -171,7 +179,7 @@ GenerateLLVMModule(const TranslationUnit *tu, TypeContext &types,
   module->setTargetTriple(triple);
   module->setDataLayout(target_machine->createDataLayout());
 
-  GenContext context(llvm_context, *module, types);
+  GenContext context(llvm_context, *module, types, diagnostics);
   context.PushLayer();
   IRBuilder builder(context);
 

@@ -1,6 +1,7 @@
 #include "Sizeof.h"
 #include "../../AST/AST.h"
 #include "../../AST/Operations.h"
+#include "../../Util/Diagnostic.h"
 #include "GenContext.h"
 #include "GenExpr.h"
 
@@ -38,43 +39,58 @@ static TypeRef EvalBinOpResType(TypeRef left, TypeRef right, BinaryOp *node,
     if (auto *pointer = right->DynCast<PointerType>()) {
       return pointer->pointee_type;
     }
-    RAISE_ERROR("Subscript requires an array or pointer operand");
+    context.Diagnostics().RaiseError(
+        node->location, "Subscript requires an array or pointer operand");
   case BinaryOpType::Add:
   case BinaryOpType::Sub:
     left = decay_array(left);
     right = decay_array(right);
     if (left->Is<PointerType>()) {
       if (right->Is<PointerType>()) {
-        ASSERT(op == BinaryOpType::Sub,
-               "Pointer subtraction is the only pointer-pointer operation");
+        if (op != BinaryOpType::Sub) {
+          context.Diagnostics().RaiseError(
+              node->location,
+              "Pointer subtraction is the only pointer-pointer operation");
+        }
         return types.getLong();
       }
-      ASSERT(IsIntegerType(right),
-             "Pointer arithmetic requires an integer operand");
+      if (!IsIntegerType(right)) {
+        context.Diagnostics().RaiseError(
+            node->location, "Pointer arithmetic requires an integer operand");
+      }
       return left;
     }
     if (right->Is<PointerType>() && op == BinaryOpType::Add) {
-      ASSERT(IsIntegerType(left),
-             "Pointer arithmetic requires an integer operand");
+      if (!IsIntegerType(left)) {
+        context.Diagnostics().RaiseError(
+            node->location, "Pointer arithmetic requires an integer operand");
+      }
       return right;
     }
     [[fallthrough]];
   case BinaryOpType::Mul:
   case BinaryOpType::Div:
-    ASSERT(IsNumericType(left) && IsNumericType(right),
-           "Arithmetic operators require numeric operands");
+    if (!IsNumericType(left) || !IsNumericType(right)) {
+      context.Diagnostics().RaiseError(
+          node->location, "Arithmetic operators require numeric operands");
+    }
     return UsualArithmeticType(left, right, types);
   case BinaryOpType::Mod:
   case BinaryOpType::BitAnd:
   case BinaryOpType::BitOr:
   case BinaryOpType::BitXor:
-    ASSERT(IsIntegerType(left) && IsIntegerType(right),
-           "Modulo and bitwise operators require integer operands");
+    if (!IsIntegerType(left) || !IsIntegerType(right)) {
+      context.Diagnostics().RaiseError(
+          node->location,
+          "Modulo and bitwise operators require integer operands");
+    }
     return UsualArithmeticType(left, right, types);
   case BinaryOpType::LShift:
   case BinaryOpType::RShift:
-    ASSERT(IsIntegerType(left) && IsIntegerType(right),
-           "Shift operators require integer operands");
+    if (!IsIntegerType(left) || !IsIntegerType(right)) {
+      context.Diagnostics().RaiseError(
+          node->location, "Shift operators require integer operands");
+    }
     return PromoteInteger(left, types);
   case BinaryOpType::Eq:
   case BinaryOpType::Ne:
@@ -84,21 +100,27 @@ static TypeRef EvalBinOpResType(TypeRef left, TypeRef right, BinaryOp *node,
   case BinaryOpType::Ge:
     left = decay_array(left);
     right = decay_array(right);
-    ASSERT((IsNumericType(left) && IsNumericType(right)) ||
-               (left->Is<PointerType>() && right->Is<PointerType>()),
-           "Comparison requires compatible numeric or pointer operands");
+    if (!((IsNumericType(left) && IsNumericType(right)) ||
+          (left->Is<PointerType>() && right->Is<PointerType>()))) {
+      context.Diagnostics().RaiseError(
+          node->location,
+          "Comparison requires compatible numeric or pointer operands");
+    }
     return types.getInt();
   case BinaryOpType::And:
   case BinaryOpType::Or:
     left = decay_array(left);
     right = decay_array(right);
-    ASSERT((IsNumericType(left) || left->Is<PointerType>()) &&
-               (IsNumericType(right) || right->Is<PointerType>()),
-           "Logical operators require scalar operands");
+    if (!((IsNumericType(left) || left->Is<PointerType>()) &&
+          (IsNumericType(right) || right->Is<PointerType>()))) {
+      context.Diagnostics().RaiseError(
+          node->location, "Logical operators require scalar operands");
+    }
     return types.getInt();
   }
 
-  RAISE_ERROR("Unsupported binary operator for type evaluation: ", op);
+  context.Diagnostics().RaiseError(
+      node->location, "Unsupported binary operator for type evaluation: ", op);
 }
 
 static TypeRef EvalUnaryOpResType(TypeRef operand, UnaryOp *node,
@@ -118,28 +140,38 @@ static TypeRef EvalUnaryOpResType(TypeRef operand, UnaryOp *node,
   case UnaryOpType::IncAfterUse:
   case UnaryOpType::DecBeforeUse:
   case UnaryOpType::DecAfterUse:
-    ASSERT(IsNumericType(operand) || operand->Is<PointerType>(),
-           "Increment/decrement requires a scalar operand");
+    if (!IsNumericType(operand) && !operand->Is<PointerType>()) {
+      context.Diagnostics().RaiseError(
+          node->location, "Increment/decrement requires a scalar operand");
+    }
     return StripTypeTag(operand, TypeTag::Const);
   case UnaryOpType::Deref:
     if (auto *pointer = operand->DynCast<PointerType>()) {
       return pointer->pointee_type;
     }
-    RAISE_ERROR("Dereference requires a pointer operand");
+    context.Diagnostics().RaiseError(node->location,
+                                     "Dereference requires a pointer operand");
   case UnaryOpType::GetAddress:
     return types.Pointer(operand);
   case UnaryOpType::Not:
     operand = decay_array(operand);
-    ASSERT(IsNumericType(operand) || operand->Is<PointerType>(),
-           "Logical NOT requires a scalar operand");
+    if (!IsNumericType(operand) && !operand->Is<PointerType>()) {
+      context.Diagnostics().RaiseError(node->location,
+                                       "Logical NOT requires a scalar operand");
+    }
     return types.getInt();
   case UnaryOpType::BitNot:
-    ASSERT(IsIntegerType(operand), "Bitwise NOT requires an integer operand");
+    if (!IsIntegerType(operand)) {
+      context.Diagnostics().RaiseError(
+          node->location, "Bitwise NOT requires an integer operand");
+    }
     return PromoteInteger(operand, types);
   case UnaryOpType::UnaryPlus:
   case UnaryOpType::UnaryMinus:
-    ASSERT(IsNumericType(operand),
-           "Unary plus/minus requires a numeric operand");
+    if (!IsNumericType(operand)) {
+      context.Diagnostics().RaiseError(
+          node->location, "Unary plus/minus requires a numeric operand");
+    }
     if (IsIntegerType(operand)) {
       return PromoteInteger(operand, types);
     }
@@ -151,23 +183,31 @@ static TypeRef EvalUnaryOpResType(TypeRef operand, UnaryOp *node,
     RAISE_ERROR("Type cast must be evaluated by EvalType");
   }
 
-  RAISE_ERROR("Unsupported unary operator for type evaluation: ", op);
+  context.Diagnostics().RaiseError(
+      node->location, "Unsupported unary operator for type evaluation: ", op);
 }
 
 static TypeRef EvalType(ASTNode *node, GenContext &context) {
-  auto get_field_type = [](TypeRef type,
-                           std::string_view field_name) -> TypeRef {
+  auto get_field_type = [&context](TypeRef type, std::string_view field_name,
+                                   SourceLocation location) -> TypeRef {
     if (auto *struct_type = type->DynCast<StructType>()) {
       auto field = struct_type->GetField(field_name);
-      ASSERT(field.has_value(), "Unknown struct field: ", field_name);
+      if (!field.has_value()) {
+        context.Diagnostics().RaiseError(location,
+                                         "Unknown struct field: ", field_name);
+      }
       return field->type;
     }
     if (auto *union_type = type->DynCast<UnionType>()) {
       auto field = union_type->GetField(field_name);
-      ASSERT(field.has_value(), "Unknown union field: ", field_name);
+      if (!field.has_value()) {
+        context.Diagnostics().RaiseError(location,
+                                         "Unknown union field: ", field_name);
+      }
       return field->type;
     }
-    RAISE_ERROR("Field access requires a struct or union operand");
+    context.Diagnostics().RaiseError(
+        location, "Field access requires a struct or union operand");
   };
   auto eval_unary = [&context](UnaryOp *unary_expr) {
     auto operand_type = EvalType(unary_expr->operand.get(), context);
@@ -193,14 +233,18 @@ static TypeRef EvalType(ASTNode *node, GenContext &context) {
   }
   if (auto get_field = node->DynCast<GetField>()) {
     auto operand_type = EvalType(get_field->operand.get(), context);
-    return get_field_type(operand_type, get_field->field_name);
+    return get_field_type(operand_type, get_field->field_name,
+                          get_field->location);
   }
   if (auto ptr_get_field = node->DynCast<PtrGetField>()) {
     auto operand_type = EvalType(ptr_get_field->operand.get(), context);
     if (auto *pointer = operand_type->DynCast<PointerType>()) {
-      return get_field_type(pointer->pointee_type, ptr_get_field->field_name);
+      return get_field_type(pointer->pointee_type, ptr_get_field->field_name,
+                            ptr_get_field->location);
     }
-    RAISE_ERROR("Pointer field access requires a pointer operand");
+    context.Diagnostics().RaiseError(
+        ptr_get_field->location,
+        "Pointer field access requires a pointer operand");
   }
   if (auto unary_expr = node->DynCast<UnaryOp>()) {
     return eval_unary(unary_expr);
@@ -210,7 +254,9 @@ static TypeRef EvalType(ASTNode *node, GenContext &context) {
     if (auto *func = func_type->DynCast<FunctionType>()) {
       return func->return_type;
     } else {
-      RAISE_ERROR("Function invocation on non-function type");
+      context.Diagnostics().RaiseError(
+          func_invoke->location,
+          "Function invocation requires a function or function pointer");
     }
   }
   if (auto var_ref = node->DynCast<VarRef>()) {
@@ -220,9 +266,11 @@ static TypeRef EvalType(ASTNode *node, GenContext &context) {
     if (auto *func = context.FindFunction(var_ref->name)) {
       return func->c_type;
     }
-    RAISE_ERROR("Unknown variable or function: ", var_ref->name);
+    context.Diagnostics().RaiseError(
+        var_ref->location, "Unknown variable or function: ", var_ref->name);
   }
-  RAISE_ERROR("Cannot evaluate type of node: ", node->ToString());
+  context.Diagnostics().RaiseError(
+      node->location, "Cannot evaluate type of node: ", node->ToString());
 }
 
 RValue GenSizeof(std::vector<IntrinsicCallArg> &args,

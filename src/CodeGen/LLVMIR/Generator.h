@@ -9,6 +9,8 @@ class LLVMContext;
 class Module;
 } // namespace llvm
 
-std::unique_ptr<llvm::Module> GenerateLLVMModule(const TranslationUnit *tu,
-                                                 TypeContext &types,
-                                                 llvm::LLVMContext &context);
+class DiagnosticContext;
+
+std::unique_ptr<llvm::Module>
+GenerateLLVMModule(const TranslationUnit *tu, TypeContext &types,
+                   llvm::LLVMContext &context, DiagnosticContext &diagnostics);

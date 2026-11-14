@@ -8,6 +8,7 @@
 #include "Lex/Lexer.h"
 #include "SourceManager.h"
 #include "Util/CmdLine.h"
+#include "Util/Diagnostic.h"
 
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
@@ -34,10 +35,9 @@ CMDLINE_ARG(bool, lex_only, false);
 CMDLINE_ARG(bool, jit_run, false);
 CMDLINE_ARG(std::string, output_file, "o", "");
 
-int main(int argc, char **argv) {
+static int Run(int argc, char **argv, SourceManager &source_manager,
+               DiagnosticContext &diagnostics) {
   std::vector<std::string_view> rest = CmdLine::Parse(argc, argv);
-
-  SourceManager source_manager;
 
   SourceHandle source;
   if (rest.size() > 0) {
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
   if (show_tokens || lex_only) {
     MacroContext macro_context;
     TypeContext types;
-    CompileContext compile_context(types, source_manager);
+    CompileContext compile_context(types, source_manager, diagnostics);
     RawLexer raw_lexer(source, macro_context, source_manager, compile_context);
     Lexer lexer(raw_lexer);
     while (true) {
@@ -79,37 +79,42 @@ int main(int argc, char **argv) {
 
   MacroContext macro_context;
   TypeContext types;
-  CompileContext compile_context(types, source_manager);
+  CompileContext compile_context(types, source_manager, diagnostics);
   RawLexer lexer(source, macro_context, source_manager, compile_context);
   Lexer filtered_lexer(lexer);
-  auto TU = ParseTranslationUnit(filtered_lexer, types, source_manager);
+  auto TU =
+      ParseTranslationUnit(filtered_lexer, types, source_manager, diagnostics);
 
   if (show_ast) {
     TU->Print(std::cout);
   }
 
   auto llvm_context = std::make_unique<llvm::LLVMContext>();
-  auto module = GenerateLLVMModule(TU.get(), types, *llvm_context);
+  auto module = GenerateLLVMModule(TU.get(), types, *llvm_context, diagnostics);
   std::string ir = PrintModule(*module);
 
   std::string verification_error;
   llvm::raw_string_ostream error_stream(verification_error);
   if (llvm::verifyModule(*module, &error_stream)) {
-    std::cout << ir;
     error_stream.flush();
-    RAISE_ERROR("Invalid LLVM module:\n", verification_error);
+    throw Exception("Invalid LLVM module:\n" + verification_error);
   }
 
   if (output_file.size()) {
     auto out_path = std::filesystem::path(output_file);
-    if (!std::filesystem::exists(out_path.parent_path())) {
-      std::cerr << "Invalid output path: " << out_path.parent_path()
-                << std::endl;
-      return 1;
+    if (!out_path.parent_path().empty() &&
+        !std::filesystem::exists(out_path.parent_path())) {
+      throw DriverError("Invalid output path: " +
+                        out_path.parent_path().string());
     }
     std::ofstream out(out_path);
+    if (!out.is_open()) {
+      throw DriverError("Failed to open output file: " + out_path.string());
+    }
     out << ir;
-    out.close();
+    if (!out) {
+      throw DriverError("Failed to write output file: " + out_path.string());
+    }
   } else {
     std::cout << ir;
   }
@@ -118,12 +123,35 @@ int main(int argc, char **argv) {
     std::cout.flush();
     auto result = RunLLVMModule(std::move(module), std::move(llvm_context));
     if (!result) {
-      std::cerr << "JIT execution failed: "
-                << llvm::toString(result.takeError()) << '\n';
-      return 1;
+      throw DriverError("JIT execution failed: " +
+                        llvm::toString(result.takeError()));
     }
     std::cout << "Return: " << *result << '\n';
   }
 
   return 0;
+}
+
+int main(int argc, char **argv) {
+  SourceManager source_manager;
+  DiagnosticContext diagnostics(source_manager);
+
+  try {
+    return Run(argc, argv, source_manager, diagnostics);
+  } catch (const DiagnosticError &error) {
+    std::cerr << diagnostics.Format(error.Messages()) << '\n';
+    return 1;
+  } catch (const DriverError &error) {
+    std::cerr << "ccompiler: error: " << error.what() << '\n';
+    return 1;
+  } catch (const CmdLineArgParseError &error) {
+    std::cerr << "ccompiler: error: " << error.what() << '\n';
+    return 1;
+  } catch (const std::exception &error) {
+    std::cerr << "ccompiler: internal compiler error: " << error.what() << '\n';
+    return 1;
+  } catch (...) {
+    std::cerr << "ccompiler: internal compiler error: unknown exception\n";
+    return 1;
+  }
 }

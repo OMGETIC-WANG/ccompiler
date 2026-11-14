@@ -7,6 +7,7 @@
 #include "Lex/Macro.h"
 #include "SourceManager.h"
 #include "Support/ASTVerifier.h"
+#include "Util/Diagnostic.h"
 
 #include <filesystem>
 #include <iostream>
@@ -29,11 +30,13 @@ int RunTest(const std::filesystem::path &source_path,
 
   MacroContext macros;
   TypeContext types;
-  CompileContext context(types, sources);
+  DiagnosticContext diagnostics(sources);
+  CompileContext context(types, sources, diagnostics);
   RegisterBuiltinIntrinsics();
   RawLexer raw_lexer(source, macros, sources, context);
   Lexer lexer(raw_lexer);
-  auto translation_unit = ParseTranslationUnit(lexer, types, sources);
+  auto translation_unit =
+      ParseTranslationUnit(lexer, types, sources, diagnostics);
 
   YAML::Node expected = YAML::LoadFile(expected_path.string());
   VerifyContext verify_context;
@@ -51,9 +54,54 @@ int RunTest(const std::filesystem::path &source_path,
   return 0;
 }
 
+int RunDiagnosticSelfTest() {
+  SourceManager sources;
+  SourceHandle source = sources.LoadSource("abc\n", "<stdin>");
+  DiagnosticContext diagnostics(sources);
+  SourceLocation location{
+      .source_id = source.id,
+      .begin = 1,
+      .end = 2,
+  };
+
+  diagnostics.AddError(location, "localized");
+  std::string formatted = diagnostics.Format(diagnostics.Messages());
+  if (formatted != "<stdin>:1:2: error: localized") {
+    std::cerr << "Unexpected localized diagnostic: " << formatted << '\n';
+    return 1;
+  }
+
+  DiagnosticMessage global{.message = "global"};
+  formatted = diagnostics.Format(global);
+  if (formatted != "ccompiler: error: global") {
+    std::cerr << "Unexpected global diagnostic: " << formatted << '\n';
+    return 1;
+  }
+
+  DiagnosticContext raised(sources);
+  try {
+    raised.RaiseError(location, "raised");
+  } catch (const DiagnosticError &error) {
+    formatted = raised.Format(error.Messages());
+    if (formatted != "<stdin>:1:2: error: raised") {
+      std::cerr << "Unexpected raised diagnostic: " << formatted << '\n';
+      return 1;
+    }
+    std::cout << "PASS diagnostic formatting\n";
+    return 0;
+  }
+
+  std::cerr << "DiagnosticError was not raised\n";
+  return 1;
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
+  if (argc == 2 && std::string_view(argv[1]) == "--diagnostic-self-test") {
+    return RunDiagnosticSelfTest();
+  }
+
   if (argc == 2 && std::string_view(argv[1]) == "--check-verifiers") {
     std::vector<std::string> missing = FindMissingVerifierNames();
     if (missing.empty()) {
@@ -71,7 +119,10 @@ int main(int argc, char **argv) {
     std::cerr << "Usage: " << argv[0]
               << " <source.c> [expected.ast.yaml]\n"
                  "       "
-              << argv[0] << " --check-verifiers\n";
+              << argv[0]
+              << " --check-verifiers\n"
+                 "       "
+              << argv[0] << " --diagnostic-self-test\n";
     return 2;
   }
 

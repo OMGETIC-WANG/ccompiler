@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../AST/TypeContext.h"
+#include "../../Util/Diagnostic.h"
 #include "Value.h"
 
 #include <llvm/IR/Constants.h>
@@ -73,13 +74,16 @@ public:
 class GenContext {
 public:
   GenContext(llvm::LLVMContext &llvm_context, llvm::Module &module,
-             TypeContext &types);
+             TypeContext &types, DiagnosticContext &diagnostics);
 
   llvm::LLVMContext &LLVMContext() { return _llvm_context; }
   llvm::Module &Module() { return _module; }
 
   TypeContext &Types() { return types; }
   const TypeContext &Types() const { return types; }
+
+  DiagnosticContext &Diagnostics() { return _diagnostics; }
+  const DiagnosticContext &Diagnostics() const { return _diagnostics; }
 
   llvm::Type *LLVMType(TypeRef type) { return type_converter.Convert(type); }
   llvm::FunctionType *LLVMFunctionType(TypeRef type) {
@@ -172,6 +176,7 @@ private:
   llvm::LLVMContext &_llvm_context;
   llvm::Module &_module;
   TypeContext &types;
+  DiagnosticContext &_diagnostics;
   LLVMTypeConverter type_converter;
 };
 

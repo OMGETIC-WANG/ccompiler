@@ -2,6 +2,7 @@
 #include "../../AST/AST.h"
 #include "../../AST/Intrinsic.h"
 #include "../../AST/Operations.h"
+#include "../../Util/Diagnostic.h"
 
 #define MAKE_TRUE_CASE_BIN(op)                                                 \
   case BinaryOpType::op:                                                       \
@@ -103,13 +104,16 @@ static NumericValue EvalLiteral(LiteralNum *literal) { return literal->value; }
 
 static NumericValue EvalBinary(BinaryOp *bin_expr, GenContext &context) {
   if (!IsEvalable(bin_expr->op_type)) {
-    RAISE_ERROR("Cannot evaluate non-numeric binary operation");
+    context.Diagnostics().RaiseError(
+        bin_expr->location, "Cannot evaluate non-numeric binary operation");
   }
   NumericValue left = EvalNode(bin_expr->left.get(), context);
   NumericValue right = EvalNode(bin_expr->right.get(), context);
   if (IsBitwiseOp(bin_expr->op_type)) {
-    ASSERT(HoldsInteger(left) && HoldsInteger(right),
-           "Bitwise operations require integer operands");
+    if (!HoldsInteger(left) || !HoldsInteger(right)) {
+      context.Diagnostics().RaiseError(
+          bin_expr->location, "Bitwise operations require integer operands");
+    }
   }
   std::tie(left, right) = PromoteVal(left, right);
   switch (bin_expr->op_type) {
@@ -146,13 +150,16 @@ static NumericValue EvalBinary(BinaryOp *bin_expr, GenContext &context) {
   case BinaryOpType::RShift:
     return Calc<shift_right>(left, right);
   default:
-    RAISE_ERROR("Unsupported binary operation for constant evaluation");
+    context.Diagnostics().RaiseError(
+        bin_expr->location,
+        "Unsupported binary operation for constant evaluation");
   }
 }
 
 static NumericValue EvalUnary(UnaryOp *unary_expr, GenContext &context) {
   if (!IsEvalable(unary_expr->op_type)) {
-    RAISE_ERROR("Cannot evaluate non-numeric unary operation");
+    context.Diagnostics().RaiseError(
+        unary_expr->location, "Cannot evaluate non-numeric unary operation");
   }
   NumericValue operand = EvalNode(unary_expr->operand.get(), context);
   switch (unary_expr->op_type) {
@@ -164,7 +171,10 @@ static NumericValue EvalUnary(UnaryOp *unary_expr, GenContext &context) {
     return std::visit([](auto v) -> NumericValue { return (int64_t)(!v); },
                       operand);
   case UnaryOpType::BitNot:
-    ASSERT(HoldsInteger(operand), "Bitwise NOT requires an integer operand");
+    if (!HoldsInteger(operand)) {
+      context.Diagnostics().RaiseError(
+          unary_expr->location, "Bitwise NOT requires an integer operand");
+    }
     return std::visit(
         [](auto v) -> NumericValue {
           if constexpr (std::is_invocable_v<std::bit_not<>, decltype(v)>) {
@@ -175,7 +185,9 @@ static NumericValue EvalUnary(UnaryOp *unary_expr, GenContext &context) {
         },
         operand);
   default:
-    RAISE_ERROR("Unsupported unary operation for constant evaluation");
+    context.Diagnostics().RaiseError(
+        unary_expr->location,
+        "Unsupported unary operation for constant evaluation");
   }
 }
 
@@ -192,11 +204,17 @@ static NumericValue EvalConditional(ConditionalExpr *cond_expr,
 
 static NumericValue EvalIntrinsic(IntrinsicCall *intrinsic_call,
                                   GenContext &context) {
-  ASSERT(intrinsic_call->desc->is_constant_evalable,
-         "Unexpected non-constant-evalable intrinsic in constant evaluation");
+  if (!intrinsic_call->desc->is_constant_evalable) {
+    context.Diagnostics().RaiseError(
+        intrinsic_call->location,
+        "Intrinsic is not constant-evaluable: ", intrinsic_call->desc->name);
+  }
   RValue res = intrinsic_call->Eval(&context);
-  ASSERT(IsIntegerType(res.c_type) || IsFloatingType(res.c_type),
-         "Unexpected non-numeric result from constant-evalable intrinsic");
+  if (!IsIntegerType(res.c_type) && !IsFloatingType(res.c_type)) {
+    context.Diagnostics().RaiseError(
+        intrinsic_call->location,
+        "Constant-evaluable intrinsic must produce a numeric result");
+  }
   if (auto *integer = llvm::dyn_cast<llvm::ConstantInt>(res.ir_value)) {
     if (HasTypeTag(res.c_type, TypeTag::Unsigned)) {
       return integer->getZExtValue();
@@ -206,8 +224,9 @@ static NumericValue EvalIntrinsic(IntrinsicCall *intrinsic_call,
   } else if (auto *floating = llvm::dyn_cast<llvm::ConstantFP>(res.ir_value)) {
     return floating->getValueAPF().convertToDouble();
   } else {
-    RAISE_ERROR(
-        "Unexpected non-numeric result from constant-evalable intrinsic");
+    context.Diagnostics().RaiseError(
+        intrinsic_call->location,
+        "Unexpected non-numeric result from constant-evaluable intrinsic");
   }
 }
 
@@ -227,8 +246,9 @@ static NumericValue EvalNode(ASTNode *node, GenContext &context) {
   if (auto *intrinsic_call = node->DynCast<IntrinsicCall>()) {
     return EvalIntrinsic(intrinsic_call, context);
   }
-  RAISE_ERROR("Unexpected ASTNode type for constant evaluation: ",
-              node->GetType());
+  context.Diagnostics().RaiseError(
+      node->location,
+      "Unexpected AST node type for constant evaluation: ", node->GetType());
 }
 
 NumericValue EvalNumeric(ASTNode *node, GenContext &context) {
@@ -241,13 +261,22 @@ llvm::Constant *EvalNumericConstant(TypeRef type, ASTNode *node,
 
   llvm::Type *llvm_type = context.LLVMType(type);
   if (std::holds_alternative<int64_t>(val)) {
-    ASSERT(llvm_type->isIntegerTy(), "Integer initializer type mismatch");
+    if (!llvm_type->isIntegerTy()) {
+      context.Diagnostics().RaiseError(node->location,
+                                       "Integer initializer type mismatch");
+    }
     return llvm::ConstantInt::get(llvm_type, std::get<int64_t>(val), true);
   }
   if (std::holds_alternative<uint64_t>(val)) {
-    ASSERT(llvm_type->isIntegerTy(), "Integer initializer type mismatch");
+    if (!llvm_type->isIntegerTy()) {
+      context.Diagnostics().RaiseError(node->location,
+                                       "Integer initializer type mismatch");
+    }
     return llvm::ConstantInt::get(llvm_type, std::get<uint64_t>(val), false);
   }
-  ASSERT(llvm_type->isFloatingPointTy(), "Floating initializer type mismatch");
+  if (!llvm_type->isFloatingPointTy()) {
+    context.Diagnostics().RaiseError(node->location,
+                                     "Floating initializer type mismatch");
+  }
   return llvm::ConstantFP::get(llvm_type, std::get<long double>(val));
 }

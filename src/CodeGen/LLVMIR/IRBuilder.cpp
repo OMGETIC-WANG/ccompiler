@@ -1,4 +1,5 @@
 #include "IRBuilder.h"
+#include "../../Util/Diagnostic.h"
 
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Instructions.h>
@@ -60,51 +61,81 @@ LValue IRBuilder::GetElementPtrImpl(llvm::StructType *type,
   return LValue{field.type, ptr};
 }
 
-LValue IRBuilder::GetElementPtr(const LValue &value, const StructField &field) {
+LValue IRBuilder::GetElementPtr(const LValue &value, const StructField &field,
+                                SourceLocation location) {
+  if (!value.c_type->Is<StructType>()) {
+    _context.Diagnostics().RaiseError(location,
+                                      "Field access requires a struct operand");
+  }
   auto *struct_type = _context.LLVMStructType(value.c_type);
   return GetElementPtrImpl(struct_type, value.address, field);
 }
 
 LValue IRBuilder::GetElementPtr(const LValue &value,
-                                std::string_view field_name) {
-  ASSERT(value.c_type->Is<StructType>(),
-         "GetElementPtr only supports struct type");
+                                std::string_view field_name,
+                                SourceLocation location) {
+  if (!value.c_type->Is<StructType>()) {
+    _context.Diagnostics().RaiseError(location,
+                                      "Field access requires a struct operand");
+  }
   auto field = value.c_type->As<StructType>()->GetField(field_name);
-  ASSERT(field.has_value(), "Unknown struct field: ", field_name);
+  if (!field.has_value()) {
+    _context.Diagnostics().RaiseError(location,
+                                      "Unknown struct field: ", field_name);
+  }
   return GetElementPtr(value, field.value());
 }
 
 LValue IRBuilder::GetPtrElementPtr(const RValue &ptr,
-                                   std::string_view field_name) {
-  ASSERT(ptr.c_type->Is<PointerType>(),
-         "PtrGetField requires a pointer operand");
+                                   std::string_view field_name,
+                                   SourceLocation location) {
+  if (!ptr.c_type->Is<PointerType>()) {
+    _context.Diagnostics().RaiseError(
+        location, "Pointer field access requires a pointer operand");
+  }
   auto *pointee_type =
       ptr.c_type->As<PointerType>()->pointee_type->DynCast<StructType>();
-  ASSERT(pointee_type, "PtrGetField requires a pointer to struct type");
+  if (!pointee_type) {
+    _context.Diagnostics().RaiseError(
+        location, "Pointer field access requires a pointer to struct type");
+  }
   auto field = pointee_type->GetField(field_name);
-  ASSERT(field.has_value(), "Unknown struct field: ", field_name);
+  if (!field.has_value()) {
+    _context.Diagnostics().RaiseError(location,
+                                      "Unknown struct field: ", field_name);
+  }
   auto *struct_type = _context.LLVMStructType(pointee_type);
   return GetElementPtrImpl(struct_type, ptr.ir_value, field.value());
 }
 
 RValue IRBuilder::CreateExtractValue(const RValue &value,
-                                     const StructField &field) {
-  ASSERT(value.c_type->Is<StructType>(),
-         "GetElementPtr only supports struct type");
+                                     const StructField &field,
+                                     SourceLocation location) {
+  if (!value.c_type->Is<StructType>()) {
+    _context.Diagnostics().RaiseError(location,
+                                      "Field access requires a struct operand");
+  }
   auto *val = _builder.CreateExtractValue(value.ir_value, field.index);
   return RValue{field.type, val};
 }
 
 RValue IRBuilder::CreateExtractValue(const RValue &value,
-                                     std::string_view field_name) {
-  ASSERT(value.c_type->Is<StructType>(),
-         "GetElementPtr only supports struct type");
+                                     std::string_view field_name,
+                                     SourceLocation location) {
+  if (!value.c_type->Is<StructType>()) {
+    _context.Diagnostics().RaiseError(location,
+                                      "Field access requires a struct operand");
+  }
   auto field = value.c_type->As<StructType>()->GetField(field_name);
-  ASSERT(field.has_value(), "Unknown struct field: ", field_name);
-  return CreateExtractValue(value, field.value());
+  if (!field.has_value()) {
+    _context.Diagnostics().RaiseError(location,
+                                      "Unknown struct field: ", field_name);
+  }
+  return CreateExtractValue(value, field.value(), location);
 }
 
-LValue IRBuilder::CreateSubscript(const RValue &value, const RValue &index) {
+LValue IRBuilder::CreateSubscript(const RValue &value, const RValue &index,
+                                  SourceLocation location) {
   if (auto *array = value.c_type->DynCast<ArrayType>()) {
     auto *source_type = _context.LLVMType(value.c_type);
     auto *zero = _builder.getInt64(0);
@@ -118,7 +149,8 @@ LValue IRBuilder::CreateSubscript(const RValue &value, const RValue &index) {
                                            {index.ir_value});
     return LValue{pointer->pointee_type, ptr};
   }
-  RAISE_ERROR("Subscript only supports array or pointer type");
+  _context.Diagnostics().RaiseError(
+      location, "Subscript requires an array or pointer operand");
 }
 
 void IRBuilder::CreateRet(const RValue &value) {
@@ -224,12 +256,17 @@ RValue IRBuilder::CreatePhi(const RValue &value1, llvm::BasicBlock *block1,
 }
 
 RValue IRBuilder::CreateBinaryOp(BinaryOpType op, const RValue &left,
-                                 const RValue &right, TypeRef out_type) {
-  ASSERT(left.ir_value->getType()->isIntegerTy() ||
-             left.ir_value->getType()->isFloatingPointTy(),
-         "Binary operation only supports numeric values");
-  ASSERT(left.ir_value->getType() == right.ir_value->getType(),
-         "Binary operation operand type mismatch");
+                                 const RValue &right, TypeRef out_type,
+                                 SourceLocation location) {
+  if (!left.ir_value->getType()->isIntegerTy() &&
+      !left.ir_value->getType()->isFloatingPointTy()) {
+    _context.Diagnostics().RaiseError(
+        location, "Binary operation only supports numeric values");
+  }
+  if (left.ir_value->getType() != right.ir_value->getType()) {
+    _context.Diagnostics().RaiseError(location,
+                                      "Binary operation operand type mismatch");
+  }
   bool is_float = left.ir_value->getType()->isFloatingPointTy();
   bool is_unsigned = HasTypeTag(left.c_type, TypeTag::Unsigned);
 
@@ -261,19 +298,34 @@ RValue IRBuilder::CreateBinaryOp(BinaryOpType op, const RValue &left,
                         ? _builder.CreateURem(left.ir_value, right.ir_value)
                         : _builder.CreateSRem(left.ir_value, right.ir_value))};
   case BinaryOpType::BitAnd:
-    ASSERT(!is_float, "Bitwise AND requires integer operands");
+    if (is_float) {
+      _context.Diagnostics().RaiseError(
+          location, "Bitwise AND requires integer operands");
+    }
     return RValue{out_type, _builder.CreateAnd(left.ir_value, right.ir_value)};
   case BinaryOpType::BitOr:
-    ASSERT(!is_float, "Bitwise OR requires integer operands");
+    if (is_float) {
+      _context.Diagnostics().RaiseError(location,
+                                        "Bitwise OR requires integer operands");
+    }
     return RValue{out_type, _builder.CreateOr(left.ir_value, right.ir_value)};
   case BinaryOpType::BitXor:
-    ASSERT(!is_float, "Bitwise XOR requires integer operands");
+    if (is_float) {
+      _context.Diagnostics().RaiseError(
+          location, "Bitwise XOR requires integer operands");
+    }
     return RValue{out_type, _builder.CreateXor(left.ir_value, right.ir_value)};
   case BinaryOpType::LShift:
-    ASSERT(!is_float, "Left shift requires integer operands");
+    if (is_float) {
+      _context.Diagnostics().RaiseError(location,
+                                        "Left shift requires integer operands");
+    }
     return RValue{out_type, _builder.CreateShl(left.ir_value, right.ir_value)};
   case BinaryOpType::RShift:
-    ASSERT(!is_float, "Right shift requires integer operands");
+    if (is_float) {
+      _context.Diagnostics().RaiseError(
+          location, "Right shift requires integer operands");
+    }
     return RValue{out_type,
                   is_unsigned
                       ? _builder.CreateLShr(left.ir_value, right.ir_value)
@@ -321,26 +373,36 @@ RValue IRBuilder::CreateBinaryOp(BinaryOpType op, const RValue &left,
                    ? _builder.CreateICmpUGE(left.ir_value, right.ir_value)
                    : _builder.CreateICmpSGE(left.ir_value, right.ir_value))};
   default:
-    RAISE_ERROR("Unsupported binary operation");
+    _context.Diagnostics().RaiseError(location, "Unsupported binary operation");
   }
 }
 
 RValue IRBuilder::CreateFuncInvoke(const RValue &func,
-                                   std::span<const RValue> args) {
+                                   std::span<const RValue> args,
+                                   SourceLocation location) {
   TypeRef c_function_type = func.c_type;
   if (auto *pointer = c_function_type->DynCast<PointerType>()) {
     c_function_type = pointer->pointee_type;
   }
-  ASSERT(c_function_type->Is<FunctionType>(),
-         "Function invoke only supports function or pointer type");
+  if (!c_function_type->Is<FunctionType>()) {
+    _context.Diagnostics().RaiseError(
+        location,
+        "Function invocation requires a function or function pointer");
+  }
   const auto *function = c_function_type->As<FunctionType>();
 
   if (function->has_va_args) {
-    ASSERT(args.size() >= function->parameters.size(),
-           "Function argument count mismatch, expect >= declared arguments");
+    if (args.size() < function->parameters.size()) {
+      _context.Diagnostics().RaiseError(
+          location, "Function argument count mismatch, expected at least ",
+          function->parameters.size(), " arguments");
+    }
   } else {
-    ASSERT(args.size() == function->parameters.size(),
-           "Function argument count mismatch");
+    if (args.size() != function->parameters.size()) {
+      _context.Diagnostics().RaiseError(
+          location, "Function argument count mismatch, expected ",
+          function->parameters.size(), " arguments");
+    }
   }
 
   std::vector<llvm::Value *> llvm_args;
@@ -356,9 +418,11 @@ RValue IRBuilder::CreateFuncInvoke(const RValue &func,
           IsNumericType(param_type)) {
         arg = CreateNumericCast(arg, param_type);
       }
-      ASSERT(arg.ir_value->getType() ==
-                 _context.LLVMFunctionType(c_function_type)->getParamType(i),
-             "Function argument type mismatch at argument ", std::to_string(i));
+      if (arg.ir_value->getType() !=
+          _context.LLVMFunctionType(c_function_type)->getParamType(i)) {
+        _context.Diagnostics().RaiseError(
+            location, "Function argument type mismatch at argument ", i);
+      }
     }
     auto arg_ir_value = arg.ir_value;
     if (function->has_va_args && i >= function->parameters.size()) {

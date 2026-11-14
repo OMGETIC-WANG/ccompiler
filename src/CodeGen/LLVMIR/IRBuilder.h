@@ -46,17 +46,23 @@ public:
   LValue GetElementPtrImpl(llvm::StructType *type, llvm::Value *address,
                            const StructField &field);
 
-  LValue GetElementPtr(const LValue &value, const StructField &field);
+  LValue GetElementPtr(const LValue &value, const StructField &field,
+                       SourceLocation location = {});
 
-  LValue GetElementPtr(const LValue &value, std::string_view field_name);
+  LValue GetElementPtr(const LValue &value, std::string_view field_name,
+                       SourceLocation location = {});
 
-  LValue GetPtrElementPtr(const RValue &ptr, std::string_view field_name);
+  LValue GetPtrElementPtr(const RValue &ptr, std::string_view field_name,
+                          SourceLocation location = {});
 
-  RValue CreateExtractValue(const RValue &value, const StructField &field);
+  RValue CreateExtractValue(const RValue &value, const StructField &field,
+                            SourceLocation location = {});
 
-  RValue CreateExtractValue(const RValue &value, std::string_view field_name);
+  RValue CreateExtractValue(const RValue &value, std::string_view field_name,
+                            SourceLocation location = {});
 
-  LValue CreateSubscript(const RValue &value, const RValue &index);
+  LValue CreateSubscript(const RValue &value, const RValue &index,
+                         SourceLocation location = {});
 
   void CreateRet(const RValue &value);
 
@@ -72,9 +78,11 @@ public:
                    const RValue &value2, llvm::BasicBlock *block2);
 
   RValue CreateBinaryOp(BinaryOpType op, const RValue &left,
-                        const RValue &right, TypeRef out_type);
+                        const RValue &right, TypeRef out_type,
+                        SourceLocation location = {});
 
-  RValue CreateFuncInvoke(const RValue &func, std::span<const RValue> args);
+  RValue CreateFuncInvoke(const RValue &func, std::span<const RValue> args,
+                          SourceLocation location = {});
 
   RValue CreateInv(const RValue &value);
 

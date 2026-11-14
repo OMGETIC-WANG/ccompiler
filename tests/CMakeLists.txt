@@ -72,3 +72,68 @@ add_ast_schema_failure(TypeTagMismatch type_tag_mismatch.ast.yaml
 add_ast_schema_failure(UnknownTypeTag unknown_type_tag.ast.yaml
                        "unknown type tag 'packed'")
 add_ast_schema_failure(NullMismatch null_mismatch.ast.yaml "expected null")
+
+function(add_source_diagnostic_failure name source line column message)
+  add_test(
+    NAME "Diagnostics.${name}"
+    COMMAND
+      ${CMAKE_COMMAND} -DTEST_EXECUTABLE=$<TARGET_FILE:ccompiler>
+      -DSOURCE_DIAGNOSTIC=ON
+      -DSOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/Diagnostics/${source}
+      -DEXPECTED_LINE=${line} -DEXPECTED_COLUMN=${column}
+      "-DEXPECTED_MESSAGE=${message}" -P
+      ${CMAKE_CURRENT_SOURCE_DIR}/ExpectDiagnostic.cmake)
+  set_tests_properties("Diagnostics.${name}" PROPERTIES LABELS
+                                                        "diagnostics;frontend")
+endfunction()
+
+function(add_command_diagnostic_failure name expected_message)
+  add_test(
+    NAME "Diagnostics.${name}"
+    COMMAND
+      ${CMAKE_COMMAND} -DTEST_EXECUTABLE=$<TARGET_FILE:ccompiler>
+      "-DTEST_ARGUMENTS=${ARGN}" "-DEXPECTED_STDERR=${expected_message}" -P
+      ${CMAKE_CURRENT_SOURCE_DIR}/ExpectDiagnostic.cmake)
+  set_tests_properties("Diagnostics.${name}" PROPERTIES LABELS
+                                                        "diagnostics;frontend")
+endfunction()
+
+add_source_diagnostic_failure(Lex.UnknownCharacter UnknownCharacter.c 1 25
+                              "Unknown character: '@'")
+add_source_diagnostic_failure(Lex.InvalidExponent Exponent.c 1 2
+                              "Expected decimal exponent after 'e' or 'E'")
+add_source_diagnostic_failure(Preprocessor.UnknownDirective UnknownDirective.c
+                              1 2 "Unexpected preprocessor name: unknown")
+add_source_diagnostic_failure(Parser.MissingColon MissingColon.c 1 30
+                              "Expected ':' in conditional expression")
+add_source_diagnostic_failure(Sema.UnsupportedType UnsupportedType.c 1 1
+                              "volatile types are not supported yet")
+add_source_diagnostic_failure(Codegen.UnknownIdentifier UnknownIdentifier.c 1
+                              25 "Unknown variable or function: missing")
+add_source_diagnostic_failure(
+  Codegen.StringTooLong StringTooLong.c 1 16
+  "Array size is smaller than the literal string size")
+
+set(missing_diagnostic_source
+    "${CMAKE_CURRENT_BINARY_DIR}/missing/diagnostic-input.c")
+add_command_diagnostic_failure(
+  Driver.MissingInput
+  "ccompiler: error: Failed to open file: ${missing_diagnostic_source}"
+  "${missing_diagnostic_source}")
+add_command_diagnostic_failure(
+  Driver.UnknownOption "ccompiler: error: Unknown argument: unknown-option"
+  "--unknown-option")
+set(valid_diagnostic_source
+    "${CMAKE_CURRENT_SOURCE_DIR}/AST/Statements/Empty.c")
+set(invalid_diagnostic_output
+    "${CMAKE_CURRENT_BINARY_DIR}/missing-output/main.ll")
+add_command_diagnostic_failure(
+  Driver.InvalidOutputPath
+  "ccompiler: error: Invalid output path: ${CMAKE_CURRENT_BINARY_DIR}/missing-output"
+  "${valid_diagnostic_source}"
+  -o
+  "${invalid_diagnostic_output}")
+add_test(NAME Diagnostics.Formatting COMMAND $<TARGET_FILE:ccompiler_tests>
+                                             --diagnostic-self-test)
+set_tests_properties(Diagnostics.Formatting PROPERTIES LABELS
+                                                       "diagnostics;frontend")

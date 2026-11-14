@@ -182,9 +182,9 @@ llvm::Type *LLVMTypeConverter::ConvertEnum(EnumType *type) {
 }
 
 GenContext::GenContext(llvm::LLVMContext &llvm_context, llvm::Module &module,
-                       TypeContext &types)
+                       TypeContext &types, DiagnosticContext &diagnostics)
     : counter(1), _llvm_context(llvm_context), _module(module), types(types),
-      type_converter(llvm_context, counter) {}
+      _diagnostics(diagnostics), type_converter(llvm_context, counter) {}
 
 llvm::Value *GenContext::CreateStringConstant(std::string_view value,
                                               size_t buffer_size) {

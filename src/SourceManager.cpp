@@ -1,5 +1,6 @@
 #include "SourceManager.h"
 #include "Exception.h"
+#include "Util/Diagnostic.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -18,7 +19,7 @@ static std::string MakeAbsolutePath(std::string_view path) {
 static std::string ReadFileContent(std::string_view path) {
   std::ifstream file(std::string(path), std::ios::binary | std::ios::ate);
   if (!file.is_open()) {
-    throw std::runtime_error("Failed to open file: " + std::string(path));
+    throw DriverError("Failed to open file: " + std::string(path));
   }
 
   std::streamsize size = file.tellg();
@@ -28,7 +29,7 @@ static std::string ReadFileContent(std::string_view path) {
   if (size > 0) {
     content.resize(static_cast<std::size_t>(size));
     if (!file.read(content.data(), size)) {
-      throw std::runtime_error("Failed to read file: " + std::string(path));
+      throw DriverError("Failed to read file: " + std::string(path));
     }
   }
 
@@ -162,4 +163,15 @@ SourcePosition SourceManager::GetLineColumn(SourceLocation location) const {
           static_cast<std::uint32_t>(line_it - entry.line_starts.begin() + 1),
       .column = static_cast<std::uint32_t>(location.begin - *line_it + 1),
   };
+}
+
+std::string SourceManager::FormatLocation(SourceLocation location) const {
+  if (!location.IsValid()) {
+    return "<invalid location>";
+  }
+
+  std::string_view file_name = GetFileName(location);
+  SourcePosition pos = GetLineColumn(location);
+  return std::string(file_name) + ":" + std::to_string(pos.line) + ":" +
+         std::to_string(pos.column);
 }

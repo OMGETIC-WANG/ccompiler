@@ -20,11 +20,15 @@ std::unique_ptr<CompoundStmt> ParseCompoundStmt(Lexer &lexer,
 static std::unique_ptr<ASTNode> ParseControlCondExpr(Lexer &lexer,
                                                      CompileContext &context) {
   Token tok = lexer.PeekNextToken();
-  ASSERT_EQ(tok.type, TokenType::LParen, "Expected (");
+  if (tok.type != TokenType::LParen) {
+    context.Diagnostics().RaiseError(tok.location, "Expected '('");
+  }
   lexer.ConsumeToken(tok);
   auto expr = ParseExpr(lexer, context);
   tok = lexer.PeekNextToken();
-  ASSERT_EQ(tok.type, TokenType::RParen, "Expected )");
+  if (tok.type != TokenType::RParen) {
+    context.Diagnostics().RaiseError(tok.location, "Expected ')'");
+  }
   lexer.ConsumeToken(tok);
   return expr;
 }
@@ -67,8 +71,10 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(Lexer &lexer,
     }
 
     if (type_spec.is_typedef) {
-      ASSERT(storage_class == StorageClass::None,
-             "A typedef cannot have a storage class");
+      if (storage_class != StorageClass::None) {
+        context.Diagnostics().RaiseError(
+            type_spec.location, "A typedef cannot have a storage class");
+      }
       for (auto &parsed_type : decl_types) {
         if (!parsed_type.declarator_name.empty()) {
           auto typedef_decl = std::make_unique<TypedefDecl>();
@@ -80,9 +86,12 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(Lexer &lexer,
         }
       }
     } else {
-      ASSERT(storage_class == StorageClass::None ||
-                 !decl->init_declarators.empty(),
-             "A storage class requires a declared object or function");
+      if (storage_class != StorageClass::None &&
+          decl->init_declarators.empty()) {
+        context.Diagnostics().RaiseError(
+            type_spec.location,
+            "A storage class requires a declared object or function");
+      }
       for (size_t i = 0; i < decl_types.size(); i++) {
         auto &parsed_type = decl_types[i];
         auto &type = parsed_type.type;
@@ -105,8 +114,11 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(Lexer &lexer,
             context.AddVariable(var_decl->name, type);
             decl_stmt_builder.Add(std::move(var_decl));
           } else {
-            ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon,
-                      "Expected semicolon after declaration");
+            Token next = lexer.PeekNextToken();
+            if (next.type != TokenType::Semicolon) {
+              context.Diagnostics().RaiseError(
+                  next.location, "Expected semicolon after declaration");
+            }
           }
           break;
         case TypeBaseType::FunctionType:
@@ -156,7 +168,10 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(Lexer &lexer,
       if (next_tok.type == TokenType::Colon) {
         lexer.ConsumeToken(tok);
         Token colon = lexer.ConsumeNextToken();
-        ASSERT_EQ(colon.type, TokenType::Colon, "Expected ':' after label");
+        if (colon.type != TokenType::Colon) {
+          context.Diagnostics().RaiseError(colon.location,
+                                           "Expected ':' after label");
+        }
         auto label_stmt = std::make_unique<LabelStmt>();
         label_stmt->location = CombineLocation(tok.location, colon.location);
         label_stmt->name = context.Sources().GetText(tok);
@@ -225,7 +240,9 @@ static std::unique_ptr<ASTNode> ParseStmt(Lexer &lexer,
 std::unique_ptr<CompoundStmt> ParseCompoundStmt(Lexer &lexer,
                                                 CompileContext &context) {
   auto tok = lexer.PeekNextToken();
-  ASSERT_EQ(tok.type, TokenType::LBrace, "Expected {");
+  if (tok.type != TokenType::LBrace) {
+    context.Diagnostics().RaiseError(tok.location, "Expected '{'");
+  }
   lexer.ConsumeToken(tok);
   auto CS = std::make_unique<CompoundStmt>();
   SourceLocation start_location = tok.location;
@@ -233,9 +250,7 @@ std::unique_ptr<CompoundStmt> ParseCompoundStmt(Lexer &lexer,
   while (true) {
     tok = lexer.PeekNextToken();
     if (tok.type == TokenType::EndOfFile) {
-      CS->location =
-          CombineLocation(start_location, lexer.GetLastConsumedLocation());
-      return CS;
+      context.Diagnostics().RaiseError(tok.location, "Expected '}'");
     }
     if (tok.type == TokenType::RBrace) {
       lexer.ConsumeToken(tok);
@@ -288,9 +303,12 @@ static std::unique_ptr<DoWhileStmt> ParseDoWhileStmt(Lexer &lexer,
   auto do_while_stmt = std::make_unique<DoWhileStmt>();
   lexer.ConsumeNextToken(); // consume "do"
   do_while_stmt->body = ParseStmt(lexer, context);
-  ASSERT_EQ(lexer.PeekNextToken().type, TokenType::KwWhile,
-            "Expected 'while' after 'do' statement");
-  lexer.ConsumeNextToken();
+  Token while_token = lexer.PeekNextToken();
+  if (while_token.type != TokenType::KwWhile) {
+    context.Diagnostics().RaiseError(while_token.location,
+                                     "Expected 'while' after 'do' statement");
+  }
+  lexer.ConsumeToken(while_token);
   do_while_stmt->condition = ParseControlCondExpr(lexer, context);
   do_while_stmt->location =
       CombineLocation(start_token.location, lexer.GetLastConsumedLocation());
@@ -302,24 +320,33 @@ static std::unique_ptr<ForStmt> ParseForStmt(Lexer &lexer,
   Token start_token = lexer.PeekNextToken();
   auto for_stmt = std::make_unique<ForStmt>();
   lexer.ConsumeNextToken();
-  ASSERT_EQ(lexer.PeekNextToken().type, TokenType::LParen, "Expected a '('");
-  lexer.ConsumeNextToken();
+  Token lparen = lexer.PeekNextToken();
+  if (lparen.type != TokenType::LParen) {
+    context.Diagnostics().RaiseError(lparen.location, "Expected '('");
+  }
+  lexer.ConsumeToken(lparen);
 
   if (lexer.PeekNextToken().type == TokenType::Semicolon) {
     for_stmt->init = nullptr;
   } else {
     for_stmt->init = ParseStmtOnly(lexer, context);
   }
-  ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon, "Expect a ';'");
-  lexer.ConsumeNextToken();
+  Token semicolon = lexer.PeekNextToken();
+  if (semicolon.type != TokenType::Semicolon) {
+    context.Diagnostics().RaiseError(semicolon.location, "Expected ';'");
+  }
+  lexer.ConsumeToken(semicolon);
 
   if (lexer.PeekNextToken().type == TokenType::Semicolon) {
     for_stmt->condition = nullptr;
   } else {
     for_stmt->condition = ParseStmtOnly(lexer, context);
   }
-  ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon, "Expect a ';'");
-  lexer.ConsumeNextToken();
+  semicolon = lexer.PeekNextToken();
+  if (semicolon.type != TokenType::Semicolon) {
+    context.Diagnostics().RaiseError(semicolon.location, "Expected ';'");
+  }
+  lexer.ConsumeToken(semicolon);
 
   if (lexer.PeekNextToken().type == TokenType::RParen) {
     for_stmt->increment = nullptr;
@@ -327,8 +354,11 @@ static std::unique_ptr<ForStmt> ParseForStmt(Lexer &lexer,
     for_stmt->increment = ParseStmtOnly(lexer, context);
   }
 
-  ASSERT_EQ(lexer.PeekNextToken().type, TokenType::RParen, "Expected a ')'");
-  lexer.ConsumeNextToken();
+  Token rparen = lexer.PeekNextToken();
+  if (rparen.type != TokenType::RParen) {
+    context.Diagnostics().RaiseError(rparen.location, "Expected ')'");
+  }
+  lexer.ConsumeToken(rparen);
   for_stmt->body = ParseStmt(lexer, context);
   SourceLocation end_location = for_stmt->body
                                     ? for_stmt->body->location
@@ -353,8 +383,11 @@ static std::unique_ptr<SwitchStmt> ParseSwitchStmt(Lexer &lexer,
         CombineLocation(start_token.location, lexer.GetLastConsumedLocation());
     return switch_stmt;
   } else {
-    ASSERT_EQ(lexer.PeekNextToken().type, TokenType::LBrace, "Expected a '{'");
-    lexer.ConsumeNextToken();
+    Token lbrace = lexer.PeekNextToken();
+    if (lbrace.type != TokenType::LBrace) {
+      context.Diagnostics().RaiseError(lbrace.location, "Expected '{'");
+    }
+    lexer.ConsumeToken(lbrace);
     while (true) {
       Token tok = lexer.PeekNextToken();
       switch (tok.type) {
@@ -366,9 +399,12 @@ static std::unique_ptr<SwitchStmt> ParseSwitchStmt(Lexer &lexer,
           lexer.ConsumeNextToken();
           case_stmt->case_vals.push_back(ParseExpr(lexer, context));
           case_end = case_stmt->case_vals.back()->location;
-          ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Colon,
-                    "Expected a ':'");
-          case_end = lexer.ConsumeNextToken().location;
+          Token colon = lexer.PeekNextToken();
+          if (colon.type != TokenType::Colon) {
+            context.Diagnostics().RaiseError(colon.location, "Expected ':'");
+          }
+          case_end = colon.location;
+          lexer.ConsumeToken(colon);
         }
         do {
           case_stmt->body.push_back(ParseStmt(lexer, context));
@@ -384,9 +420,12 @@ static std::unique_ptr<SwitchStmt> ParseSwitchStmt(Lexer &lexer,
         lexer.ConsumeToken(tok);
         SourceLocation default_end = tok.location;
         auto default_stmt = std::make_unique<DefaultStmt>();
-        ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Colon,
-                  "Expected a ':'");
-        default_end = lexer.ConsumeNextToken().location;
+        Token colon = lexer.PeekNextToken();
+        if (colon.type != TokenType::Colon) {
+          context.Diagnostics().RaiseError(colon.location, "Expected ':'");
+        }
+        default_end = colon.location;
+        lexer.ConsumeToken(colon);
         do {
           default_stmt->body.push_back(ParseStmt(lexer, context));
         } while (!IsCaseEnd(lexer.PeekNextToken().type));
@@ -403,7 +442,8 @@ static std::unique_ptr<SwitchStmt> ParseSwitchStmt(Lexer &lexer,
             CombineLocation(start_token.location, tok.location);
         return switch_stmt;
       default:
-        RAISE_ERROR("Unexpected token in switch statement:", tok.type);
+        context.Diagnostics().RaiseError(
+            tok.location, "Unexpected token in switch statement: ", tok.type);
       }
     }
   }
@@ -427,7 +467,10 @@ static std::unique_ptr<ASTNode> ParseGotoStmt(Lexer &lexer,
   auto goto_stmt = std::make_unique<GotoStmt>();
   lexer.ConsumeNextToken(); // consume "goto"
   Token tok = lexer.ConsumeNextToken();
-  ASSERT_EQ(tok.type, TokenType::Identifier, "Expected identifier after goto");
+  if (tok.type != TokenType::Identifier) {
+    context.Diagnostics().RaiseError(tok.location,
+                                     "Expected identifier after goto");
+  }
   goto_stmt->target = context.Sources().GetText(tok);
   goto_stmt->location = CombineLocation(start_token.location, tok.location);
   return goto_stmt;
@@ -445,27 +488,39 @@ std::unique_ptr<StructDecl> ParseStructDecl(Lexer &lexer, std::string_view name,
     for (const auto &statement : SD->fields->statements) {
       if (statement->GetType() == ASTNodeType::DeclStmt) {
         for (const auto &decl : statement->As<DeclStmt>()->decls) {
-          ASSERT_EQ(decl->GetType(), ASTNodeType::VarDecl,
-                    "Struct fields must be variable declarations");
+          if (decl->GetType() != ASTNodeType::VarDecl) {
+            context.Diagnostics().RaiseError(
+                decl->location, "Struct fields must be variable declarations");
+          }
           auto *field = decl->As<VarDecl>();
-          ASSERT(field->storage_class == StorageClass::None,
-                 "A struct field cannot have a storage class");
+          if (field->storage_class != StorageClass::None) {
+            context.Diagnostics().RaiseError(
+                field->location, "A struct field cannot have a storage class");
+          }
           fields.push_back(
               {.name = std::string(field->name), .type = field->type});
         }
       } else {
-        ASSERT_EQ(statement->GetType(), ASTNodeType::VarDecl,
-                  "Struct fields must be variable declarations");
+        if (statement->GetType() != ASTNodeType::VarDecl) {
+          context.Diagnostics().RaiseError(
+              statement->location,
+              "Struct fields must be variable declarations");
+        }
         auto *field = statement->As<VarDecl>();
-        ASSERT(field->storage_class == StorageClass::None,
-               "A struct field cannot have a storage class");
+        if (field->storage_class != StorageClass::None) {
+          context.Diagnostics().RaiseError(
+              field->location, "A struct field cannot have a storage class");
+        }
         fields.push_back(
             {.name = std::string(field->name), .type = field->type});
       }
     }
     context.Types().CompleteStruct(SD->type, fields);
   } else {
-    ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon);
+    Token tok = lexer.PeekNextToken();
+    if (tok.type != TokenType::Semicolon) {
+      context.Diagnostics().RaiseError(tok.location, "Expected ';'");
+    }
   }
   return SD;
 }
@@ -481,14 +536,18 @@ std::unique_ptr<UnionDecl> ParseUnionDecl(Lexer &lexer, std::string_view name,
     std::vector<UnionField> fields;
     auto add_field = [&](const ASTNode *decl) {
       if (auto field = decl->DynCast<VarDecl>()) {
-        ASSERT(field->storage_class == StorageClass::None,
-               "A Union field cannot have a storage class");
+        if (field->storage_class != StorageClass::None) {
+          context.Diagnostics().RaiseError(
+              field->location, "A union field cannot have a storage class");
+        }
         fields.push_back({.name = field->name, .type = field->type});
       } else {
-        ASSERT(decl->GetType() == ASTNodeType::StructDecl ||
-                   decl->GetType() == ASTNodeType::UnionDecl ||
-                   decl->GetType() == ASTNodeType::EnumDecl,
-               "Union fields must be variable declarations");
+        if (decl->GetType() != ASTNodeType::StructDecl &&
+            decl->GetType() != ASTNodeType::UnionDecl &&
+            decl->GetType() != ASTNodeType::EnumDecl) {
+          context.Diagnostics().RaiseError(
+              decl->location, "Union fields must be variable declarations");
+        }
       }
     };
     for (const auto &statement : UD->fields->statements) {
@@ -502,7 +561,10 @@ std::unique_ptr<UnionDecl> ParseUnionDecl(Lexer &lexer, std::string_view name,
     }
     context.Types().CompleteUnion(UD->type, fields);
   } else {
-    ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon);
+    Token tok = lexer.PeekNextToken();
+    if (tok.type != TokenType::Semicolon) {
+      context.Diagnostics().RaiseError(tok.location, "Expected ';'");
+    }
   }
   return UD;
 }
@@ -516,10 +578,13 @@ static void ParseEnumContent(Lexer &lexer, CompileContext &context,
       return;
     }
     if (tok.type == TokenType::EndOfFile) {
-      RAISE_ERROR("Expect }");
+      context.Diagnostics().RaiseError(tok.location, "Expected '}' after enum");
     }
 
-    ASSERT_EQ(tok.type, TokenType::Identifier);
+    if (tok.type != TokenType::Identifier) {
+      context.Diagnostics().RaiseError(
+          tok.location, "Expected identifier in enum declaration");
+    }
     std::string_view name = context.Sources().GetText(tok);
     lexer.ConsumeToken(tok);
 
@@ -549,12 +614,16 @@ std::unique_ptr<EnumDecl> ParseEnumDecl(Lexer &lexer, std::string_view name,
   ED->type = context.Types().GetOrCreateEnum(context.CurrentScopeId(), name);
   context.AddEnum(name, ED->type);
   if (lexer.PeekNextToken().type == TokenType::Colon) {
-    lexer.ConsumeNextToken();
+    Token colon = lexer.ConsumeNextToken();
     TypeRef parsed_type = ParseType(lexer, context);
-    ASSERT((parsed_type.get_tag() & (TypeRef::TagType)(TypeTag::Const)) == 0,
-           "Unexpected specifier for enum underlying type");
-    ASSERT(IsIntegerType(parsed_type),
-           "Expected integer type for enum underlying type");
+    if ((parsed_type.get_tag() & (TypeRef::TagType)(TypeTag::Const)) != 0) {
+      context.Diagnostics().RaiseError(
+          colon.location, "Unexpected specifier for enum underlying type");
+    }
+    if (!IsIntegerType(parsed_type)) {
+      context.Diagnostics().RaiseError(
+          colon.location, "Expected integer type for enum underlying type");
+    }
     ED->underlying_type = parsed_type;
   } else {
     ED->underlying_type = context.Types().getInt();
@@ -564,7 +633,10 @@ std::unique_ptr<EnumDecl> ParseEnumDecl(Lexer &lexer, std::string_view name,
     lexer.ConsumeNextToken();
     ParseEnumContent(lexer, context, ED.get());
   } else {
-    ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon);
+    Token tok = lexer.PeekNextToken();
+    if (tok.type != TokenType::Semicolon) {
+      context.Diagnostics().RaiseError(tok.location, "Expected ';'");
+    }
   }
   return ED;
 }
@@ -582,8 +654,13 @@ ParseFunctionDecl(Lexer &lexer, ParsedType type, StorageClass storage_class,
   if (lexer.PeekNextToken().type == TokenType::LBrace) {
     FD->body = ParseCompoundStmt(lexer, context);
     FD->location = CombineLocation(FD->location, FD->body->location);
-  } else
-    ASSERT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon);
+  } else {
+    Token tok = lexer.PeekNextToken();
+    if (tok.type != TokenType::Semicolon) {
+      context.Diagnostics().RaiseError(tok.location,
+                                       "Expected function body or ';'");
+    }
+  }
   context.PopLayer();
   return FD;
 }
@@ -601,12 +678,13 @@ static void AddVaList(CompileContext &context) {
 }
 
 std::unique_ptr<TranslationUnit>
-ParseTranslationUnit(Lexer &lexer, TypeContext &types, SourceManager &sources) {
+ParseTranslationUnit(Lexer &lexer, TypeContext &types, SourceManager &sources,
+                     DiagnosticContext &diagnostics) {
   std::unique_ptr<TranslationUnit> TU = std::make_unique<TranslationUnit>();
   Token first_token = lexer.PeekNextToken();
   SourceLocation translation_unit_location = first_token.location;
   bool has_decls = false;
-  CompileContext context(types, sources);
+  CompileContext context(types, sources, diagnostics);
   context.PushLayer();
   AddVaList(context);
   while (true) {

@@ -1,5 +1,6 @@
 #include "Scanner.h"
 #include "../Exception.h"
+#include "../Util/Diagnostic.h"
 #include "../Util/StringUtil.h"
 #include <algorithm>
 #include <ranges>
@@ -166,7 +167,18 @@ constexpr auto AdvanceHexFloatNum =
 
 constexpr auto AdvanceDecFloatNum = AdvanceFloatNum<std::pair{'0', '9'}>;
 
-static std::optional<std::string_view> TryPeekAsLiteralHex(std::string_view s) {
+static SourceLocation PointLocation(SourceLocation token_location,
+                                    size_t offset) {
+  return {
+      .source_id = token_location.source_id,
+      .begin = token_location.begin + static_cast<std::uint32_t>(offset),
+      .end = token_location.begin + static_cast<std::uint32_t>(offset + 1),
+  };
+}
+
+static std::optional<std::string_view>
+TryPeekAsLiteralHex(std::string_view s, DiagnosticContext &diagnostics,
+                    SourceLocation token_location) {
   if (s.starts_with("0x") || s.starts_with("0X")) {
     size_t pos = 2;
     pos = AdvanceHexFloatNum(s, pos);
@@ -174,13 +186,15 @@ static std::optional<std::string_view> TryPeekAsLiteralHex(std::string_view s) {
       return std::nullopt;
     }
     if (pos < s.size() && (s[pos] == 'p' || s[pos] == 'P')) {
+      SourceLocation exponent_location = PointLocation(token_location, pos);
       pos++;
       if (pos < s.size() && (s[pos] == '+' || s[pos] == '-')) {
         pos++;
       }
       size_t advanced = AdvancePureDecNum(s, pos);
       if (advanced == pos) {
-        RAISE_ERROR("Expected dec exponent after 'p' or 'P'");
+        diagnostics.RaiseError(exponent_location,
+                               "Expected decimal exponent after 'p' or 'P'");
       }
       pos = advanced;
     }
@@ -189,19 +203,23 @@ static std::optional<std::string_view> TryPeekAsLiteralHex(std::string_view s) {
   return std::nullopt;
 }
 
-static std::optional<std::string_view> TryPeekAsLiteralDec(std::string_view s) {
+static std::optional<std::string_view>
+TryPeekAsLiteralDec(std::string_view s, DiagnosticContext &diagnostics,
+                    SourceLocation token_location) {
   size_t pos = AdvanceDecFloatNum(s, 0);
   if (pos == 0) {
     return std::nullopt;
   }
   if (pos < s.size() && (s[pos] == 'e' || s[pos] == 'E')) {
+    SourceLocation exponent_location = PointLocation(token_location, pos);
     pos++;
     if (pos < s.size() && (s[pos] == '+' || s[pos] == '-')) {
       pos++;
     }
     size_t advanced = AdvancePureDecNum(s, pos);
     if (advanced == pos) {
-      RAISE_ERROR("Expected decimal exponent after 'e' or 'E'");
+      diagnostics.RaiseError(exponent_location,
+                             "Expected decimal exponent after 'e' or 'E'");
     }
     pos = advanced;
   }
@@ -237,15 +255,17 @@ static std::string_view TryAddPostfix(std::string_view s,
 
 #pragma endregion literal_num_detail
 
-static ScannedToken TryPeekAsLiteralNum(std::string_view s) {
-  if (auto hex = TryPeekAsLiteralHex(s)) {
+static ScannedToken TryPeekAsLiteralNum(std::string_view s,
+                                        DiagnosticContext &diagnostics,
+                                        SourceLocation token_location) {
+  if (auto hex = TryPeekAsLiteralHex(s, diagnostics, token_location)) {
     return {TokenType::LiteralNum, TryAddPostfix(s, hex.value()).size()};
   }
   if (auto bin = TryPeekAsLiteralBin(s)) {
     return {TokenType::LiteralNum, TryAddPostfix(s, bin.value()).size()};
   }
   // Treat oct as dec in lexer
-  if (auto dec = TryPeekAsLiteralDec(s)) {
+  if (auto dec = TryPeekAsLiteralDec(s, diagnostics, token_location)) {
     return {TokenType::LiteralNum, TryAddPostfix(s, dec.value()).size()};
   }
   return {};
@@ -447,14 +467,16 @@ std::pair<std::string_view, bool> Scanner::TrimSourceBlankH() {
   return {_source.text.substr(_pos), pos == old_pos};
 }
 
-static ScannedToken ScanToken(std::string_view rest) {
+static ScannedToken ScanToken(std::string_view rest,
+                              DiagnosticContext &diagnostics,
+                              SourceLocation token_location) {
   if (rest.starts_with("##")) {
     return {TokenType::SharpSharp, 2};
   }
 
   if (rest[0] == '.') {
     if (1 < rest.size() && isdigit(rest[1])) {
-      return TryPeekAsLiteralNum(rest);
+      return TryPeekAsLiteralNum(rest, diagnostics, token_location);
     }
     if (rest.starts_with("...")) {
       return {TokenType::DotDotDot, 3};
@@ -477,7 +499,7 @@ static ScannedToken ScanToken(std::string_view rest) {
   }
 
   if (isdigit(rest[0])) {
-    return TryPeekAsLiteralNum(rest);
+    return TryPeekAsLiteralNum(rest, diagnostics, token_location);
   }
 
   ScannedToken op_tok = TryPeekAsOperator(rest);
@@ -489,7 +511,8 @@ static ScannedToken ScanToken(std::string_view rest) {
     return {single_char_tokens[rest[0]], 1};
   }
 
-  RAISE_ERROR("Unknown char: ", rest[0]);
+  diagnostics.RaiseError(PointLocation(token_location, 0),
+                         "Unknown character: '", rest[0], "'");
 }
 
 static Token MakeToken(const SourceHandle &source, size_t begin,
@@ -526,7 +549,14 @@ Token Scanner::PeekNextToken() {
   }
 
   size_t token_begin = _pos;
-  return MakeToken(_source, token_begin, ScanToken(rest), has_leading_space);
+  SourceLocation token_location{
+      .source_id = _source.id,
+      .begin = static_cast<std::uint32_t>(token_begin),
+      .end = static_cast<std::uint32_t>(token_begin + 1),
+  };
+  return MakeToken(_source, token_begin,
+                   ScanToken(rest, _diagnostics, token_location),
+                   has_leading_space);
 }
 
 Token Scanner::PeekNextTokenH() {
@@ -552,7 +582,14 @@ Token Scanner::PeekNextTokenH() {
                      has_leading_space);
   }
 
-  return MakeToken(_source, token_begin, ScanToken(rest), has_leading_space);
+  SourceLocation token_location{
+      .source_id = _source.id,
+      .begin = static_cast<std::uint32_t>(token_begin),
+      .end = static_cast<std::uint32_t>(token_begin + 1),
+  };
+  return MakeToken(_source, token_begin,
+                   ScanToken(rest, _diagnostics, token_location),
+                   has_leading_space);
 }
 
 void Scanner::ConsumeToken(Token tok) {

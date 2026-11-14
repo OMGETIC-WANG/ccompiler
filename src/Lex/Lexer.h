@@ -30,11 +30,7 @@ class CompileContext;
 class RawLexer : public IRawLexer {
 public:
   RawLexer(SourceHandle source, MacroContext &macro_context,
-           SourceManager &source_manager, CompileContext &compile_context)
-      : _source_manager(source_manager), _macro_context(macro_context),
-        _compile_context(compile_context) {
-    _scanners.push_back(std::make_unique<Scanner>(std::move(source)));
-  }
+           SourceManager &source_manager, CompileContext &compile_context);
 
   Token EmitToken() override;
 
@@ -46,7 +42,7 @@ private:
   bool IsInValidPPCond() const;
 
   IScanner *CurrScanner() {
-    assert(!_scanners.empty());
+    ASSERT(!_scanners.empty(), "No current scanner");
     return _scanners.back().get();
   }
 

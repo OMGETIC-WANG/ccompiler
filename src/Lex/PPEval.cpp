@@ -103,40 +103,47 @@ struct shift_right {
   }
 };
 
-static MacroValue EvalNode(ASTNode *node);
+static MacroValue EvalNode(ASTNode *node, DiagnosticContext &diagnostics);
 
-static MacroValue EvalLiteral(LiteralNum *literal) {
+static MacroValue EvalLiteral(LiteralNum *literal,
+                              DiagnosticContext &diagnostics) {
   if (auto *value = std::get_if<uint64_t>(&literal->value)) {
     return *value;
   }
   if (auto *value = std::get_if<int64_t>(&literal->value)) {
     return *value;
   }
-  RAISE_ERROR("Floating-point literal is not allowed in preprocessor "
-              "condition");
+  diagnostics.RaiseError(literal->location,
+                         "Floating-point literal is not allowed in "
+                         "preprocessor condition");
 }
 
-static MacroValue EvalBinary(BinaryOp *bin_expr) {
+static MacroValue EvalBinary(BinaryOp *bin_expr,
+                             DiagnosticContext &diagnostics) {
   if (!IsEvalable(bin_expr->op_type)) {
-    RAISE_ERROR("Cannot evaluate binary operation in preprocessor condition: ",
-                bin_expr->op_type);
+    diagnostics.RaiseError(
+        bin_expr->location,
+        "Cannot evaluate binary operation in preprocessor condition: ",
+        bin_expr->op_type);
   }
 
-  MacroValue left = EvalNode(bin_expr->left.get());
+  MacroValue left = EvalNode(bin_expr->left.get(), diagnostics);
   if (bin_expr->op_type == BinaryOpType::And) {
     if (!IsTrue(left)) {
       return static_cast<int64_t>(0);
     }
-    return static_cast<int64_t>(IsTrue(EvalNode(bin_expr->right.get())));
+    return static_cast<int64_t>(
+        IsTrue(EvalNode(bin_expr->right.get(), diagnostics)));
   }
   if (bin_expr->op_type == BinaryOpType::Or) {
     if (IsTrue(left)) {
       return static_cast<int64_t>(1);
     }
-    return static_cast<int64_t>(IsTrue(EvalNode(bin_expr->right.get())));
+    return static_cast<int64_t>(
+        IsTrue(EvalNode(bin_expr->right.get(), diagnostics)));
   }
 
-  MacroValue right = EvalNode(bin_expr->right.get());
+  MacroValue right = EvalNode(bin_expr->right.get(), diagnostics);
   if (IsBitwiseOp(bin_expr->op_type)) {
     ASSERT(std::holds_alternative<uint64_t>(left) ||
                std::holds_alternative<int64_t>(left),
@@ -177,16 +184,21 @@ static MacroValue EvalBinary(BinaryOp *bin_expr) {
   case BinaryOpType::RShift:
     return Calc<shift_right>(left, right);
   default:
-    RAISE_ERROR("Unsupported binary operation for preprocessor evaluation");
+    diagnostics.RaiseError(
+        bin_expr->location,
+        "Unsupported binary operation for preprocessor evaluation");
   }
 }
 
-static MacroValue EvalUnary(UnaryOp *unary_expr) {
+static MacroValue EvalUnary(UnaryOp *unary_expr,
+                            DiagnosticContext &diagnostics) {
   if (!IsEvalable(unary_expr->op_type)) {
-    RAISE_ERROR("Cannot evaluate unary operation in preprocessor condition: ",
-                unary_expr->op_type);
+    diagnostics.RaiseError(
+        unary_expr->location,
+        "Cannot evaluate unary operation in preprocessor condition: ",
+        unary_expr->op_type);
   }
-  MacroValue operand = EvalNode(unary_expr->operand.get());
+  MacroValue operand = EvalNode(unary_expr->operand.get(), diagnostics);
   switch (unary_expr->op_type) {
   case UnaryOpType::UnaryPlus:
     return operand;
@@ -205,36 +217,40 @@ static MacroValue EvalUnary(UnaryOp *unary_expr) {
         },
         operand);
   default:
-    RAISE_ERROR("Unsupported unary operation for preprocessor evaluation");
+    diagnostics.RaiseError(
+        unary_expr->location,
+        "Unsupported unary operation for preprocessor evaluation");
   }
 }
 
-static MacroValue EvalConditional(ConditionalExpr *cond_expr) {
-  if (IsTrue(EvalNode(cond_expr->condition.get()))) {
-    return EvalNode(cond_expr->true_expr.get());
+static MacroValue EvalConditional(ConditionalExpr *cond_expr,
+                                  DiagnosticContext &diagnostics) {
+  if (IsTrue(EvalNode(cond_expr->condition.get(), diagnostics))) {
+    return EvalNode(cond_expr->true_expr.get(), diagnostics);
   }
-  return EvalNode(cond_expr->false_expr.get());
+  return EvalNode(cond_expr->false_expr.get(), diagnostics);
 }
 
-static MacroValue EvalNode(ASTNode *node) {
+static MacroValue EvalNode(ASTNode *node, DiagnosticContext &diagnostics) {
   ASSERT(node != nullptr, "Unexpected null AST node in preprocessor condition");
   if (auto *literal = node->DynCast<LiteralNum>()) {
-    return EvalLiteral(literal);
+    return EvalLiteral(literal, diagnostics);
   }
   if (auto *binary = node->DynCast<BinaryOp>()) {
-    return EvalBinary(binary);
+    return EvalBinary(binary, diagnostics);
   }
   if (auto *unary = node->DynCast<UnaryOp>()) {
-    return EvalUnary(unary);
+    return EvalUnary(unary, diagnostics);
   }
   if (auto *cond_expr = node->DynCast<ConditionalExpr>()) {
-    return EvalConditional(cond_expr);
+    return EvalConditional(cond_expr, diagnostics);
   }
-  RAISE_ERROR("Unexpected ASTNode type in preprocessor condition: ",
-              node->GetType());
+  diagnostics.RaiseError(
+      node->location,
+      "Unexpected ASTNode type in preprocessor condition: ", node->GetType());
 }
 
-uint64_t EvalMacroCond(ASTNode *node) {
-  MacroValue value = EvalNode(node);
+uint64_t EvalMacroCond(ASTNode *node, DiagnosticContext &diagnostics) {
+  MacroValue value = EvalNode(node, diagnostics);
   return std::visit([](auto val) -> uint64_t { return val; }, value);
 }

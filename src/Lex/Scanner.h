@@ -9,6 +9,8 @@
 
 TokenType TryGetKeywordTokenType(std::string_view s);
 
+class DiagnosticContext;
+
 // clang-format off
 #define SCANNER_TYPE_VALUES(x)\
   x(Scanner)\
@@ -42,7 +44,8 @@ class Scanner : public IScanner {
   IScannerImpl(Scanner);
 
 public:
-  explicit Scanner(SourceHandle source) : _source(source) {}
+  explicit Scanner(SourceHandle source, DiagnosticContext &diagnostics)
+      : _source(source), _diagnostics(diagnostics) {}
 
   Token PeekNextToken() override;
 
@@ -61,5 +64,6 @@ private:
   std::pair<std::string_view, bool> TrimSourceBlankH();
 
   SourceHandle _source;
+  DiagnosticContext &_diagnostics;
   size_t _pos = 0;
 };

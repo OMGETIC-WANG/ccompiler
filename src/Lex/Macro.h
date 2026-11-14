@@ -60,8 +60,9 @@ class MacroScanner : public IScanner {
 
 public:
   MacroScanner(MacroDef &def, std::vector<std::vector<Token>> args,
-               SourceManager &source_manager)
-      : _def(def), _source_manager(source_manager), _args(args) {}
+               SourceManager &source_manager, DiagnosticContext &diagnostics)
+      : _def(def), _source_manager(source_manager), _diagnostics(diagnostics),
+        _args(args) {}
 
   Token PeekNextToken() override;
 
@@ -72,6 +73,7 @@ private:
 
   MacroDef &_def;
   SourceManager &_source_manager;
+  DiagnosticContext &_diagnostics;
   size_t _idx = 0;
   bool _is_in_arg_tok = false;
   size_t _arg_idx = 0;

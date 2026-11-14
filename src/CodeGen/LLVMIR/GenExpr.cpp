@@ -4,6 +4,7 @@
 #include "../../AST/Intrinsic.h"
 #include "../../AST/Operations.h"
 #include "../../AST/Type.h"
+#include "../../Util/Diagnostic.h"
 #include "ConstantEval.h"
 #include "GenDecl.h"
 #include "IRBuilder.h"
@@ -20,7 +21,8 @@ static std::span<const RValue> AsSpan(const std::vector<RValue> &values) {
   return values;
 }
 
-static RValue TryCastTo(TypeRef type, const RValue &value, IRBuilder &builder) {
+static RValue TryCastTo(TypeRef type, const RValue &value, IRBuilder &builder,
+                        SourceLocation location) {
   if (type == value.c_type) {
     return value;
   }
@@ -28,8 +30,10 @@ static RValue TryCastTo(TypeRef type, const RValue &value, IRBuilder &builder) {
       builder.Context().LLVMType(value.c_type)) {
     return RValue{type, value.ir_value};
   }
-  ASSERT(IsNumericType(type) && IsNumericType(value.c_type),
-         "Failed to cast between incompatible types");
+  if (!IsNumericType(type) || !IsNumericType(value.c_type)) {
+    builder.Context().Diagnostics().RaiseError(
+        location, "Failed to cast between incompatible types");
+  }
   return builder.CreateNumericCast(value, type);
 }
 
@@ -47,11 +51,16 @@ static bool LosesConstInPointerConversion(TypeRef from, TypeRef to) {
   return LosesConstInPointerConversion(from_pointee, to_pointee);
 }
 
-static void CheckConstAssignment(TypeRef target, TypeRef value) {
-  ASSERT(!HasTypeTag(target, TypeTag::Const),
-         "Cannot assign to a const-qualified object");
-  ASSERT(!LosesConstInPointerConversion(value, target),
-         "Cannot assign a pointer after discarding const");
+static void CheckConstAssignment(TypeRef target, TypeRef value,
+                                 SourceLocation location, GenContext &context) {
+  if (HasTypeTag(target, TypeTag::Const)) {
+    context.Diagnostics().RaiseError(
+        location, "Cannot assign to a const-qualified object");
+  }
+  if (LosesConstInPointerConversion(value, target)) {
+    context.Diagnostics().RaiseError(
+        location, "Cannot assign a pointer after discarding const");
+  }
 }
 
 static RValue CreateIndex(size_t index, GenContext &context) {
@@ -80,29 +89,37 @@ struct ExprEmitter::detail {
       if (auto *array_init = initializer->DynCast<ArrayInitializer>()) {
         size_t array_size =
             array_type->size.value_or(array_init->initializers.size());
-        ASSERT(array_init->initializers.size() <= array_size,
-               "Array initializer has more elements than the array size");
+        if (array_init->initializers.size() > array_size) {
+          self.context.Diagnostics().RaiseError(
+              array_init->location,
+              "Array initializer has more elements than the array size");
+        }
 
         RValue array_base = LoadAsRValue(value, self);
         for (size_t i = 0; i < array_size; ++i) {
           if (i < array_init->initializers.size()) {
             GenVarInitializer(self.builder.CreateSubscript(
-                                  array_base, CreateIndex(i, self.context)),
+                                  array_base, CreateIndex(i, self.context),
+                                  array_init->location),
                               array_type->element_type,
                               array_init->initializers[i].get(), self);
           } else {
             self.builder.CreateStore(
                 CreateNullValue(array_type->element_type, self.context),
                 self.builder.CreateSubscript(array_base,
-                                             CreateIndex(i, self.context)));
+                                             CreateIndex(i, self.context),
+                                             array_init->location));
           }
         }
       }
       if (IsLiteralStringInit(array_type, initializer)) {
         auto *literal_str =
             initializer->As<ValueInitializer>()->value->As<LiteralString>();
-        ASSERT(array_type->size.value() >= literal_str->value.view().size() + 1,
-               "Array size is smaller than the literal string size");
+        if (array_type->size.value() < literal_str->value.view().size() + 1) {
+          self.context.Diagnostics().RaiseError(
+              literal_str->location,
+              "Array size is smaller than the literal string size");
+        }
         auto s = self.context.CreateStringConstant(literal_str->value.view(),
                                                    array_type->size.value());
         self.builder.CreateMemcpy(value, RValue{nullptr, s},
@@ -116,7 +133,10 @@ struct ExprEmitter::detail {
         std::vector<uint8_t> fields_inited(struct_type->fields.size(), false);
         for (const auto &[name, init] : field_init->field_initializers) {
           auto field = struct_type->GetField(name);
-          ASSERT(field.has_value(), "Unknown field name: ", name);
+          if (!field.has_value()) {
+            self.context.Diagnostics().RaiseError(field_init->location,
+                                                  "Unknown field name: ", name);
+          }
           size_t field_index = 0;
           bool found = false;
           for (size_t i = 0; i < struct_type->fields.size(); ++i) {
@@ -126,9 +146,13 @@ struct ExprEmitter::detail {
               break;
             }
           }
-          ASSERT(found, "Unknown field name: ", name);
+          if (!found) {
+            self.context.Diagnostics().RaiseError(field_init->location,
+                                                  "Unknown field name: ", name);
+          }
           fields_inited[field_index] = true;
-          GenVarInitializer(self.builder.GetElementPtr(value, field.value()),
+          GenVarInitializer(self.builder.GetElementPtr(value, field.value(),
+                                                       field_init->location),
                             field->type, init.get(), self);
         }
         for (size_t i = 0; i < struct_type->fields.size(); i++) {
@@ -140,8 +164,11 @@ struct ExprEmitter::detail {
         }
       }
       if (auto *array_init = initializer->DynCast<ArrayInitializer>()) {
-        ASSERT(array_init->initializers.size() <= struct_type->fields.size(),
-               "Struct initializer has more elements than the struct fields");
+        if (array_init->initializers.size() > struct_type->fields.size()) {
+          self.context.Diagnostics().RaiseError(
+              array_init->location,
+              "Struct initializer has more elements than the struct fields");
+        }
         for (size_t i = 0; i < array_init->initializers.size(); i++) {
           auto &field = struct_type->fields[i];
           GenVarInitializer(self.builder.GetElementPtr(value, field),
@@ -160,23 +187,29 @@ struct ExprEmitter::detail {
 
     if (auto *val_init = initializer->DynCast<ValueInitializer>()) {
       RValue val = self.EmitRValue(val_init->value.get());
-      val = TryCastTo(type, val, self.builder);
+      val = TryCastTo(type, val, self.builder, val_init->location);
       self.builder.CreateStore(val, value);
       return;
     }
 
-    RAISE_ERROR("Unexpected init");
+    self.context.Diagnostics().RaiseError(initializer->location,
+                                          "Unexpected initializer");
   }
 
   static LValue GenVarDecl(VarDecl *decl, ExprEmitter &self) {
-    ASSERT(decl->storage_class == StorageClass::None,
-           "Local static storage is not supported yet");
+    if (decl->storage_class != StorageClass::None) {
+      self.context.Diagnostics().RaiseError(
+          decl->location, "Local static storage is not supported yet");
+    }
     TypeRef type = decl->type;
     if (decl->type->Is<ArrayType>()) {
       auto array_type = decl->type->As<ArrayType>();
       if (!array_type->size.has_value()) {
-        ASSERT(decl->initializer.get(),
-               "Array with unspecified size requires an initializer");
+        if (!decl->initializer) {
+          self.context.Diagnostics().RaiseError(
+              decl->location,
+              "Array with unspecified size requires an initializer");
+        }
         if (auto *array_init = decl->initializer->DynCast<ArrayInitializer>()) {
           if (!array_type->size.has_value()) {
             type = ApplyTypeTag(
@@ -184,8 +217,11 @@ struct ExprEmitter::detail {
                                            array_init->initializers.size()),
                 static_cast<TypeTag>(type.get_tag()));
           } else {
-            ASSERT(array_type->size.value() >= array_init->initializers.size(),
-                   "Array initializer has more elements than the array size");
+            if (array_type->size.value() < array_init->initializers.size()) {
+              self.context.Diagnostics().RaiseError(
+                  array_init->location,
+                  "Array initializer has more elements than the array size");
+            }
           }
         } else {
           if (IsLiteralStringInit(array_type, decl->initializer.get())) {
@@ -198,7 +234,9 @@ struct ExprEmitter::detail {
                                         1),
                                 static_cast<TypeTag>(type.get_tag()));
           } else {
-            RAISE_ERROR("Failed to init array");
+            self.context.Diagnostics().RaiseError(
+                decl->initializer->location,
+                "Array initializer must be a brace list or string literal");
           }
         }
       } else {
@@ -280,54 +318,70 @@ struct ExprEmitter::detail {
   }
 
   static TypeRef PromoteNumericOperands(RValue &left, RValue &right,
+                                        SourceLocation location,
                                         ExprEmitter &self) {
     TypeRef common_type =
         UsualArithmeticType(left.c_type, right.c_type, self.context.Types());
-    left = TryCastTo(common_type, left, self.builder);
-    right = TryCastTo(common_type, right, self.builder);
+    left = TryCastTo(common_type, left, self.builder, location);
+    right = TryCastTo(common_type, right, self.builder, location);
     return common_type;
   }
 
   static RValue EvalBinaryOp(BinaryOpType op_type, RValue left, RValue right,
-                             ExprEmitter &self) {
+                             SourceLocation location, ExprEmitter &self) {
     if (op_type == BinaryOpType::BitAnd || op_type == BinaryOpType::BitOr ||
         op_type == BinaryOpType::BitXor) {
-      ASSERT(IsIntegerType(left.c_type),
-             "Bitwise operators require an integer left operand");
-      ASSERT(IsIntegerType(right.c_type),
-             "Bitwise operators require an integer right operand");
-      TypeRef result_type = PromoteNumericOperands(left, right, self);
-      return self.builder.CreateBinaryOp(op_type, left, right, result_type);
+      if (!IsIntegerType(left.c_type)) {
+        self.context.Diagnostics().RaiseError(
+            location, "Bitwise operators require an integer left operand");
+      }
+      if (!IsIntegerType(right.c_type)) {
+        self.context.Diagnostics().RaiseError(
+            location, "Bitwise operators require an integer right operand");
+      }
+      TypeRef result_type = PromoteNumericOperands(left, right, location, self);
+      return self.builder.CreateBinaryOp(op_type, left, right, result_type,
+                                         location);
     }
 
     if (op_type == BinaryOpType::LShift || op_type == BinaryOpType::RShift) {
-      ASSERT(IsIntegerType(left.c_type),
-             "Shift operators require an integer left operand");
-      ASSERT(IsIntegerType(right.c_type),
-             "Shift operators require an integer right operand");
-      left = TryCastTo(PromoteInteger(left.c_type, self.context.Types()), left,
-                       self.builder);
-      right = TryCastTo(PromoteInteger(right.c_type, self.context.Types()),
-                        right, self.builder);
-      if (left.c_type != right.c_type) {
-        right = TryCastTo(left.c_type, right, self.builder);
+      if (!IsIntegerType(left.c_type)) {
+        self.context.Diagnostics().RaiseError(
+            location, "Shift operators require an integer left operand");
       }
-      return self.builder.CreateBinaryOp(op_type, left, right, left.c_type);
+      if (!IsIntegerType(right.c_type)) {
+        self.context.Diagnostics().RaiseError(
+            location, "Shift operators require an integer right operand");
+      }
+      left = TryCastTo(PromoteInteger(left.c_type, self.context.Types()), left,
+                       self.builder, location);
+      right = TryCastTo(PromoteInteger(right.c_type, self.context.Types()),
+                        right, self.builder, location);
+      if (left.c_type != right.c_type) {
+        right = TryCastTo(left.c_type, right, self.builder, location);
+      }
+      return self.builder.CreateBinaryOp(op_type, left, right, left.c_type,
+                                         location);
     }
 
     if (left.c_type->Is<PointerType>()) {
-      ASSERT(IsIntegerType(right.c_type),
-             "Pointer arithmetic only supports integer type");
-      ASSERT(op_type == BinaryOpType::Add || op_type == BinaryOpType::Sub,
-             "Pointer arithmetic only supports addition and subtraction");
+      if (!IsIntegerType(right.c_type)) {
+        self.context.Diagnostics().RaiseError(
+            location, "Pointer arithmetic only supports integer offsets");
+      }
+      if (op_type != BinaryOpType::Add && op_type != BinaryOpType::Sub) {
+        self.context.Diagnostics().RaiseError(
+            location,
+            "Pointer arithmetic only supports addition and subtraction");
+      }
       if (op_type == BinaryOpType::Sub) {
         right = self.builder.CreateInv(right);
       }
-      LValue subscripted = self.builder.CreateSubscript(left, right);
+      LValue subscripted = self.builder.CreateSubscript(left, right, location);
       return RValue{left.c_type, subscripted.address};
     }
 
-    TypeRef result_type = PromoteNumericOperands(left, right, self);
+    TypeRef result_type = PromoteNumericOperands(left, right, location, self);
     bool is_comparison =
         op_type == BinaryOpType::Eq || op_type == BinaryOpType::Ne ||
         op_type == BinaryOpType::Lt || op_type == BinaryOpType::Gt ||
@@ -336,25 +390,33 @@ struct ExprEmitter::detail {
         is_comparison
             ? ApplyTypeTag(self.context.Types().getI1(), TypeTag::Unsigned)
             : result_type;
-    return self.builder.CreateBinaryOp(op_type, left, right, out_type);
+    return self.builder.CreateBinaryOp(op_type, left, right, out_type,
+                                       location);
   }
 
   static LValue GetUnionFieldLValue(const LValue &value,
-                                    std::string_view field_name) {
+                                    std::string_view field_name,
+                                    SourceLocation location,
+                                    ExprEmitter &self) {
     ASSERT(value.c_type->Is<UnionType>());
     auto union_type = value.c_type->As<UnionType>();
     auto field_ = union_type->GetField(field_name);
-    ASSERT(field_.has_value(), "Unknown union field: ", field_name);
+    if (!field_.has_value()) {
+      self.context.Diagnostics().RaiseError(
+          location, "Unknown union field: ", field_name);
+    }
     auto &field = field_.value();
     return LValue{field.type, value.address};
   }
 
   static RValue GetUnionFieldRValue(const RValue &value,
                                     std::string_view field_name,
+                                    SourceLocation location,
                                     ExprEmitter &self) {
     LValue union_lval = self.builder.CreateAlloca(value.c_type);
     self.builder.CreateStore(value, union_lval);
-    LValue field_lval = GetUnionFieldLValue(union_lval, field_name);
+    LValue field_lval =
+        GetUnionFieldLValue(union_lval, field_name, location, self);
     return LoadAsRValue(field_lval, self);
   }
 };
@@ -394,7 +456,8 @@ LValue ExprEmitter::EmitLValue(ASTNode *node) {
     if (auto *function = context.FindFunction(var_ref->name)) {
       return LValue{function->c_type, function->function};
     }
-    RAISE_ERROR("Unknown variable or function: ", var_ref->name);
+    context.Diagnostics().RaiseError(
+        var_ref->location, "Unknown variable or function: ", var_ref->name);
   }
   if (auto *var_decl = node->DynCast<VarDecl>()) {
     return detail::GenVarDecl(var_decl, *this);
@@ -405,43 +468,54 @@ LValue ExprEmitter::EmitLValue(ASTNode *node) {
       return {};
     }
     if (operand.c_type->Is<StructType>()) {
-      return builder.GetElementPtr(operand, get_field->field_name);
+      return builder.GetElementPtr(operand, get_field->field_name,
+                                   get_field->location);
     } else if (operand.c_type->Is<UnionType>()) {
-      return detail::GetUnionFieldLValue(operand, get_field->field_name);
+      return detail::GetUnionFieldLValue(operand, get_field->field_name,
+                                         get_field->location, *this);
     } else {
-      RAISE_ERROR("GetField requires a struct or union operand");
+      context.Diagnostics().RaiseError(
+          get_field->location, "GetField requires a struct or union operand");
     }
   }
   if (auto *ptr_get_field = node->DynCast<PtrGetField>()) {
     RValue ptr = EmitRValue(ptr_get_field->operand.get());
     if (auto ptr_t = ptr.c_type->DynCast<PointerType>()) {
       if (ptr_t->pointee_type->Is<StructType>()) {
-        return builder.GetPtrElementPtr(ptr, ptr_get_field->field_name);
+        return builder.GetPtrElementPtr(ptr, ptr_get_field->field_name,
+                                        ptr_get_field->location);
       } else if (ptr_t->pointee_type->Is<UnionType>()) {
         return detail::GetUnionFieldLValue(
             LValue{ptr_t->pointee_type, ptr.ir_value},
-            ptr_get_field->field_name);
+            ptr_get_field->field_name, ptr_get_field->location, *this);
       } else {
-        RAISE_ERROR("Unexpected pointer type for PtrGetField: ",
-                    ptr_t->pointee_type);
+        context.Diagnostics().RaiseError(
+            ptr_get_field->location,
+            "Unexpected pointer type for pointer field access: ",
+            ptr_t->pointee_type);
       }
     } else {
-      RAISE_ERROR("PtrGetField requires a pointer operand");
+      context.Diagnostics().RaiseError(
+          ptr_get_field->location,
+          "Pointer field access requires a pointer operand");
     }
   }
   if (auto *binary = node->DynCast<BinaryOp>()) {
     if (binary->op_type == BinaryOpType::Subscript) {
       RValue array = EmitRValue(binary->left.get());
       RValue index = EmitRValue(binary->right.get());
-      return builder.CreateSubscript(array, index);
+      return builder.CreateSubscript(array, index, binary->location);
     }
-    RAISE_ERROR("Unexpected lvalue binary operation");
+    context.Diagnostics().RaiseError(binary->location,
+                                     "Unexpected lvalue binary operation");
   }
   if (auto *unary = node->DynCast<UnaryOp>()) {
     if (unary->op_type == UnaryOpType::Deref) {
       RValue ptr = EmitRValue(unary->operand.get());
-      ASSERT(ptr.c_type->Is<PointerType>(),
-             "Dereference requires a pointer operand");
+      if (!ptr.c_type->Is<PointerType>()) {
+        context.Diagnostics().RaiseError(
+            unary->location, "Dereference requires a pointer operand");
+      }
       return LValue{ptr.c_type->As<PointerType>()->pointee_type, ptr.ir_value};
     }
   }
@@ -482,36 +556,44 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     LValue operand_lhs = EmitLValue(get_field->operand.get());
     if (operand_lhs.address) {
       if (operand_lhs.c_type->Is<StructType>()) {
-        LValue field_lhs =
-            builder.GetElementPtr(operand_lhs, get_field->field_name);
+        LValue field_lhs = builder.GetElementPtr(
+            operand_lhs, get_field->field_name, get_field->location);
         return detail::LoadAsRValue(field_lhs, *this);
       } else if (operand_lhs.c_type->Is<UnionType>()) {
-        LValue field_lhs =
-            detail::GetUnionFieldLValue(operand_lhs, get_field->field_name);
+        LValue field_lhs = detail::GetUnionFieldLValue(
+            operand_lhs, get_field->field_name, get_field->location, *this);
         return detail::LoadAsRValue(field_lhs, *this);
       } else {
-        RAISE_ERROR("Unexpected operand type for GetField: ",
-                    operand_lhs.c_type);
+        context.Diagnostics().RaiseError(
+            get_field->location,
+            "Unexpected operand type for GetField: ", operand_lhs.c_type);
       }
     }
     RValue operand_rhs = EmitRValue(get_field->operand.get());
     if (operand_rhs.c_type->Is<StructType>()) {
-      return builder.CreateExtractValue(operand_rhs, get_field->field_name);
+      return builder.CreateExtractValue(operand_rhs, get_field->field_name,
+                                        get_field->location);
     } else if (operand_rhs.c_type->Is<UnionType>()) {
       return detail::GetUnionFieldRValue(operand_rhs, get_field->field_name,
-                                         *this);
+                                         get_field->location, *this);
     } else {
-      RAISE_ERROR("Unexpected operand type for GetField: ", operand_rhs.c_type);
+      context.Diagnostics().RaiseError(
+          get_field->location,
+          "Unexpected operand type for GetField: ", operand_rhs.c_type);
     }
   }
   if (auto *bin_expr = node->DynCast<BinaryOp>()) {
     switch (bin_expr->op_type) {
     case BinaryOpType::Assignment: {
       LValue left = EmitLValue(bin_expr->left.get());
-      ASSERT(left.address, "Assignment requires an lvalue");
+      if (!left.address) {
+        context.Diagnostics().RaiseError(bin_expr->location,
+                                         "Assignment requires an lvalue");
+      }
       RValue right = EmitRValue(bin_expr->right.get());
-      CheckConstAssignment(left.c_type, right.c_type);
-      right = TryCastTo(left.c_type, right, builder);
+      CheckConstAssignment(left.c_type, right.c_type, bin_expr->location,
+                           context);
+      right = TryCastTo(left.c_type, right, builder, bin_expr->location);
       builder.CreateStore(right, left);
       return right;
     }
@@ -539,7 +621,8 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     case BinaryOpType::RShift: {
       RValue left = EmitRValue(bin_expr->left.get());
       RValue right = EmitRValue(bin_expr->right.get());
-      return detail::EvalBinaryOp(bin_expr->op_type, left, right, *this);
+      return detail::EvalBinaryOp(bin_expr->op_type, left, right,
+                                  bin_expr->location, *this);
     }
     case BinaryOpType::AddAssign:
     case BinaryOpType::SubAssign:
@@ -552,13 +635,17 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     case BinaryOpType::LShiftAssign:
     case BinaryOpType::RShiftAssign: {
       LValue left_lhs = EmitLValue(bin_expr->left.get());
-      ASSERT(left_lhs.address, "Assignment requires an lvalue");
+      if (!left_lhs.address) {
+        context.Diagnostics().RaiseError(bin_expr->location,
+                                         "Assignment requires an lvalue");
+      }
       RValue left = detail::LoadAsRValue(left_lhs, *this);
       RValue right = EmitRValue(bin_expr->right.get());
 
       RValue res = detail::EvalBinaryOp(OpAssignToOp(bin_expr->op_type), left,
-                                        right, *this);
-      CheckConstAssignment(left_lhs.c_type, res.c_type);
+                                        right, bin_expr->location, *this);
+      CheckConstAssignment(left_lhs.c_type, res.c_type, bin_expr->location,
+                           context);
       if (res.c_type != left_lhs.c_type) {
         res = builder.CreateNumericCast(res, left_lhs.c_type);
       }
@@ -576,7 +663,8 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
       args.push_back(EmitRValue(argument.get()));
     }
     RValue function = EmitRValue(func_invoke->function.get());
-    return builder.CreateFuncInvoke(function, AsSpan(args));
+    return builder.CreateFuncInvoke(function, AsSpan(args),
+                                    func_invoke->location);
   }
   if (auto *intrinsic_call = node->DynCast<IntrinsicCall>()) {
     ASSERT(intrinsic_call->desc != nullptr,
@@ -592,49 +680,62 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
       return operand;
     }
     if (operand.c_type->Is<PointerType>() && target_type->Is<PointerType>()) {
-      ASSERT(!LosesConstInPointerConversion(operand.c_type, target_type),
-             "Cannot cast a pointer after discarding const");
+      if (LosesConstInPointerConversion(operand.c_type, target_type)) {
+        context.Diagnostics().RaiseError(
+            type_cast->location,
+            "Cannot cast a pointer after discarding const");
+      }
       return RValue{target_type, operand.ir_value};
     }
     if (IsNumericType(operand.c_type) && IsNumericType(target_type)) {
       return builder.CreateNumericCast(operand, target_type);
     }
-    RAISE_ERROR("Unsupported type cast from ", operand.c_type->ToString(),
-                " to ", target_type->ToString());
+    context.Diagnostics().RaiseError(
+        type_cast->location, "Unsupported type cast from ",
+        operand.c_type->ToString(), " to ", target_type->ToString());
   }
   if (auto *unary_expr = node->DynCast<UnaryOp>()) {
     switch (unary_expr->op_type) {
     case UnaryOpType::GetAddress: {
       LValue operand = EmitLValue(unary_expr->operand.get());
-      ASSERT(operand.address, "Address-of requires an lvalue");
+      if (!operand.address) {
+        context.Diagnostics().RaiseError(unary_expr->location,
+                                         "Address-of requires an lvalue");
+      }
       return RValue{context.Types().Pointer(operand.c_type), operand.address};
     }
     case UnaryOpType::UnaryPlus: {
       RValue operand = EmitRValue(unary_expr->operand.get());
-      ASSERT(IsNumericType(operand.c_type),
-             "Unary plus requires a numeric type");
+      if (!IsNumericType(operand.c_type)) {
+        context.Diagnostics().RaiseError(unary_expr->location,
+                                         "Unary plus requires a numeric type");
+      }
       if (IsIntegerType(operand.c_type)) {
         operand = TryCastTo(PromoteInteger(operand.c_type, context.Types()),
-                            operand, builder);
+                            operand, builder, unary_expr->location);
       }
       return operand;
     }
     case UnaryOpType::UnaryMinus: {
       RValue operand = EmitRValue(unary_expr->operand.get());
-      ASSERT(IsNumericType(operand.c_type),
-             "Unary minus requires a numeric type");
+      if (!IsNumericType(operand.c_type)) {
+        context.Diagnostics().RaiseError(unary_expr->location,
+                                         "Unary minus requires a numeric type");
+      }
       if (IsIntegerType(operand.c_type)) {
         operand = TryCastTo(PromoteInteger(operand.c_type, context.Types()),
-                            operand, builder);
+                            operand, builder, unary_expr->location);
       }
       return builder.CreateInv(operand);
     }
     case UnaryOpType::BitNot: {
       RValue operand = EmitRValue(unary_expr->operand.get());
-      ASSERT(IsIntegerType(operand.c_type),
-             "Bitwise NOT requires an integer type");
+      if (!IsIntegerType(operand.c_type)) {
+        context.Diagnostics().RaiseError(
+            unary_expr->location, "Bitwise NOT requires an integer type");
+      }
       operand = TryCastTo(PromoteInteger(operand.c_type, context.Types()),
-                          operand, builder);
+                          operand, builder, unary_expr->location);
       return builder.CreateBitNot(operand);
     }
     case UnaryOpType::IncBeforeUse:
@@ -647,9 +748,14 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
                            unary_expr->op_type == UnaryOpType::DecBeforeUse;
 
       LValue operand = EmitLValue(unary_expr->operand.get());
-      ASSERT(operand.address, "Increment/decrement requires an lvalue");
-      ASSERT(!HasTypeTag(operand.c_type, TypeTag::Const),
-             "Cannot modify a const-qualified object");
+      if (!operand.address) {
+        context.Diagnostics().RaiseError(
+            unary_expr->location, "Increment/decrement requires an lvalue");
+      }
+      if (HasTypeTag(operand.c_type, TypeTag::Const)) {
+        context.Diagnostics().RaiseError(
+            unary_expr->location, "Cannot modify a const-qualified object");
+      }
       RValue old_value = builder.CreateLoad(operand.c_type, operand);
 
       if (operand.c_type->Is<PointerType>()) {
@@ -657,24 +763,29 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
                    llvm::ConstantInt::get(
                        llvm::Type::getInt32Ty(context.LLVMContext()), 1)};
         LValue subscripted = builder.CreateSubscript(
-            old_value, is_inc ? one : builder.CreateInv(one));
+            old_value, is_inc ? one : builder.CreateInv(one),
+            unary_expr->location);
         RValue updated{operand.c_type, subscripted.address};
         builder.CreateStore(updated, operand);
         return is_before_use ? updated : old_value;
       } else {
         RValue one{operand.c_type,
                    llvm::ConstantInt::get(context.LLVMType(operand.c_type), 1)};
-        RValue updated = builder.CreateBinaryOp(is_inc ? BinaryOpType::Add
-                                                       : BinaryOpType::Sub,
-                                                old_value, one, operand.c_type);
+        RValue updated = builder.CreateBinaryOp(
+            is_inc ? BinaryOpType::Add : BinaryOpType::Sub, old_value, one,
+            operand.c_type, unary_expr->location);
         builder.CreateStore(updated, operand);
         return is_before_use ? updated : old_value;
       }
     }
     case UnaryOpType::Not: {
       RValue operand = EmitRValue(unary_expr->operand.get());
-      ASSERT(IsNumericType(operand.c_type) || operand.c_type->Is<PointerType>(),
-             "Logical NOT requires a numeric or pointer type");
+      if (!IsNumericType(operand.c_type) &&
+          !operand.c_type->Is<PointerType>()) {
+        context.Diagnostics().RaiseError(
+            unary_expr->location,
+            "Logical NOT requires a numeric or pointer type");
+      }
       return builder.CreateInvBoolCond(operand);
     }
     default:
@@ -706,11 +817,13 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
         true_value.c_type, false_value.c_type, context.Types());
 
     builder.SetInsertPoint(true_block);
-    true_value = TryCastTo(common_type, true_value, builder);
+    true_value =
+        TryCastTo(common_type, true_value, builder, cond_expr->location);
     builder.CreateBr(end_block);
 
     builder.SetInsertPoint(false_block);
-    false_value = TryCastTo(common_type, false_value, builder);
+    false_value =
+        TryCastTo(common_type, false_value, builder, cond_expr->location);
     builder.CreateBr(end_block);
 
     builder.SetInsertPoint(end_block);
@@ -731,7 +844,8 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     }
     throw;
   }
-  RAISE_ERROR("Unsupported ASTNode type: ", node->GetType());
+  context.Diagnostics().RaiseError(
+      node->location, "Unsupported AST node type: ", node->GetType());
 }
 
 llvm::BasicBlock *ExprEmitter::GetOrCreateLabelBlock(std::string_view name) {
@@ -951,8 +1065,11 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     auto curr_block = builder.GetInsertBlock();
 
     RValue switched_val = EmitRValue(switch_stmt->value.get());
-    ASSERT(IsValidSwitchValue(switched_val.c_type.get()),
-           "switch-case requires an integer or enum type");
+    if (!IsValidSwitchValue(switched_val.c_type.get())) {
+      context.Diagnostics().RaiseError(
+          switch_stmt->value->location,
+          "switch requires an integer or enum controlling expression");
+    }
 
     llvm::BasicBlock *default_block;
     llvm::BasicBlock *end_block = llvm::BasicBlock::Create(
@@ -996,8 +1113,10 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
       builder.CreateBr(default_block);
 
       for (const auto &val : case_stmt->case_vals) {
-        ASSERT(IsConstantFoldable(val.get()),
-               "Case value must be constant foldable");
+        if (!IsConstantFoldable(val.get())) {
+          context.Diagnostics().RaiseError(
+              val->location, "Case value must be a constant expression");
+        }
         auto folded =
             EvalNumericConstant(switched_val.c_type, val.get(), context);
         case_blocks.push_back({llvm::cast<llvm::ConstantInt>(folded), body});
@@ -1009,12 +1128,18 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     return;
   }
   if (node->DynCast<BreakStmt>()) {
-    ASSERT(context.loop_layers.size(), "Expect break in a loop statement");
+    if (context.loop_layers.empty()) {
+      context.Diagnostics().RaiseError(
+          node->location, "break statement is not inside a loop or switch");
+    }
     builder.CreateBr(context.CurrLoopLayer().break_block);
     return;
   }
   if (node->DynCast<ContinueStmt>()) {
-    ASSERT(context.loop_layers.size(), "Expect continue in a loop statement");
+    if (context.loop_layers.empty()) {
+      context.Diagnostics().RaiseError(
+          node->location, "continue statement is not inside a loop");
+    }
     builder.CreateBr(context.CurrLoopLayer().continue_block);
     return;
   }
@@ -1023,7 +1148,7 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
       RValue ret = EmitRValue(ret_stmt->ret_value.get());
       TypeRef return_type =
           context.current_function_type->As<FunctionType>()->return_type;
-      ret = TryCastTo(return_type, ret, builder);
+      ret = TryCastTo(return_type, ret, builder, ret_stmt->location);
       builder.CreateRet(ret);
     } else {
       builder.CreateVoidRet();
