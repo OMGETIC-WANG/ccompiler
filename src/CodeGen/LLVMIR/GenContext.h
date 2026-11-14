@@ -7,9 +7,11 @@
 #include <llvm/IR/Constants.h>
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 namespace llvm {
@@ -34,6 +36,9 @@ private:
   Integer _curr;
 };
 
+class EnumElemDecl;
+class ValueDecl;
+
 class LLVMTypeConverter {
 public:
   LLVMTypeConverter(llvm::LLVMContext &context, Counter<> &counter);
@@ -54,17 +59,6 @@ private:
   std::unordered_map<const TypeBase *, llvm::Type *> _types;
 };
 
-struct FunctionValue {
-  TypeRef c_type = nullptr;
-  llvm::Function *function = nullptr;
-};
-
-class GenContextLayer {
-public:
-  std::unordered_map<std::string_view, LValue> variables;
-  std::unordered_map<std::string_view, EnumType *> enums;
-};
-
 class LoopContextLayer {
 public:
   llvm::BasicBlock *continue_block = nullptr;
@@ -73,6 +67,8 @@ public:
 
 class GenContext {
 public:
+  using DeclValue = std::variant<LValue, EnumType *>;
+
   GenContext(llvm::LLVMContext &llvm_context, llvm::Module &module,
              TypeContext &types, DiagnosticContext &diagnostics);
 
@@ -99,71 +95,26 @@ public:
     return type_converter.ConvertArray(type->As<ArrayType>());
   }
 
-  std::vector<GenContextLayer> layers;
   std::vector<LoopContextLayer> loop_layers;
 
-  std::unordered_map<std::string_view, FunctionValue> functions;
   llvm::Function *current_function = nullptr;
   TypeRef current_function_type = nullptr;
 
-  GenContextLayer &CurrLayer() { return layers.back(); }
   LoopContextLayer &CurrLoopLayer() { return loop_layers.back(); }
 
-  void PushLayer() { layers.emplace_back(); }
   void PushLoopLayer() { loop_layers.emplace_back(); }
 
-  void PopLayer() {
-    if (layers.size() > 1) {
-      layers.pop_back();
-    }
-  }
   void PopLoopLayer() {
     if (loop_layers.size() > 1) {
       loop_layers.pop_back();
     }
   }
 
-  LValue *FindVariable(std::string_view name) {
-    for (auto it = layers.rbegin(); it != layers.rend(); ++it) {
-      auto &layer = *it;
-      auto var_it = layer.variables.find(name);
-      if (var_it != layer.variables.end()) {
-        return &var_it->second;
-      }
-    }
-    return nullptr;
-  }
-
-  std::optional<RValue> FindEnumValue(std::string_view name) {
-    for (auto it = layers.rbegin(); it != layers.rend(); ++it) {
-      for (auto &[_, enum_type] : it->enums) {
-        for (auto &value : enum_type->enumerators) {
-          if (value.name == name) {
-            auto llvm_val = std::visit(
-                [this, enum_type](auto v) {
-                  return llvm::ConstantInt::get(
-                      LLVMType(enum_type), v,
-                      !HasTypeTag(enum_type, TypeTag::Unsigned));
-                },
-                value.value);
-            return RValue{enum_type, llvm_val};
-          }
-        }
-      }
-    }
-    return std::nullopt;
-  }
-
-  FunctionValue *FindFunction(std::string_view name) {
-    if (auto it = functions.find(name); it != functions.end()) {
-      return &it->second;
-    }
-    return nullptr;
-  }
-
-  void AddFunction(std::string_view name, FunctionValue value) {
-    functions[name] = value;
-  }
+  void AddLValue(const ValueDecl *decl, LValue value);
+  void AddEnum(const EnumElemDecl *decl, EnumType *type);
+  const LValue *FindLValue(const ValueDecl *decl) const;
+  std::optional<RValue> FindEnumValue(const EnumElemDecl *decl);
+  std::optional<TypeRef> FindDeclType(const ValueDecl *decl);
 
   llvm::Value *CreateStringConstant(std::string_view value, size_t buffer_size);
 
@@ -178,17 +129,7 @@ private:
   TypeContext &types;
   DiagnosticContext &_diagnostics;
   LLVMTypeConverter type_converter;
-};
-
-class GenContextLayerGuard {
-public:
-  explicit GenContextLayerGuard(GenContext &context) : _context(context) {
-    _context.PushLayer();
-  }
-  ~GenContextLayerGuard() { _context.PopLayer(); }
-
-private:
-  GenContext &_context;
+  std::unordered_map<const ValueDecl *, DeclValue> values;
 };
 
 class GenContextLoopLayerGuard {

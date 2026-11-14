@@ -88,7 +88,9 @@ void GenEnumDecl(EnumDecl *decl, GenContext &context) {
 
   context.Types().CompleteEnum(decl->type,
                                decl->As<EnumDecl>()->underlying_type, values);
-  context.CurrLayer().enums[decl->name] = decl->type->As<EnumType>();
+  for (const auto &element : decl->values) {
+    context.AddEnum(element.get(), decl->type->As<EnumType>());
+  }
 }
 
 static bool IsLiteralStringInit(const ArrayType *type,
@@ -281,6 +283,6 @@ LValue GenGlobalVarDecl(VarDecl *decl, GenContext &context) {
   global->setAlignment(llvm::Align(type->GetAlign()));
 
   LValue value{type, global};
-  context.CurrLayer().variables[decl->name] = value;
+  context.AddLValue(decl, value);
   return value;
 }

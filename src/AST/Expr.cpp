@@ -462,6 +462,7 @@ std::unique_ptr<ASTNode> ParsePrimary(Lexer &lexer, CompileContext &context) {
       auto var_ref = std::make_unique<VarRef>();
       var_ref->location = tok.location;
       var_ref->name = name;
+      var_ref->decl = context.FindValue(name);
       return var_ref;
     }
   }

@@ -7,6 +7,7 @@
 #include "Lex/Macro.h"
 #include "SourceManager.h"
 #include "Support/ASTVerifier.h"
+#include "Support/DeclBindingTest.h"
 #include "Util/Diagnostic.h"
 
 #include <array>
@@ -190,6 +191,10 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  if (argc == 2 && std::string_view(argv[1]) == "--decl-binding-self-test") {
+    return RunDeclBindingSelfTest();
+  }
+
   if (argc < 2 || argc > 3) {
     std::cerr << "Usage: " << argv[0]
               << " <source.c> [expected.ast.yaml]\n"
@@ -197,7 +202,10 @@ int main(int argc, char **argv) {
               << argv[0]
               << " --check-verifiers\n"
                  "       "
-              << argv[0] << " --diagnostic-self-test\n";
+              << argv[0]
+              << " --diagnostic-self-test\n"
+                 "       "
+              << argv[0] << " --decl-binding-self-test\n";
     return 2;
   }
 

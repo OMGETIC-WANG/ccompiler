@@ -1,5 +1,6 @@
 #include "Type.h"
 #include "../Exception.h"
+#include "AST.h"
 #include "Context.h"
 #include "Declaration.h"
 
@@ -51,13 +52,11 @@ TypeRef GetOrCreateBaseType(const TypeSpecifier &specifier,
           specifier.location,
           "unsigned cannot qualify a typedef in a type specifier");
     }
-    type = context.FindTypedef(specifier.type_name);
-    if (type) {
-      return type;
+    if (auto *decl = context.FindTypedef(specifier.type_name)) {
+      return decl->type;
     }
-    type = context.FindEnum(specifier.type_name);
-    if (type) {
-      return type;
+    if (auto *decl = context.FindEnum(specifier.type_name)) {
+      return decl->type;
     }
     context.Diagnostics().Fail(specifier.location, "Unknown type name ",
                                specifier.type_name);
@@ -76,7 +75,7 @@ TypeRef GetOrCreateBaseType(const TypeSpecifier &specifier,
 static ParsedType
 ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
                 CompileContext &context,
-                std::vector<std::string_view> function_parameter_names = {}) {
+                std::vector<ParsedParameter> function_parameters = {}) {
   TypeContext &types = context.Types();
 
   if (!declarator->pointers.empty()) {
@@ -86,7 +85,7 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
         curr_type = ApplyTypeTag(curr_type, TypeTag::Const);
       }
     }
-    function_parameter_names.clear();
+    function_parameters.clear();
   }
 
   const DirectDeclarator *direct = declarator->direct_declarator.get();
@@ -95,7 +94,7 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
         .type = curr_type,
         .location = declarator->location,
         .declarator_name = {},
-        .parameter_names = {},
+        .parameters = {},
     };
   }
 
@@ -106,9 +105,9 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
     case DeclType::ParamList: {
       const auto *param_list = suffix->As<ParamList>();
       std::vector<TypeRef> parameter_types;
-      std::vector<std::string_view> parameter_names;
+      std::vector<ParsedParameter> parameters;
       parameter_types.reserve(param_list->params.size());
-      parameter_names.reserve(param_list->params.size());
+      parameters.reserve(param_list->params.size());
 
       for (const auto &param : param_list->params) {
         TypeRef param_type = context.GetType(param.specifier.type_spec);
@@ -119,19 +118,27 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
         }
         if (!param.declarator) {
           parameter_types.push_back(param_type);
-          parameter_names.push_back({});
+          parameters.push_back({
+              .type = param_type,
+              .location = param.specifier.type_spec.location,
+              .name = {},
+          });
           continue;
         }
 
         ParsedType parsed_param =
             ParseDeclarator(param_type, param.declarator.get(), context);
         parameter_types.push_back(parsed_param.type);
-        parameter_names.push_back(parsed_param.declarator_name);
+        parameters.push_back({
+            .type = parsed_param.type,
+            .location = parsed_param.location,
+            .name = parsed_param.declarator_name,
+        });
       }
 
       curr_type = types.Function(curr_type, parameter_types);
       curr_type->As<FunctionType>()->has_va_args = param_list->has_va_args;
-      function_parameter_names = std::move(parameter_names);
+      function_parameters = std::move(parameters);
       break;
     }
     case DeclType::ArraySuffix: {
@@ -141,7 +148,7 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
         size = array_suffix->size;
       }
       curr_type = types.Array(curr_type, size);
-      function_parameter_names.clear();
+      function_parameters.clear();
       break;
     }
     default:
@@ -155,7 +162,7 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
         .type = curr_type,
         .location = declarator->location,
         .declarator_name = {},
-        .parameter_names = {},
+        .parameters = {},
     };
   }
   if (direct_declarator->GetType() == DeclType::IdentifierDeclarator) {
@@ -164,14 +171,14 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
         .type = curr_type,
         .location = declarator->location,
         .declarator_name = identifier->identifier,
-        .parameter_names = curr_type->Is<FunctionType>()
-                               ? std::move(function_parameter_names)
-                               : std::vector<std::string_view>{},
+        .parameters = curr_type->Is<FunctionType>()
+                          ? std::move(function_parameters)
+                          : std::vector<ParsedParameter>{},
     };
   }
   if (direct_declarator->GetType() == DeclType::Declarator) {
     return ParseDeclarator(curr_type, direct_declarator->As<Declarator>(),
-                           context, std::move(function_parameter_names));
+                           context, std::move(function_parameters));
   }
   RAISE_ERROR("Unexpected declarator type");
 }
@@ -307,7 +314,7 @@ std::vector<ParsedType> ParseType(const Declaration *decl,
         .type = base_type,
         .location = decl->location,
         .declarator_name = {},
-        .parameter_names = {},
+        .parameters = {},
     });
   }
   return results;

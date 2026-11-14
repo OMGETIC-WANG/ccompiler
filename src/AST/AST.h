@@ -5,6 +5,15 @@
 #include "Declaration.h"
 #include "Type.h"
 
+class NamedDecl : public ASTNode {
+  TreeNodeFieldAsString(name);
+
+public:
+  std::string_view name;
+};
+
+class ValueDecl : public NamedDecl {};
+
 class LiteralString : public ASTNode {
   ASTNodeImpl(LiteralString);
   TreeNodeFieldAsString(value);
@@ -80,25 +89,31 @@ private:
   SourceLocation _location;
 };
 
-class VarDecl : public ASTNode {
+class ParamDecl : public ValueDecl {
+  ASTNodeImpl(ParamDecl);
+  TreeNodePrintFields(name, type);
+
+public:
+  TypeRef type = nullptr;
+};
+
+class VarDecl : public ValueDecl {
   ASTNodeImpl(VarDecl);
   TreeNodeFieldAsString(name);
   TreeNodePrintFields(type, initializer);
 
 public:
-  std::string_view name;
   TypeRef type = nullptr;
   StorageClass storage_class = StorageClass::None;
   std::unique_ptr<Initializer> initializer;
 };
 
-class TypedefDecl : public ASTNode {
+class TypedefDecl : public NamedDecl {
   ASTNodeImpl(TypedefDecl);
   TreeNodeFieldAsString(name);
   TreeNodePrintFields(name, type);
 
 public:
-  std::string_view name;
   TypeRef type = nullptr;
 };
 
@@ -108,6 +123,7 @@ class VarRef : public ASTNode {
 
 public:
   std::string_view name;
+  ValueDecl *decl = nullptr;
 };
 
 class CompoundStmt : public ASTNode {
@@ -124,22 +140,20 @@ public:
   }
 };
 
-class StructDecl : public ASTNode {
+class StructDecl : public NamedDecl {
   ASTNodeImpl(StructDecl);
   TreeNodePrintFields(name, type, fields);
 
 public:
-  std::string_view name;
   TypeRef type = nullptr;
   std::unique_ptr<CompoundStmt> fields;
 };
 
-class UnionDecl : public ASTNode {
+class UnionDecl : public NamedDecl {
   ASTNodeImpl(UnionDecl);
   TreeNodePrintFields(name, type, fields);
 
 public:
-  std::string_view name;
   TypeRef type = nullptr;
   std::unique_ptr<CompoundStmt> fields;
 };
@@ -234,7 +248,7 @@ public:
   std::unique_ptr<ASTNode> ret_value;
 };
 
-class FunctionDecl : public ASTNode {
+class FunctionDecl : public ValueDecl {
   ASTNodeImpl(FunctionDecl);
   TreeNodeFieldAsString(name);
 
@@ -243,39 +257,36 @@ public:
     std::vector<TreeNodePrintField> print_fields;
     AppendTreeNodePrintField(print_fields, "name", name);
     AppendTreeNodePrintField(print_fields, "function_type", function_type);
-    for (std::string_view parameter_name : parameter_names) {
+    for (const auto &parameter : parameters) {
       print_fields.push_back(
-          {"parameter_name", parameter_name.empty()
+          {"parameter_name", parameter->name.empty()
                                  ? "<anonymous>"
-                                 : std::string(parameter_name)});
+                                 : std::string(parameter->name)});
     }
     AppendTreeNodePrintField(print_fields, "body", body);
     return print_fields;
   }
 
-  std::string_view name;
-  std::vector<std::string_view> parameter_names;
+  std::vector<std::unique_ptr<ParamDecl>> parameters;
   TypeRef function_type = nullptr;
   StorageClass storage_class = StorageClass::None;
   std::unique_ptr<CompoundStmt> body;
 };
 
-class EnumElemDecl : public ASTNode {
+class EnumElemDecl : public ValueDecl {
   ASTNodeImpl(EnumElemDecl);
   TreeNodeFieldAsString(name);
   TreeNodePrintFields(name, value);
 
 public:
-  std::string_view name;
   std::unique_ptr<ASTNode> value;
 };
 
-class EnumDecl : public ASTNode {
+class EnumDecl : public NamedDecl {
   ASTNodeImpl(EnumDecl);
   TreeNodePrintFields(name, type, underlying_type, values);
 
 public:
-  std::string_view name;
   TypeRef type = nullptr;
   TypeRef underlying_type = nullptr;
   bool is_definition = false;

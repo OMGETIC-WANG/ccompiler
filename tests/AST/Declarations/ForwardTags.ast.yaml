@@ -1,0 +1,17 @@
+TranslationUnit:
+  decls:
+    - StructDecl:
+        name: Node
+        type:
+          StructType:
+            type_name: Node
+            is_complete: false
+    - EnumDecl:
+        name: Status
+        type:
+          EnumType:
+            enum_name: Status
+            is_complete: false
+            underlying_type: null
+        underlying_type: {BuiltinType: {type_name: int}}
+        is_definition: false

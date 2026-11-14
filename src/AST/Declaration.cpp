@@ -180,17 +180,13 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
           spec.type_name = context.Sources().GetText(tok);
           lexer.ConsumeToken(tok);
           if (lexer.PeekNextToken().type == TokenType::LBrace ||
-              lexer.PeekNextToken().type == TokenType::Colon) {
+              lexer.PeekNextToken().type == TokenType::Colon ||
+              lexer.PeekNextToken().type == TokenType::Semicolon) {
             auto enum_decl =
                 ParseEnumDecl(lexer, context.Sources().GetText(tok), context);
             enum_decl->location = CombineLocation(
                 enum_token.location, lexer.GetLastConsumedLocation());
             decl_spec.decl = std::move(enum_decl);
-          } else if (lexer.PeekNextToken().type == TokenType::Semicolon) {
-            std::string_view enum_name = context.Sources().GetText(tok);
-            auto enum_type = context.Types().GetOrCreateEnum(
-                context.CurrentScopeId(), enum_name);
-            context.AddEnum(enum_name, enum_type);
           }
         } else if (tok.type == TokenType::LBrace ||
                    lexer.PeekNextToken().type == TokenType::Colon) {

@@ -2,7 +2,8 @@ find_package(yaml-cpp REQUIRED)
 
 set(AST_SCHEMA_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/Support/SchemaFixture.c")
 
-add_executable(ccompiler_tests Main.cpp Support/ASTVerifier.cpp)
+add_executable(ccompiler_tests Main.cpp Support/ASTVerifier.cpp
+                               Support/DeclBindingTest.cpp)
 target_link_libraries(ccompiler_tests PRIVATE ccompiler_codegen
                                               yaml-cpp::yaml-cpp)
 
@@ -36,6 +37,11 @@ list(SORT AST_CASE_SOURCES)
 foreach(ast_source IN LISTS AST_CASE_SOURCES)
   add_ast_case("${ast_source}")
 endforeach()
+
+add_test(NAME AST.Declarations.BindingIdentity
+         COMMAND $<TARGET_FILE:ccompiler_tests> --decl-binding-self-test)
+set_tests_properties(AST.Declarations.BindingIdentity
+                     PROPERTIES LABELS "ast;frontend" TIMEOUT 15)
 
 add_test(NAME AST.Schema.VerifierRegistry COMMAND $<TARGET_FILE:ccompiler_tests>
                                                   --check-verifiers)
@@ -111,6 +117,22 @@ function(add_command_diagnostic_failure name expected_message)
                                                         "diagnostics;frontend")
 endfunction()
 
+function(add_jit_case name source expected_result)
+  add_test(
+    NAME "CodeGen.${name}"
+    COMMAND
+      $<TARGET_FILE:ccompiler> "${CMAKE_CURRENT_SOURCE_DIR}/CodeGen/${source}"
+      -o "${CMAKE_CURRENT_BINARY_DIR}/CodeGen.${name}.ll" -jit-run)
+  set_tests_properties(
+    "CodeGen.${name}"
+    PROPERTIES PASS_REGULAR_EXPRESSION "Return: ${expected_result}" LABELS
+               "codegen;frontend" TIMEOUT 15)
+endfunction()
+
+add_jit_case(DeclBindings DeclBindings.c 60)
+add_jit_case(EnumShadowing EnumShadowing.c 3)
+add_jit_case(Recursion Recursion.c 120)
+
 add_source_diagnostic_failure(Lex.UnknownCharacter UnknownCharacter.c 1 25
                               "Unknown character: '@'")
 add_source_diagnostic_failure(Lex.InvalidExponent Exponent.c 1 2
@@ -133,6 +155,10 @@ add_source_diagnostic_failure(Sema.UnsupportedType UnsupportedType.c 1 1
                               "volatile types are not supported yet")
 add_source_diagnostic_failure(Codegen.UnknownIdentifier UnknownIdentifier.c 1
                               25 "Unknown variable or function: missing")
+add_source_diagnostic_failure(Codegen.OutOfScopeBlock OutOfScopeBlock.c 1 45
+                              "Unknown variable or function: hidden")
+add_source_diagnostic_failure(Codegen.OutOfScopeFor OutOfScopeFor.c 1 68
+                              "Unknown variable or function: index")
 add_source_diagnostic_failure(
   Codegen.StringTooLong StringTooLong.c 1 16
   "Array size is smaller than the literal string size")

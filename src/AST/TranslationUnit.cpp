@@ -186,7 +186,7 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(Lexer &lexer,
           typedef_decl->location = parsed_type.location;
           typedef_decl->name = parsed_type.declarator_name;
           typedef_decl->type = parsed_type.type;
-          context.AddTypedef(typedef_decl->name, parsed_type.type);
+          context.AddTypedef(typedef_decl.get());
           decl_stmt_builder.Add(std::move(typedef_decl));
         }
       }
@@ -216,7 +216,7 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(Lexer &lexer,
             var_decl->storage_class = storage_class;
             var_decl->initializer =
                 std::move(decl->init_declarators[i]->initializer);
-            context.AddVariable(var_decl->name, type);
+            context.AddVariable(var_decl.get());
             decl_stmt_builder.Add(std::move(var_decl));
           } else {
             Token next = lexer.PeekNextToken();
@@ -227,7 +227,6 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(Lexer &lexer,
           }
           break;
         case TypeBaseType::FunctionType:
-          context.AddFunction(parsed_type.declarator_name, type);
           decl_stmt_builder.Add(ParseFunctionDecl(lexer, std::move(parsed_type),
                                                   storage_class, context));
           break;
@@ -396,10 +395,14 @@ static std::unique_ptr<ASTNode> ParseIfStmt(Lexer &lexer,
   auto if_stmt = std::make_unique<IfStmt>();
   lexer.ConsumeNextToken(); // consume "if"
   if_stmt->condition = ParseControlCondExpr(lexer, context);
-  if_stmt->then_branch = ParseStmt(lexer, context);
+  {
+    CompileContextLayerGuard guard(context);
+    if_stmt->then_branch = ParseStmt(lexer, context);
+  }
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::KwElse) {
     lexer.ConsumeToken(tok);
+    CompileContextLayerGuard guard(context);
     if_stmt->else_branch = ParseStmt(lexer, context);
   }
   SourceLocation end_location =
@@ -417,7 +420,10 @@ static std::unique_ptr<WhileStmt> ParseWhileStmt(Lexer &lexer,
   auto while_stmt = std::make_unique<WhileStmt>();
   lexer.ConsumeNextToken(); // consume "while"
   while_stmt->condition = ParseControlCondExpr(lexer, context);
-  while_stmt->body = ParseStmt(lexer, context);
+  {
+    CompileContextLayerGuard guard(context);
+    while_stmt->body = ParseStmt(lexer, context);
+  }
   SourceLocation end_location = while_stmt->body
                                     ? while_stmt->body->location
                                     : lexer.GetLastConsumedLocation();
@@ -430,7 +436,10 @@ static std::unique_ptr<DoWhileStmt> ParseDoWhileStmt(Lexer &lexer,
   Token start_token = lexer.PeekNextToken();
   auto do_while_stmt = std::make_unique<DoWhileStmt>();
   lexer.ConsumeNextToken(); // consume "do"
-  do_while_stmt->body = ParseStmt(lexer, context);
+  {
+    CompileContextLayerGuard guard(context);
+    do_while_stmt->body = ParseStmt(lexer, context);
+  }
   Token while_token = lexer.PeekNextToken();
   if (while_token.type != TokenType::KwWhile) {
     RaiseParserError(context, while_token.location,
@@ -453,6 +462,7 @@ static std::unique_ptr<ForStmt> ParseForStmt(Lexer &lexer,
     RaiseParserError(context, lparen.location, "Expected '('");
   }
   lexer.ConsumeToken(lparen);
+  CompileContextLayerGuard guard(context);
 
   if (lexer.PeekNextToken().type == TokenType::Semicolon) {
     for_stmt->init = nullptr;
@@ -487,7 +497,10 @@ static std::unique_ptr<ForStmt> ParseForStmt(Lexer &lexer,
     RaiseParserError(context, rparen.location, "Expected ')'");
   }
   lexer.ConsumeToken(rparen);
-  for_stmt->body = ParseStmt(lexer, context);
+  {
+    CompileContextLayerGuard body_guard(context);
+    for_stmt->body = ParseStmt(lexer, context);
+  }
   SourceLocation end_location = for_stmt->body
                                     ? for_stmt->body->location
                                     : lexer.GetLastConsumedLocation();
@@ -516,6 +529,7 @@ static std::unique_ptr<SwitchStmt> ParseSwitchStmt(Lexer &lexer,
       RaiseParserError(context, lbrace.location, "Expected '{'");
     }
     lexer.ConsumeToken(lbrace);
+    CompileContextLayerGuard guard(context);
     while (true) {
       Token tok = lexer.PeekNextToken();
       switch (tok.type) {
@@ -609,7 +623,7 @@ std::unique_ptr<StructDecl> ParseStructDecl(Lexer &lexer, std::string_view name,
   auto SD = std::make_unique<StructDecl>();
   SD->name = name;
   SD->type = context.Types().GetOrCreateStruct(context.CurrentScopeId(), name);
-  context.AddStruct(name, SD->type);
+  context.AddStruct(SD.get());
   if (lexer.PeekNextToken().type == TokenType::LBrace) {
     SD->fields = ParseCompoundStmt(lexer, context);
     std::vector<StructField> fields;
@@ -658,7 +672,7 @@ std::unique_ptr<UnionDecl> ParseUnionDecl(Lexer &lexer, std::string_view name,
   auto UD = std::make_unique<UnionDecl>();
   UD->name = name;
   UD->type = context.Types().GetOrCreateUnion(context.CurrentScopeId(), name);
-  context.AddUnion(name, UD->type);
+  context.AddUnion(UD.get());
   if (lexer.PeekNextToken().type == TokenType::LBrace) {
     UD->fields = ParseCompoundStmt(lexer, context);
     std::vector<UnionField> fields;
@@ -729,6 +743,7 @@ static void ParseEnumContent(Lexer &lexer, CompileContext &context,
           CombineLocation(name_token.location, elem_decl->value->location);
     }
     decl->values.push_back(std::move(elem_decl));
+    context.AddEnumerator(decl->values.back().get());
     tok = lexer.PeekNextToken();
     if (tok.type == TokenType::Comma) {
       lexer.ConsumeToken(tok);
@@ -741,7 +756,7 @@ std::unique_ptr<EnumDecl> ParseEnumDecl(Lexer &lexer, std::string_view name,
   auto ED = std::make_unique<EnumDecl>();
   ED->name = name;
   ED->type = context.Types().GetOrCreateEnum(context.CurrentScopeId(), name);
-  context.AddEnum(name, ED->type);
+  context.AddEnum(ED.get());
   if (lexer.PeekNextToken().type == TokenType::Colon) {
     Token colon = lexer.ConsumeNextToken();
     TypeRef parsed_type = ParseType(lexer, context);
@@ -776,10 +791,22 @@ ParseFunctionDecl(Lexer &lexer, ParsedType type, StorageClass storage_class,
   auto FD = std::make_unique<FunctionDecl>();
   FD->location = type.location;
   FD->name = type.declarator_name;
-  FD->parameter_names = std::move(type.parameter_names);
   FD->storage_class = storage_class;
-  CompileContextLayerGuard layer_guard(context);
   FD->function_type = type.type;
+  FD->parameters.reserve(type.parameters.size());
+  for (auto &parameter : type.parameters) {
+    auto parameter_decl = std::make_unique<ParamDecl>();
+    parameter_decl->location = parameter.location;
+    parameter_decl->name = parameter.name;
+    parameter_decl->type = parameter.type;
+    FD->parameters.push_back(std::move(parameter_decl));
+  }
+  context.AddFunction(FD.get());
+
+  CompileContextLayerGuard layer_guard(context);
+  for (const auto &parameter : FD->parameters) {
+    context.AddParameter(parameter.get());
+  }
   if (lexer.PeekNextToken().type == TokenType::LBrace) {
     FD->body = ParseCompoundStmt(lexer, context);
     FD->location = CombineLocation(FD->location, FD->body->location);
@@ -801,7 +828,7 @@ static void AddVaList(CompileContext &context) {
       {"", context.Types().Pointer(context.Types().getVoid()), 2},
       {"", context.Types().getInt(), 3}};
   context.Types().CompleteStruct(va_list_type, fields);
-  context.CurrentLayer().AddTypedef("va_list", va_list_type);
+  context.AddSyntheticTypedef("va_list", va_list_type);
 }
 
 std::unique_ptr<TranslationUnit>

@@ -21,6 +21,7 @@
   x(UnaryExpr)\
   x(DeclStmt)\
   x(VarDecl)\
+  x(ParamDecl)\
   x(TypedefDecl)\
   x(VarRef)\
   x(FunctionInvocation)\

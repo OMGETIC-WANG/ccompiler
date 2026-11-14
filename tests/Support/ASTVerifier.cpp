@@ -156,10 +156,9 @@ void VerifyParameterNames(const FunctionDecl &function,
     context.AddMessage("expected a sequence");
     return;
   }
-  if (names.size() != function.parameter_names.size()) {
+  if (names.size() != function.parameters.size()) {
     context.AddMessage(std::format("expected {} names, got {}",
-                                   function.parameter_names.size(),
-                                   names.size()));
+                                   function.parameters.size(), names.size()));
     return;
   }
 
@@ -173,7 +172,7 @@ void VerifyParameterNames(const FunctionDecl &function,
 
     const std::string expected_value =
         NormalizeParameterName(expected_name.Scalar());
-    const std::string actual_value(function.parameter_names[i]);
+    const std::string actual_value(function.parameters[i]->name);
     if (actual_value != expected_value) {
       context.AddMessage(
           std::format("expected '{}', got '{}'", expected_value, actual_value));
@@ -461,6 +460,12 @@ VERIFY_FIELD(name)
 VERIFY_FIELD(type)
 VerifyStorageClass(*node, expected, context);
 VERIFY_FIELD(initializer)
+END_VERIFY_NODE()
+
+BEGIN_VERIFY_NODE(ParamDecl)
+VERIFY_FIELDS("name", "type")
+VERIFY_FIELD(name)
+VERIFY_FIELD(type)
 END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(TypedefDecl)
@@ -808,6 +813,7 @@ const bool context_verifiers_registered = [] {
   REGISTER_CONTEXT_VERIFIER(CompoundStmt);
   REGISTER_CONTEXT_VERIFIER(FunctionDecl);
   REGISTER_CONTEXT_VERIFIER(VarDecl);
+  REGISTER_CONTEXT_VERIFIER(ParamDecl);
   REGISTER_CONTEXT_VERIFIER(TypedefDecl);
   REGISTER_CONTEXT_VERIFIER(ValueInitializer);
   REGISTER_CONTEXT_VERIFIER(ArrayInitializer);

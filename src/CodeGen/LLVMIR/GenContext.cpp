@@ -1,5 +1,6 @@
 #include "GenContext.h"
 
+#include "../../AST/AST.h"
 #include "../../Exception.h"
 #include "Value.h"
 
@@ -185,6 +186,63 @@ GenContext::GenContext(llvm::LLVMContext &llvm_context, llvm::Module &module,
                        TypeContext &types, DiagnosticContext &diagnostics)
     : counter(1), _llvm_context(llvm_context), _module(module), types(types),
       _diagnostics(diagnostics), type_converter(llvm_context, counter) {}
+
+void GenContext::AddLValue(const ValueDecl *decl, LValue value) {
+  ASSERT(decl != nullptr, "Cannot bind a null declaration");
+  values[decl] = value;
+}
+
+void GenContext::AddEnum(const EnumElemDecl *decl, EnumType *type) {
+  ASSERT(decl != nullptr, "Cannot bind a null enum declaration");
+  ASSERT(type != nullptr, "Cannot bind a null enum type");
+  values[decl] = type;
+}
+
+const LValue *GenContext::FindLValue(const ValueDecl *decl) const {
+  auto found = values.find(decl);
+  if (found == values.end()) {
+    return nullptr;
+  }
+  return std::get_if<LValue>(&found->second);
+}
+
+std::optional<RValue> GenContext::FindEnumValue(const EnumElemDecl *decl) {
+  auto found = values.find(decl);
+  if (found == values.end()) {
+    return std::nullopt;
+  }
+  auto *enum_type = std::get_if<EnumType *>(&found->second);
+  if (!enum_type || !*enum_type) {
+    return std::nullopt;
+  }
+  for (const auto &value : (*enum_type)->enumerators) {
+    if (value.name == decl->name) {
+      auto llvm_val = std::visit(
+          [this, enum_type](auto v) {
+            return llvm::ConstantInt::get(
+                LLVMType(*enum_type), v,
+                !HasTypeTag(*enum_type, TypeTag::Unsigned));
+          },
+          value.value);
+      return RValue{*enum_type, llvm_val};
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<TypeRef> GenContext::FindDeclType(const ValueDecl *decl) {
+  auto found = values.find(decl);
+  if (found == values.end()) {
+    return std::nullopt;
+  }
+  if (auto *value = std::get_if<LValue>(&found->second)) {
+    return value->c_type;
+  }
+  if (auto *enum_type = std::get_if<EnumType *>(&found->second)) {
+    return *enum_type;
+  }
+  return std::nullopt;
+}
 
 llvm::Value *GenContext::CreateStringConstant(std::string_view value,
                                               size_t buffer_size) {

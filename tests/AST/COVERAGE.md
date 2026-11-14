@@ -1,8 +1,9 @@
 # AST coverage matrix
 
-This matrix tracks behavior that is observable in the final `TranslationUnit`
-or through its non-owning `TypeRef` values. A deferred entry has no CTest case
-until the parser behavior can satisfy a stable positive assertion.
+This matrix tracks behavior that is observable in the final `TranslationUnit`,
+its non-owning `TypeRef` values, or its declaration references. A deferred
+entry has no CTest case until the parser behavior can satisfy a stable positive
+assertion.
 
 ## AST nodes
 
@@ -10,7 +11,7 @@ until the parser behavior can satisfy a stable positive assertion.
 |---|---|---|
 | `TranslationUnit` | Covered | All fixtures |
 | `FunctionDecl` | Covered | `Declarations/FunctionSignatures` |
-| `StructDecl` | Covered | `Declarations/Aggregates` |
+| `StructDecl` | Covered | `Declarations/Aggregates`, `Declarations/ForwardTags` |
 | `UnionDecl` | Covered | `Declarations/Aggregates` |
 | `LiteralString` | Covered | `Expressions/StringLiterals` |
 | `LiteralNum` | Covered | `Expressions/IntegerLiterals`, `Expressions/FloatLiterals` |
@@ -18,6 +19,7 @@ until the parser behavior can satisfy a stable positive assertion.
 | `UnaryExpr` | Covered | `Expressions/UnaryOperators` |
 | `DeclStmt` | Covered | `Declarations/MultipleDeclarators`, `Statements/Declarations` |
 | `VarDecl` | Covered | `Declarations/BuiltinTypes` |
+| `ParamDecl` | Covered | `Declarations/FunctionSignatures`, `Declarations.BindingIdentity` |
 | `TypedefDecl` | Covered | `Declarations/Typedefs` |
 | `VarRef` | Covered | `Expressions/Calls`, `Statements/Declarations` |
 | `FunctionInvocation` | Covered | `Expressions/Calls` |
@@ -33,7 +35,7 @@ until the parser behavior can satisfy a stable positive assertion.
 | `DefaultStmt` | Covered | `Statements/Switch` |
 | `BreakStmt` | Covered | `Statements/Loops`, `Statements/Switch` |
 | `ContinueStmt` | Covered | `Statements/Loops` |
-| `EnumDecl` | Covered | `Declarations/Aggregates` |
+| `EnumDecl` | Covered | `Declarations/Aggregates`, `Declarations/ForwardTags` |
 | `EnumElemDecl` | Covered | `Declarations/Aggregates` |
 | `LabelStmt` | Covered | `Statements/Jumps` |
 | `GotoStmt` | Covered | `Statements/Jumps` |

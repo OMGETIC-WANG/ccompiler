@@ -86,7 +86,7 @@ void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
       function->addParamAttr(static_cast<unsigned>(i), *attr);
     }
   }
-  context.AddFunction(decl->name, FunctionValue{resolved, function});
+  context.AddLValue(decl, LValue{resolved, function});
 
   if (!decl->body) {
     return;
@@ -96,7 +96,6 @@ void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
                                "Multiple definitions of function ", decl->name);
   }
 
-  GenContextLayerGuard guard(context);
   context.current_function = function;
   context.current_function_type = resolved;
 
@@ -104,15 +103,16 @@ void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
       llvm::BasicBlock::Create(context.LLVMContext(), "entry", function);
   builder.SetInsertPoint(entry);
 
-  for (size_t i = 0; i < function_type->parameters.size(); ++i) {
-    std::string_view parameter_name = decl->parameter_names[i];
-    if (parameter_name.empty()) {
+  ASSERT(decl->parameters.size() == function_type->parameters.size(),
+         "Function parameters do not match its function type");
+  for (size_t i = 0; i < decl->parameters.size(); ++i) {
+    ParamDecl *parameter = decl->parameters[i].get();
+    if (parameter->name.empty()) {
       continue;
     }
-    TypeRef parameter_type =
-        GetParameterType(function_type->parameters[i], context.Types());
+    TypeRef parameter_type = GetParameterType(parameter->type, context.Types());
     LValue slot = builder.CreateAlloca(parameter_type);
-    context.CurrLayer().variables[parameter_name] = slot;
+    context.AddLValue(parameter, slot);
     builder.CreateStore(
         RValue{parameter_type, function->getArg(static_cast<unsigned>(i))},
         slot);
@@ -180,7 +180,6 @@ GenerateLLVMModule(const TranslationUnit *tu, TypeContext &types,
   module->setDataLayout(target_machine->createDataLayout());
 
   GenContext context(llvm_context, *module, types, diagnostics);
-  context.PushLayer();
   IRBuilder builder(context);
 
   for (const auto &stmt : tu->decls) {

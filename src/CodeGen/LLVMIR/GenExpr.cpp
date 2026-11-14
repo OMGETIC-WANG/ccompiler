@@ -21,6 +21,13 @@ static std::span<const RValue> AsSpan(const std::vector<RValue> &values) {
   return values;
 }
 
+static const EnumElemDecl *AsEnumElemDecl(const ValueDecl *decl) {
+  if (!decl || decl->GetType() != ASTNodeType::EnumElemDecl) {
+    return nullptr;
+  }
+  return decl->As<EnumElemDecl>();
+}
+
 static RValue TryCastTo(TypeRef type, const RValue &value, IRBuilder &builder,
                         SourceLocation location) {
   if (type == value.c_type) {
@@ -244,7 +251,7 @@ struct ExprEmitter::detail {
       }
     }
     LValue value = self.builder.CreateAlloca(type);
-    self.context.CurrLayer().variables[decl->name] = value;
+    self.context.AddLValue(decl, value);
     if (decl->initializer) {
       GenVarInitializer(value, type, decl->initializer.get(), self);
     }
@@ -450,14 +457,21 @@ static BinaryOpType OpAssignToOp(BinaryOpType op_assign_op) {
 
 LValue ExprEmitter::EmitLValue(ASTNode *node) {
   if (auto *var_ref = node->DynCast<VarRef>()) {
-    if (auto *variable = context.FindVariable(var_ref->name)) {
-      return *variable;
+    if (!var_ref->decl) {
+      context.Diagnostics().Fail(
+          var_ref->location, "Unknown variable or function: ", var_ref->name);
     }
-    if (auto *function = context.FindFunction(var_ref->name)) {
-      return LValue{function->c_type, function->function};
+    if (auto *value = context.FindLValue(var_ref->decl)) {
+      return *value;
     }
-    context.Diagnostics().Fail(var_ref->location,
-                               "Unknown variable or function: ", var_ref->name);
+    if (const auto *enum_decl = AsEnumElemDecl(var_ref->decl)) {
+      if (context.FindEnumValue(enum_decl)) {
+        return {};
+      }
+    }
+    context.Diagnostics().Fail(
+        var_ref->location,
+        "Declaration has no generated value: ", var_ref->name);
   }
   if (auto *var_decl = node->DynCast<VarDecl>()) {
     return detail::GenVarDecl(var_decl, *this);
@@ -523,6 +537,23 @@ LValue ExprEmitter::EmitLValue(ASTNode *node) {
 }
 
 RValue ExprEmitter::EmitRValue(ASTNode *node) {
+  if (auto *var_ref = node->DynCast<VarRef>()) {
+    if (!var_ref->decl) {
+      context.Diagnostics().Fail(
+          var_ref->location, "Unknown variable or function: ", var_ref->name);
+    }
+    if (const auto *enum_decl = AsEnumElemDecl(var_ref->decl)) {
+      if (auto enum_value = context.FindEnumValue(enum_decl)) {
+        return *enum_value;
+      }
+    }
+    if (auto *value = context.FindLValue(var_ref->decl)) {
+      return detail::LoadAsRValue(*value, *this);
+    }
+    context.Diagnostics().Fail(
+        var_ref->location,
+        "Declaration has no generated value: ", var_ref->name);
+  }
   if (auto *literal_num = node->DynCast<LiteralNum>()) {
     if (std::holds_alternative<int64_t>(literal_num->value)) {
       return RValue{
@@ -830,19 +861,9 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     return builder.CreatePhi(true_value, true_block, false_value, false_block);
   }
 
-  try {
-    LValue lhs = EmitLValue(node);
-    if (lhs.address) {
-      return detail::LoadAsRValue(lhs, *this);
-    }
-  } catch (...) {
-    if (auto var_ref = node->DynCast<VarRef>()) {
-      auto enum_val = context.FindEnumValue(var_ref->name);
-      if (enum_val.has_value()) {
-        return enum_val.value();
-      }
-    }
-    throw;
+  LValue lhs = EmitLValue(node);
+  if (lhs.address) {
+    return detail::LoadAsRValue(lhs, *this);
   }
   context.Diagnostics().Fail(node->location,
                              "Unsupported AST node type: ", node->GetType());
@@ -874,7 +895,6 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
       return;
     }
     if (auto *compound = node->DynCast<CompoundStmt>()) {
-      GenContextLayerGuard guard(context);
       for (const auto &statement : compound->statements) {
         EmitStmt(statement.get());
       }
@@ -927,7 +947,6 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
 
     builder.SetInsertPoint(true_block);
     {
-      GenContextLayerGuard guard(context);
       EmitStmt(if_stmt->then_branch.get());
     }
     bool then_fallthrough = !builder.IsTerminated();
@@ -940,7 +959,6 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     if (if_stmt->else_branch) {
       builder.SetInsertPoint(false_block);
       {
-        GenContextLayerGuard guard(context);
         EmitStmt(if_stmt->else_branch.get());
       }
       else_fallthrough = !builder.IsTerminated();
@@ -979,7 +997,6 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     builder.CreateCondBr(condition, body_block, end_block);
     builder.SetInsertPoint(body_block);
     {
-      GenContextLayerGuard guard(context);
       EmitStmt(while_stmt->body.get());
     }
     builder.CreateBr(start_block);
@@ -1005,7 +1022,6 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     builder.CreateBr(body_block);
     builder.SetInsertPoint(body_block);
     {
-      GenContextLayerGuard guard(context);
       EmitStmt(dowhile_stmt->body.get());
     }
     builder.CreateBr(cond_block);
@@ -1016,7 +1032,6 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     return;
   }
   if (auto *for_stmt = node->DynCast<ForStmt>()) {
-    GenContextLayerGuard guard(context);
     size_t label_id = context.counter();
     if (for_stmt->init) {
       EmitStmt(for_stmt->init.get());
@@ -1048,7 +1063,6 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     }
     builder.SetInsertPoint(body_block);
     {
-      GenContextLayerGuard guard(context);
       EmitStmt(for_stmt->body.get());
       builder.CreateBr(inc_block);
       builder.SetInsertPoint(inc_block);
@@ -1156,7 +1170,6 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     return;
   }
   if (auto *compound = node->DynCast<CompoundStmt>()) {
-    GenContextLayerGuard guard(context);
     for (const auto &statement : compound->statements) {
       EmitStmt(statement.get());
     }

@@ -514,11 +514,17 @@ private:
 
 class Declaration;
 
+struct ParsedParameter {
+  TypeRef type = nullptr;
+  SourceLocation location;
+  std::string_view name;
+};
+
 struct ParsedType {
   TypeRef type = nullptr;
   SourceLocation location;
   std::string_view declarator_name;
-  std::vector<std::string_view> parameter_names;
+  std::vector<ParsedParameter> parameters;
 };
 
 class CompileContext;
