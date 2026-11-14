@@ -386,7 +386,7 @@ protected:
       max_size = std::max(field.type->GetSize(), max_size);
     }
     size_t align = GetAlign();
-    return (max_size + align - 1) / align;
+    return (max_size + align - 1) / align * align;
   }
 
   size_t EvalAlign() const override {
