@@ -34,6 +34,11 @@ endfunction()
 
 add_diagnostic_case(Lex.UnknownCharacter UnknownCharacter)
 add_diagnostic_case(Lex.InvalidExponent Exponent)
+add_diagnostic_case(Preprocessor.ErrorDirective ErrorDirective)
+add_diagnostic_case(Preprocessor.MissingIfdefIdentifier MissingIfdefIdentifier)
+add_diagnostic_case(Preprocessor.MissingIfndefIdentifier
+                    MissingIfndefIdentifier)
+add_diagnostic_case(Preprocessor.MissingUndefIdentifier MissingUndefIdentifier)
 add_diagnostic_case(Preprocessor.UnknownDirective UnknownDirective)
 add_diagnostic_case(Parser.MissingColon MissingColon)
 add_diagnostic_case(Parser.MultipleStatements MultipleStatements)

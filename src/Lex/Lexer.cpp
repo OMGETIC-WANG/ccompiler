@@ -314,13 +314,58 @@ Token RawLexer::EmitToken() {
 }
 
 static bool IsPreprocessor(std::string_view name) {
-  return name == "include" || name == "define" || name == "if" ||
-         name == "else" || name == "endif";
+  return name == "include" || name == "define" || name == "undef" ||
+         name == "if" || name == "ifdef" || name == "ifndef" ||
+         name == "else" || name == "endif" || name == "error" ||
+         name == "warning";
+}
+
+static void SkipPreprocessorLine(Scanner &scanner) {
+  while (true) {
+    Token tok = scanner.PeekNextTokenH();
+    if (tok.type == TokenType::EndOfFile) {
+      return;
+    }
+    scanner.ConsumeToken(tok);
+    if (tok.type == TokenType::NextLine) {
+      return;
+    }
+  }
+}
+
+static std::pair<SourceLocation, std::string>
+ScanPreprocessorMessage(Scanner &scanner, SourceManager &source_manager) {
+  SourceLocation location;
+  std::string message;
+  while (true) {
+    Token tok = scanner.PeekNextTokenH();
+    if (tok.type == TokenType::EndOfFile) {
+      return {location, message};
+    }
+    if (tok.type == TokenType::NextLine) {
+      scanner.ConsumeToken(tok);
+      return {location, message};
+    }
+    if (location.IsValid()) {
+      message += ' ';
+    } else {
+      location = tok.location;
+    }
+    message += source_manager.GetText(tok);
+    scanner.ConsumeToken(tok);
+  }
 }
 
 Token RawLexer::EmitTokenImpl() {
+  bool is_active_group = IsInValidPPCond();
   Token tok = PeekScannerNextToken();
   if (tok.type != TokenType::Sharp) {
+    if (!is_active_group) {
+      if (tok.type != TokenType::EndOfFile) {
+        CurrScanner()->ConsumeToken(tok);
+      }
+      return tok;
+    }
     if (auto *macro = _macro_context.FindMacro(_source_manager.GetText(tok))) {
       CurrScanner()->ConsumeToken(tok);
       if (macro->has_arg) {
@@ -357,6 +402,10 @@ Token RawLexer::EmitTokenImpl() {
 
   if (preproc_name == "include") {
     curr_scanner.ConsumeToken(preproc_tok);
+    if (!is_active_group) {
+      SkipPreprocessorLine(curr_scanner);
+      return EmitToken();
+    }
     std::string curr_file(_source_manager.GetFileName(preproc_tok.location));
     std::string_view include_file = ScanIncludeFile(
         curr_scanner, _source_manager, _compile_context.Diagnostics());
@@ -366,16 +415,52 @@ Token RawLexer::EmitTokenImpl() {
         std::make_unique<Scanner>(header, _compile_context.Diagnostics()));
   } else if (preproc_name == "define") {
     curr_scanner.ConsumeToken(preproc_tok);
-    _macro_context.AddMacro(ScanMacro(curr_scanner, _source_manager,
-                                      _compile_context.Diagnostics()));
+    if (is_active_group) {
+      _macro_context.AddMacro(ScanMacro(curr_scanner, _source_manager,
+                                        _compile_context.Diagnostics()));
+    } else {
+      SkipPreprocessorLine(curr_scanner);
+    }
+  } else if (preproc_name == "undef") {
+    curr_scanner.ConsumeToken(preproc_tok);
+    Token macro_tok = curr_scanner.PeekNextTokenH();
+    if (macro_tok.type != TokenType::Identifier) {
+      _compile_context.Diagnostics().Fail(macro_tok.location,
+                                          "Expected identifier after #undef");
+    }
+    curr_scanner.ConsumeToken(macro_tok);
+    if (is_active_group) {
+      _macro_context.RemoveMacro(_source_manager.GetText(macro_tok));
+    }
   } else if (preproc_name == "if") {
     curr_scanner.ConsumeToken(preproc_tok);
-    std::unique_ptr<ASTNode> cond = ScanMacroCond(
-        &curr_scanner, _macro_context, _source_manager, _compile_context);
-    uint64_t cond_value =
-        EvalMacroCond(cond.get(), _compile_context.Diagnostics());
+    if (is_active_group) {
+      std::unique_ptr<ASTNode> cond = ScanMacroCond(
+          &curr_scanner, _macro_context, _source_manager, _compile_context);
+      uint64_t cond_value =
+          EvalMacroCond(cond.get(), _compile_context.Diagnostics());
+      _pp_cond_stack.push_back(
+          {.is_active = cond_value != 0, .branch = PPCondBranch::Then});
+    } else {
+      SkipPreprocessorLine(curr_scanner);
+      _pp_cond_stack.push_back(
+          {.is_active = false, .branch = PPCondBranch::Then});
+    }
+  } else if (preproc_name == "ifdef" || preproc_name == "ifndef") {
+    curr_scanner.ConsumeToken(preproc_tok);
+    Token macro_tok = curr_scanner.PeekNextTokenH();
+    if (macro_tok.type != TokenType::Identifier) {
+      _compile_context.Diagnostics().Fail(
+          macro_tok.location, "Expected identifier after #", preproc_name);
+    }
+    curr_scanner.ConsumeToken(macro_tok);
+    bool is_defined =
+        _macro_context.FindMacro(_source_manager.GetText(macro_tok)) != nullptr;
+    if (preproc_name == "ifndef") {
+      is_defined = !is_defined;
+    }
     _pp_cond_stack.push_back(
-        {.is_active = cond_value != 0, .branch = PPCondBranch::Then});
+        {.is_active = is_defined, .branch = PPCondBranch::Then});
   } else if (preproc_name == "else") {
     curr_scanner.ConsumeToken(preproc_tok);
     if (_pp_cond_stack.empty()) {
@@ -391,18 +476,32 @@ Token RawLexer::EmitTokenImpl() {
                                           "Unexpected #endif");
     }
     _pp_cond_stack.pop_back();
+  } else if (preproc_name == "error") {
+    curr_scanner.ConsumeToken(preproc_tok);
+    auto [location, message] =
+        ScanPreprocessorMessage(curr_scanner, _source_manager);
+    if (is_active_group) {
+      _compile_context.Diagnostics().Fail(
+          location.IsValid() ? location : preproc_tok.location,
+          "Preprocessor error: ", message);
+    }
+  } else if (preproc_name == "warning") {
+    curr_scanner.ConsumeToken(preproc_tok);
+    SkipPreprocessorLine(curr_scanner);
+    if (is_active_group) {
+      // TODO: Add warning support to DiagnosticContext
+    }
   }
 
   return EmitToken();
 }
 
 bool RawLexer::IsInValidPPCond() const {
-  if (_pp_cond_stack.empty())
-    return true;
-  PPCond cond = _pp_cond_stack.back();
-  if (cond.is_active) {
-    return cond.branch == PPCondBranch::Then;
-  } else {
-    return cond.branch == PPCondBranch::Else;
+  for (const PPCond &cond : _pp_cond_stack) {
+    bool is_active = cond.is_active == (cond.branch == PPCondBranch::Then);
+    if (!is_active) {
+      return false;
+    }
   }
+  return true;
 }

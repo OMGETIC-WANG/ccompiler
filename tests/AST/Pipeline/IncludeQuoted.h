@@ -1,1 +1,6 @@
+#ifndef INCLUDED_QUOTED_H
+#define INCLUDED_QUOTED_H
+
 #define INCLUDED_VALUE 7
+
+#endif

@@ -1,0 +1,7 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: after_warning
+        initializer:
+          ValueInitializer:
+            value: {LiteralNum: {value: 4}}

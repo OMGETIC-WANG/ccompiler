@@ -1,0 +1,17 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: if_enabled
+        initializer:
+          ValueInitializer:
+            value: {LiteralNum: {value: 1}}
+    - VarDecl:
+        name: if_disabled_else
+        initializer:
+          ValueInitializer:
+            value: {LiteralNum: {value: 2}}
+    - VarDecl:
+        name: nested_if_enabled
+        initializer:
+          ValueInitializer:
+            value: {LiteralNum: {value: 3}}
