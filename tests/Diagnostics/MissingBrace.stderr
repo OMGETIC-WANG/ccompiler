@@ -1,2 +1,2 @@
-SOURCE_FILE_PLACEHOLDER:2:11: error: Unexpected token
-SOURCE_FILE_PLACEHOLDER:3:1: error: Expected '}'
+@SOURCE_FILE@:2:11: error: Unexpected token
+@SOURCE_FILE@:3:1: error: Expected '}'

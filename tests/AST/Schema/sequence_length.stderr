@@ -1,0 +1,2 @@
+FAIL "@SOURCE_FILE@"
+AST.decls: expected 1 items for field 'decls', got 0

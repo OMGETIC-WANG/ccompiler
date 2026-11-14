@@ -1,3 +1,3 @@
-SOURCE_FILE_PLACEHOLDER:3:3: error: Expected ';' after declaration
-SOURCE_FILE_PLACEHOLDER:5:9: error: Expected ';' after statement
-SOURCE_FILE_PLACEHOLDER:6:3: error: volatile types are not supported yet
+@SOURCE_FILE@:3:3: error: Expected ';' after declaration
+@SOURCE_FILE@:5:9: error: Expected ';' after statement
+@SOURCE_FILE@:6:3: error: volatile types are not supported yet

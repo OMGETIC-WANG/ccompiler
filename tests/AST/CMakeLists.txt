@@ -1,0 +1,8 @@
+add_subdirectory(Declarations)
+add_subdirectory(Expressions)
+add_subdirectory(Initializers)
+add_subdirectory(Intrinsics)
+add_subdirectory(Pipeline)
+add_subdirectory(Schema)
+add_subdirectory(Statements)
+add_subdirectory(Types)

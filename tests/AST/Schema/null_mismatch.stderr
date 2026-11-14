@@ -1,0 +1,2 @@
+FAIL "@SOURCE_FILE@"
+AST.decls.0.body: expected null

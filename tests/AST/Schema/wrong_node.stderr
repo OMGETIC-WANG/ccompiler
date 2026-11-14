@@ -1,0 +1,2 @@
+FAIL "@SOURCE_FILE@"
+AST: expected a single 'TranslationUnit' node descriptor

@@ -1,0 +1,4 @@
+-I
+@SOURCE_ROOT@/tests/Include/include-first
+-I
+@SOURCE_ROOT@/tests/Include/include-second

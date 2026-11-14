@@ -1,0 +1,2 @@
+FAIL "@SOURCE_FILE@"
+AST.decls.0.function_type.return_type.tags: expected type tags [unsigned], got []

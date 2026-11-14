@@ -1,0 +1,1 @@
+ccompiler_add_ast_cases(Intrinsics)

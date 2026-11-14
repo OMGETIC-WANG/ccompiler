@@ -1,0 +1,124 @@
+include_guard(GLOBAL)
+
+set(CCCOMPILER_EXPECT_PROCESS_SCRIPT
+    "${CMAKE_CURRENT_LIST_DIR}/ExpectProcess.cmake")
+
+function(ccompiler_require_test_file path description)
+  if(NOT EXISTS "${path}")
+    message(FATAL_ERROR "Missing ${description}: ${path}")
+  endif()
+endfunction()
+
+function(ccompiler_set_test_properties test_name labels)
+  set_tests_properties("${test_name}" PROPERTIES LABELS "${labels}" TIMEOUT 15)
+endfunction()
+
+function(ccompiler_add_self_test test_name argument labels)
+  add_test(NAME "${test_name}" COMMAND $<TARGET_FILE:ccompiler_tests>
+                                       "${argument}")
+  ccompiler_set_test_properties("${test_name}" "${labels}")
+endfunction()
+
+function(ccompiler_add_ast_cases group)
+  file(GLOB ast_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
+  list(SORT ast_sources)
+
+  foreach(ast_source IN LISTS ast_sources)
+    string(REGEX REPLACE "\\.c$" ".ast.yaml" ast_expected "${ast_source}")
+    ccompiler_require_test_file("${ast_expected}"
+                                "AST expectation for ${ast_source}")
+
+    get_filename_component(case_name "${ast_source}" NAME_WE)
+    set(test_name "AST.${group}.${case_name}")
+    add_test(NAME "${test_name}" COMMAND $<TARGET_FILE:ccompiler_tests>
+                                         "${ast_source}" "${ast_expected}")
+    ccompiler_set_test_properties("${test_name}" "ast;frontend")
+  endforeach()
+
+  file(GLOB ast_expectations CONFIGURE_DEPENDS
+       "${CMAKE_CURRENT_SOURCE_DIR}/*.ast.yaml")
+  foreach(ast_expected IN LISTS ast_expectations)
+    string(REGEX REPLACE "\\.ast\\.yaml$" ".c" ast_source "${ast_expected}")
+    if(NOT EXISTS "${ast_source}")
+      message(FATAL_ERROR "Orphan AST expectation without source: "
+                          "${ast_expected}")
+    endif()
+  endforeach()
+endfunction()
+
+function(ccompiler_add_expected_process_test)
+  cmake_parse_arguments(
+    CASE
+    ""
+    "NAME;EXECUTABLE;SOURCE_FILE;ARGS_FILE;AST_EXPECTED_FILE;OUTPUT_FILE;BINARY_ROOT;EXPECTED_STDOUT_FILE;EXPECTED_STDERR_FILE;EXPECT_SUCCESS;JIT_RUN"
+    "LABELS"
+    ${ARGN})
+
+  if(NOT CASE_NAME
+     OR NOT CASE_EXECUTABLE
+     OR NOT DEFINED CASE_EXPECT_SUCCESS)
+    message(FATAL_ERROR "ccompiler_add_expected_process_test requires NAME, "
+                        "EXECUTABLE, and EXPECT_SUCCESS")
+  endif()
+
+  foreach(file_variable SOURCE_FILE ARGS_FILE AST_EXPECTED_FILE
+                        EXPECTED_STDOUT_FILE EXPECTED_STDERR_FILE)
+    if(CASE_${file_variable})
+      ccompiler_require_test_file("${CASE_${file_variable}}"
+                                  "${file_variable} for ${CASE_NAME}")
+    endif()
+  endforeach()
+
+  if(NOT CASE_BINARY_ROOT)
+    set(CASE_BINARY_ROOT "${CMAKE_CURRENT_BINARY_DIR}")
+  endif()
+
+  add_test(
+    NAME "${CASE_NAME}"
+    COMMAND
+      "${CMAKE_COMMAND}" "-DTEST_EXECUTABLE=${CASE_EXECUTABLE}"
+      "-DTEST_SOURCE_FILE=${CASE_SOURCE_FILE}"
+      "-DTEST_ARGS_FILE=${CASE_ARGS_FILE}"
+      "-DTEST_AST_EXPECTED_FILE=${CASE_AST_EXPECTED_FILE}"
+      "-DTEST_OUTPUT_FILE=${CASE_OUTPUT_FILE}" "-DTEST_JIT_RUN=${CASE_JIT_RUN}"
+      "-DTEST_EXPECTED_STDOUT_FILE=${CASE_EXPECTED_STDOUT_FILE}"
+      "-DTEST_EXPECTED_STDERR_FILE=${CASE_EXPECTED_STDERR_FILE}"
+      "-DEXPECT_SUCCESS=${CASE_EXPECT_SUCCESS}"
+      "-DTEST_SOURCE_ROOT=${PROJECT_SOURCE_DIR}"
+      "-DTEST_BINARY_ROOT=${CASE_BINARY_ROOT}" -P
+      "${CCCOMPILER_EXPECT_PROCESS_SCRIPT}")
+  ccompiler_set_test_properties("${CASE_NAME}" "${CASE_LABELS}")
+endfunction()
+
+function(ccompiler_add_jit_case test_name source_file labels)
+  set(source_path "${CMAKE_CURRENT_SOURCE_DIR}/${source_file}")
+  string(REGEX REPLACE "\\.c$" ".stdout" expected_stdout "${source_path}")
+  string(REGEX REPLACE "\\.c$" ".args" args_file "${source_path}")
+
+  ccompiler_require_test_file("${source_path}" "JIT source for ${test_name}")
+  ccompiler_require_test_file("${expected_stdout}"
+                              "stdout expectation for ${test_name}")
+  if(NOT EXISTS "${args_file}")
+    set(args_file "")
+  endif()
+
+  ccompiler_add_expected_process_test(
+    NAME
+    "${test_name}"
+    EXECUTABLE
+    "$<TARGET_FILE:ccompiler>"
+    SOURCE_FILE
+    "${source_path}"
+    ARGS_FILE
+    "${args_file}"
+    OUTPUT_FILE
+    "${CMAKE_CURRENT_BINARY_DIR}/${test_name}.ll"
+    JIT_RUN
+    ON
+    EXPECTED_STDOUT_FILE
+    "${expected_stdout}"
+    EXPECT_SUCCESS
+    ON
+    LABELS
+    "${labels}")
+endfunction()

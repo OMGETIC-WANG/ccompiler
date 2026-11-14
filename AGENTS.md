@@ -51,7 +51,8 @@ suite. The `ccompiler` command emits LLVM IR; omit `-o` to print it. Use
 
 `examples/brainfuck/test.py` builds and runs the end-to-end Brainfuck example.
 `examples/brainfuck/build.py` honors `CCOMPILER` and `HOST_CC`, so it can test
-the compiler built outside the default `build/` path.
+the compiler built outside the default `build/` path. Note: it is only required
+to run when `src/` was changed.
 
 ## Coding Style & Naming Conventions
 
@@ -74,10 +75,12 @@ Add positive cases under `tests/AST/<group>/` as a matching `<case>.c` and
 and remember that present fields are checked while omitted fields are ignored.
 
 Files under `tests/AST/Schema/` intentionally exercise verifier failures and
-are registered explicitly in `tests/CMakeLists.txt`. Add a new verifier
-meta-test through that file when covering another failure mode. Update
-`tests/AST/COVERAGE.md` when adding syntax coverage or changing a documented
-limitation.
+pair each malformed expectation with an exact `.stderr` sidecar. They are
+registered in `tests/AST/Schema/CMakeLists.txt`; add a new verifier meta-test
+through that file when covering another failure mode. Keep per-case diagnostic
+text and runtime values in sidecar files rather than CMake registration code.
+Update `tests/AST/COVERAGE.md` when adding syntax coverage or changing a
+documented limitation.
 
 End-to-end integration cases live under `examples/brainfuck/tests/`. Name
 programs `<case>.bf`, inputs `<case>.in`, and expected output

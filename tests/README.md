@@ -1,58 +1,72 @@
-# AST tests
+# Test suite
 
-The test suite parses valid C source through the real lexer, macro layer, and
-AST parser, then compares the resulting `TranslationUnit` with a partial YAML
-assertion. Code generation and runtime behavior are outside this suite.
+The CTest suite is grouped by test kind. `tests/CMakeLists.txt` owns the shared
+`ccompiler_tests` executable and adds the top-level suites. AST subgroups,
+CodeGen, Diagnostics, and Include each register their own tests in a local
+`CMakeLists.txt`.
+
+Expected values live beside their fixtures. A `CMakeLists.txt` may name a
+fixture, test, label, or expected file, but must not contain diagnostic text,
+runtime return values, or other per-case expectations.
 
 ## Running
 
 ```bash
 cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build build -j2
-ctest --test-dir build -L ast --output-on-failure
+ctest --test-dir build --output-on-failure
 ```
 
-`ctest --test-dir build --output-on-failure` runs the complete registered test
-set. Every positive case carries the `ast` and `frontend` labels. Verifier
-meta-tests carry `ast` and `schema`.
+Useful labels are `ast`, `schema`, `codegen`, `include`, and `diagnostics`.
+For example:
 
-Run one fixture directly when inspecting a mismatch:
+```bash
+ctest --test-dir build -L ast --output-on-failure
+ctest --test-dir build -L diagnostics --output-on-failure
+```
+
+Run an AST fixture directly when inspecting a mismatch:
 
 ```bash
 build/tests/ccompiler_tests tests/AST/Declarations/FunctionSignatures.c
 ```
 
-## Diagnostic tests
+## Test data
 
-The `diagnostics` label covers user-facing error handling. Source fixtures live
-under `tests/Diagnostics/` and are run through the `ccompiler` executable by
-`ExpectDiagnostic.cmake`, which checks the expected `file:line:column: error:`
-lines, empty stdout, and nonzero exit status. Leading and trailing whitespace
-in the captured output and expectations is ignored. Driver cases verify errors
-without a source location use the `ccompiler: error:` prefix.
+| Suite | Required fixture files | Optional fixture files |
+| --- | --- | --- |
+| AST | `<case>.c`, `<case>.ast.yaml` | none |
+| AST schema failure | `<case>.ast.yaml`, `<case>.stderr` | none |
+| CodeGen | `<source>.c`, `<source>.stdout` | `<source>.args` |
+| Include | source, `<source>.stdout` | `<source>.args` |
+| Diagnostics source | `<case>.c`, `<case>.stderr` | `<case>.args` |
+| Diagnostics driver | `<case>.args`, `<case>.stderr` | `<case>.c` |
 
-Multi-error recovery cases pair a `.c` fixture with a `.stderr` file. Use
-`SOURCE_FILE_PLACEHOLDER` wherever the absolute fixture path should appear.
+The exact comparison runner is `tests/cmake/ExpectProcess.cmake`. It checks
+the exit status, compares stdout and stderr exactly after stripping leading and
+trailing whitespace, and requires an unspecified stream to be empty.
 
-`Diagnostics.Formatting` directly checks `DiagnosticContext` formatting and the
-payload carried by `DiagnosticError`.
+`.args` files contain one raw command-line argument per line. Tests may use
+these placeholders:
 
-```bash
-ctest --test-dir build -L diagnostics --output-on-failure
-```
+- `@SOURCE_FILE@`: the test's primary source file.
+- `@SOURCE_ROOT@`: the repository source root.
+- `@BINARY_ROOT@`: the suite's CMake binary directory.
 
-The expected YAML path defaults to the source path with `.c` replaced by
-`.ast.yaml`.
+For source diagnostics, arguments are followed by the source file. For driver
+diagnostics without a `.c` fixture, the `.args` file is the complete argument
+list.
 
-## Adding a case
+## AST assertions
 
-Add `<case>.c` and `<case>.ast.yaml` under `tests/AST/<group>/`. CMake discovers
-positive cases automatically and creates a test named
-`AST.<group>.<case>`. A missing expectation file is a configuration error.
+AST tests parse valid C through the real lexer, macro layer, and parser, then
+compare the resulting `TranslationUnit` with a partial YAML assertion. Present
+fields must match; omitted fields are ignored. Mapping keys are validated, and
+node sequences have exact length and order.
 
-Keep only fields relevant to the behavior under test. A present field must
-match; an omitted field is not checked. Mapping keys are validated, so a typo
-is an error. Node sequences have exact length and order.
+Add `<case>.c` and `<case>.ast.yaml` under an existing `tests/AST/<group>/`
+directory. The group CMake file discovers positive cases and creates
+`AST.<group>.<case>`. A missing expectation is a configuration error.
 
 ```yaml
 TranslationUnit:
@@ -64,59 +78,35 @@ TranslationUnit:
             return_type: {BuiltinType: {type_name: int}}
 ```
 
-## Type assertions
-
 Type references use the same single-node-key descriptor as AST nodes. Add
-`tags` when the test depends on type qualifiers. Tags are checked as an exact
-set and may be omitted when irrelevant.
+`tags` when the test depends on type qualifiers. Supported tags are `const`
+and `unsigned`; optional values use YAML `null`.
 
 ```yaml
 type:
   PointerType:
     tags: [const]
     pointee_type: {BuiltinType: {type_name: int, tags: [const]}}
-```
-
-Supported tags are `const` and `unsigned`. Optional values use YAML `null`:
-
-```yaml
-type:
-  ArrayType:
-    size: null
-    element_type: {BuiltinType: {type_name: int}}
 
 init: null
 ```
 
-Aggregate type metadata can be asserted through `fields`:
+Files under `tests/AST/Schema/` are intentionally malformed expectations. Pair
+each `<case>.ast.yaml` with an exact `<case>.stderr` file. The shared
+`tests/Support/SchemaFixture.c` source is used for these failure tests.
 
-```yaml
-StructType:
-  type_name: Point
-  is_complete: true
-  fields:
-    - name: x
-      type: {BuiltinType: {type_name: int}}
-```
+`AST.Declarations.BindingIdentity`, `AST.Schema.VerifierRegistry`, and
+`Diagnostics.Formatting` are C++ self-tests. Their expected values remain in the
+self-test implementation because they are not CMake registration data.
 
-Designated initializers use ordered `field_initializers` entries with `name`
-and `value`. Intrinsic calls use `name` and ordered `args` entries wrapped as
-`Expr` or `Type`:
+## Adding compiler cases
 
-```yaml
-IntrinsicCall:
-  name: sizeof
-  args:
-    - Type: {BuiltinType: {type_name: int}}
-```
+- CodeGen and Include cases call `ccompiler_add_jit_case` in their suite CMake
+  file; the expected `.stdout` is derived from the source filename.
+- Diagnostics cases call the suite-local `add_diagnostic_case` with the public
+  test name and fixture stem. A source file is appended after any `.args`.
+- AST schema failures call the suite-local `add_ast_schema_failure` in
+  `tests/AST/Schema/CMakeLists.txt`.
+- Every new expected file must remain beside the fixture it describes.
 
-## Verifier tests
-
-Files under `tests/AST/Schema/` intentionally fail the YAML comparison and are
-run through `ExpectFailure.cmake`. They verify unknown-field handling, wrong
-node descriptors, sequence lengths, scalar and literal mismatches, type tags,
-and explicit null checks. `AST.Schema.VerifierRegistry` also checks that every
-AST node and type node has a verifier.
-
-See `tests/AST/COVERAGE.md` for the current node, type, and operator coverage
-matrix and for syntax intentionally deferred from the green suite.
+See `tests/AST/COVERAGE.md` for node, type, and operator coverage.

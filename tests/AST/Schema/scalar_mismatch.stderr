@@ -1,0 +1,2 @@
+FAIL "@SOURCE_FILE@"
+AST.decls.0.name: expected value 'main' for field 'name', got 'other'
