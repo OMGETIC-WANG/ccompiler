@@ -2,6 +2,8 @@
 
 #include <cstdint>
 #include <deque>
+#include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -39,6 +41,8 @@ public:
 
   std::string FormatLocation(SourceLocation location) const;
 
+  void AddIncludePath(std::filesystem::path path);
+
 private:
   struct SourceEntry {
     SourceId id = INVALID_SOURCE_ID;
@@ -49,8 +53,14 @@ private:
 
   SourceHandle AddSource(std::string name, std::string text);
 
+  std::optional<std::filesystem::path>
+  FindSourceFile(std::string_view curr_file,
+                 std::string_view relative_path) const;
+
   const SourceEntry &GetEntry(SourceId source_id) const;
 
   std::deque<SourceEntry> _sources;
   std::unordered_map<std::string, SourceId> _files;
+
+  std::vector<std::filesystem::path> _include_paths;
 };

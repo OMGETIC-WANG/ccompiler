@@ -11,7 +11,7 @@ public:
   using std::runtime_error::runtime_error;
 };
 
-enum class CmdLineArgType { None, Single, Multiple };
+enum class CmdLineArgType { None, Single };
 
 struct CmdLineArgDesc {
 public:
@@ -45,7 +45,7 @@ template <typename T> struct IsVector<std::vector<T>> {
 template <typename T>
   requires IsVector<T>::value
 struct CmdLineArgTypeOf<T> {
-  static constexpr CmdLineArgType value = CmdLineArgType::Multiple;
+  static constexpr CmdLineArgType value = CmdLineArgType::Single;
 };
 
 template <typename T> struct CmdLineArgParser {};

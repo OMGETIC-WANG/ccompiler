@@ -92,6 +92,8 @@ assertion.
 |---|---|---|
 | Object-like macro expansion | Covered | `Pipeline/Macros` |
 | Function-like macro expansion | Covered | `Pipeline/Macros` |
+| Quoted and nested relative `#include` | Covered | `Pipeline/IncludeQuoted`, `Include.LocalRelative` |
+| Include search paths and search order | Covered | `Include.SearchOrder` |
 | Intrinsic registration shared with compiler | Covered | `AST.Schema.VerifierRegistry`, `Intrinsics/*` |
 | Verifier registration completeness | Covered | `AST.Schema.VerifierRegistry` |
 | Unknown fields and malformed descriptors | Covered | `AST.Schema.*` |
@@ -108,7 +110,7 @@ AST:
 | Character literals | Lexed but no primary-expression AST path |
 | Variadic parameter lists | Current parse probe aborts on type specifiers |
 | `sizeof` applied without parentheses | Intrinsic parser currently requires `(` |
-| Quoted and relative `#include` | Current include scanner passes quotes and uses the process working directory |
+| Include guards and conditional header paths | `#ifndef`/`#define` guards are not implemented yet |
 | `long double` declarations | Explicitly rejected; `L` literal type is covered |
 | `volatile`, `extern`, and `register` declarations | Explicitly rejected or unsupported |
 | Nested brace initializers and compound literals | No stable supported AST path |

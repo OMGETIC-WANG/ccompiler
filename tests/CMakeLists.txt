@@ -133,6 +133,29 @@ add_jit_case(DeclBindings DeclBindings.c 60)
 add_jit_case(EnumShadowing EnumShadowing.c 3)
 add_jit_case(Recursion Recursion.c 120)
 
+function(add_include_jit_case name source expected_result)
+  add_test(
+    NAME "Include.${name}"
+    COMMAND
+      $<TARGET_FILE:ccompiler> ${ARGN}
+      "${CMAKE_CURRENT_SOURCE_DIR}/Include/${source}" -o
+      "${CMAKE_CURRENT_BINARY_DIR}/Include.${name}.ll" -jit-run)
+  set_tests_properties(
+    "Include.${name}"
+    PROPERTIES PASS_REGULAR_EXPRESSION "Return: ${expected_result}" LABELS
+               "codegen;frontend;include" TIMEOUT 15)
+endfunction()
+
+add_include_jit_case(LocalRelative local/Main.c 7)
+add_include_jit_case(
+  SearchOrder
+  IncludePaths.c
+  60
+  -I
+  "${CMAKE_CURRENT_SOURCE_DIR}/Include/include-first"
+  -I
+  "${CMAKE_CURRENT_SOURCE_DIR}/Include/include-second")
+
 add_source_diagnostic_failure(Lex.UnknownCharacter UnknownCharacter.c 1 25
                               "Unknown character: '@'")
 add_source_diagnostic_failure(Lex.InvalidExponent Exponent.c 1 2
@@ -172,6 +195,12 @@ add_command_diagnostic_failure(
 add_command_diagnostic_failure(
   Driver.UnknownOption "ccompiler: error: Unknown argument: unknown-option"
   "--unknown-option")
+add_command_diagnostic_failure(
+  Driver.MissingInclude
+  "ccompiler: error: Failed to open include file: missing_header.h"
+  -I
+  "${CMAKE_CURRENT_SOURCE_DIR}/Include/include-first"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Diagnostics/MissingInclude.c")
 set(valid_diagnostic_source
     "${CMAKE_CURRENT_SOURCE_DIR}/AST/Statements/Empty.c")
 set(invalid_diagnostic_output

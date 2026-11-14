@@ -16,6 +16,10 @@ static std::string MakeAbsolutePath(std::string_view path) {
       .string();
 }
 
+static bool IsPseudoFileName(std::string_view path) {
+  return path.size() >= 2 && path.front() == '<' && path.back() == '>';
+}
+
 static std::string ReadFileContent(std::string_view path) {
   std::ifstream file(std::string(path), std::ios::binary | std::ios::ate);
   if (!file.is_open()) {
@@ -84,6 +88,15 @@ SourceHandle SourceManager::LoadSource(std::string source, std::string name) {
   return AddSource(std::move(name), RemoveLineContinuations(source));
 }
 
+void SourceManager::AddIncludePath(std::filesystem::path path) {
+  std::filesystem::path normalized =
+      std::filesystem::absolute(std::move(path)).lexically_normal();
+  if (std::find(_include_paths.begin(), _include_paths.end(), normalized) ==
+      _include_paths.end()) {
+    _include_paths.push_back(std::move(normalized));
+  }
+}
+
 SourceHandle SourceManager::LoadSourceFrom(std::string_view path) {
   std::string absolute_path = MakeAbsolutePath(path);
   auto found = _files.find(absolute_path);
@@ -98,12 +111,48 @@ SourceHandle SourceManager::LoadSourceFrom(std::string_view path) {
   return source;
 }
 
+std::optional<std::filesystem::path>
+SourceManager::FindSourceFile(std::string_view curr_file,
+                              std::string_view relative_path) const {
+  std::filesystem::path relative{relative_path};
+  auto try_candidate = [](const std::filesystem::path &candidate)
+      -> std::optional<std::filesystem::path> {
+    std::error_code error;
+    if (std::filesystem::is_regular_file(candidate, error)) {
+      return candidate.lexically_normal();
+    }
+    return std::nullopt;
+  };
+
+  if (relative.is_absolute()) {
+    return try_candidate(relative);
+  }
+
+  if (!IsPseudoFileName(curr_file)) {
+    std::filesystem::path current{curr_file};
+    if (auto found = try_candidate(current.parent_path() / relative)) {
+      return found;
+    }
+  }
+
+  for (const std::filesystem::path &include_path : _include_paths) {
+    if (auto found = try_candidate(include_path / relative)) {
+      return found;
+    }
+  }
+
+  return std::nullopt;
+}
+
 SourceHandle SourceManager::LoadSourceFrom(std::string_view curr_file,
                                            std::string_view relative_path) {
-  std::filesystem::path include_path =
-      std::filesystem::path(curr_file).parent_path() /
-      std::filesystem::path(relative_path);
-  return LoadSourceFrom(include_path.string());
+  std::optional<std::filesystem::path> include_path =
+      FindSourceFile(curr_file, relative_path);
+  if (!include_path) {
+    throw DriverError("Failed to open include file: " +
+                      std::string(relative_path));
+  }
+  return LoadSourceFrom(include_path->string());
 }
 
 SourceLocation SourceManager::AddSynthetic(std::string text, std::string name) {

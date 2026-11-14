@@ -1,0 +1,3 @@
+#define OUTER_VALUE 100
+#define FIRST_PATH_VALUE 200
+#define NESTED_VALUE 300

@@ -4,6 +4,8 @@
 #include "../AST/Expr.h"
 #include "PPEval.h"
 
+#include <string>
+
 RawLexer::RawLexer(SourceHandle source, MacroContext &macro_context,
                    SourceManager &source_manager,
                    CompileContext &compile_context)
@@ -29,7 +31,11 @@ static std::string_view ScanIncludeFile(Scanner &scanner,
   Token tok = scanner.PeekNextTokenH();
   if (tok.type == TokenType::LiteralString) {
     scanner.ConsumeToken(tok);
-    return source_manager.GetText(tok);
+    std::string_view text = source_manager.GetText(tok);
+    if (text.size() <= 2) {
+      diagnostics.Fail(tok.location, "Unexpected empty include file name");
+    }
+    return text.substr(1, text.size() - 2);
   } else if (tok.type == TokenType::Lt) {
     scanner.ConsumeToken(tok);
     SourceLocation filename_location;
@@ -351,8 +357,11 @@ Token RawLexer::EmitTokenImpl() {
 
   if (preproc_name == "include") {
     curr_scanner.ConsumeToken(preproc_tok);
-    SourceHandle header = _source_manager.LoadSourceFrom(ScanIncludeFile(
-        curr_scanner, _source_manager, _compile_context.Diagnostics()));
+    std::string curr_file(_source_manager.GetFileName(preproc_tok.location));
+    std::string_view include_file = ScanIncludeFile(
+        curr_scanner, _source_manager, _compile_context.Diagnostics());
+    SourceHandle header =
+        _source_manager.LoadSourceFrom(curr_file, include_file);
     _scanners.push_back(
         std::make_unique<Scanner>(header, _compile_context.Diagnostics()));
   } else if (preproc_name == "define") {

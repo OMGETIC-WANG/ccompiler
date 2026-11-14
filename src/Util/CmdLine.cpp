@@ -1,24 +1,5 @@
 #include "CmdLine.h"
 
-static bool IsOption(std::string_view arg) {
-  if (arg.empty())
-    return false;
-  if (arg[0] == '-') {
-    for (size_t i = 1; i < arg.size(); i++) {
-      if (i == 1) {
-        if (!isalpha(arg[i]) && arg[i] != '_' && arg[i] != '-')
-          return false;
-      } else {
-        if (!isalpha(arg[i]) && arg[i] != '_' && arg[i] != '-' &&
-            !isdigit(arg[i]))
-          return false;
-      }
-    }
-    return true;
-  }
-  return false;
-}
-
 static bool CompArgName(std::string_view l, std::string_view r) {
   if (l.size() != r.size())
     return false;
@@ -66,7 +47,7 @@ std::vector<std::string_view> CmdLine::Parse(int argc, char **argv) {
         if (desc->type == CmdLineArgType::None) {
           desc->parser(desc->ptr, {});
           i++;
-        } else if (desc->type == CmdLineArgType::Single) {
+        } else {
           if (i + 1 < argc) {
             desc->parser(desc->ptr, argv[i + 1]);
             i += 2;
@@ -74,17 +55,6 @@ std::vector<std::string_view> CmdLine::Parse(int argc, char **argv) {
             throw CmdLineArgParseError("Missing value for argument: " +
                                        std::string(name));
           }
-        } else {
-          int j = i + 1;
-          while (j < argc) {
-            std::string_view value(argv[j]);
-            if (value == "--" || IsOption(value)) {
-              break;
-            }
-            desc->parser(desc->ptr, value);
-            j++;
-          }
-          i = j;
         }
       } else {
         name = name_val.substr(0, eq_pos);

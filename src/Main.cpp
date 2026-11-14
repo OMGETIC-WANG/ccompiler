@@ -20,6 +20,7 @@
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 static std::string PrintModule(llvm::Module &module) {
   std::string output;
@@ -34,10 +35,14 @@ CMDLINE_ARG(bool, show_tokens, false);
 CMDLINE_ARG(bool, lex_only, false);
 CMDLINE_ARG(bool, jit_run, false);
 CMDLINE_ARG(std::string, output_file, "o", "");
+CMDLINE_ARG(std::vector<std::string>, include_paths, "I", {});
 
 static int Run(int argc, char **argv, SourceManager &source_manager,
                DiagnosticContext &diagnostics) {
   std::vector<std::string_view> rest = CmdLine::Parse(argc, argv);
+  for (const std::string &include_path : include_paths) {
+    source_manager.AddIncludePath(include_path);
+  }
 
   SourceHandle source;
   if (rest.size() > 0) {
