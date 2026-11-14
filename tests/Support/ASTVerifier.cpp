@@ -502,7 +502,7 @@ END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(VarRef)
 VERIFY_FIELDS("name")
-VERIFY_FIELD(name)
+VerifyField("name", node->decl->name, expected, context);
 END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(ReturnStmt)

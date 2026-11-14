@@ -459,10 +459,13 @@ std::unique_ptr<ASTNode> ParsePrimary(Lexer &lexer, CompileContext &context) {
     if (const IntrinsicDesc *desc = IntrinsicManager::GetIntrinsicDesc(name)) {
       return ParseIntrinsicCall(desc, tok, lexer, context);
     } else {
-      auto var_ref = std::make_unique<VarRef>();
+      ValueDecl *decl = context.FindValue(name);
+      if (!decl) {
+        RaiseParserError(context, tok.location,
+                         "Unknown variable or function: ", name);
+      }
+      auto var_ref = std::make_unique<VarRef>(decl);
       var_ref->location = tok.location;
-      var_ref->name = name;
-      var_ref->decl = context.FindValue(name);
       return var_ref;
     }
   }

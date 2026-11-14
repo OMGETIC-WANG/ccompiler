@@ -153,11 +153,11 @@ add_source_diagnostic_failures(Parser.MissingBrace MissingBrace.c
                                MissingBrace.stderr)
 add_source_diagnostic_failure(Sema.UnsupportedType UnsupportedType.c 1 1
                               "volatile types are not supported yet")
-add_source_diagnostic_failure(Codegen.UnknownIdentifier UnknownIdentifier.c 1
-                              25 "Unknown variable or function: missing")
-add_source_diagnostic_failure(Codegen.OutOfScopeBlock OutOfScopeBlock.c 1 45
+add_source_diagnostic_failure(Parser.UnknownIdentifier UnknownIdentifier.c 1 25
+                              "Unknown variable or function: missing")
+add_source_diagnostic_failure(Parser.OutOfScopeBlock OutOfScopeBlock.c 1 45
                               "Unknown variable or function: hidden")
-add_source_diagnostic_failure(Codegen.OutOfScopeFor OutOfScopeFor.c 1 68
+add_source_diagnostic_failure(Parser.OutOfScopeFor OutOfScopeFor.c 1 68
                               "Unknown variable or function: index")
 add_source_diagnostic_failure(
   Codegen.StringTooLong StringTooLong.c 1 16

@@ -119,11 +119,18 @@ public:
 
 class VarRef : public ASTNode {
   ASTNodeImpl(VarRef);
-  TreeNodeFieldAsString(name);
 
 public:
-  std::string_view name;
-  ValueDecl *decl = nullptr;
+  explicit VarRef(ValueDecl *decl) : decl(decl) {
+    ASSERT(decl != nullptr, "VarRef requires a resolved declaration");
+  }
+
+  std::string ToString() const override {
+    return std::format("{} 0x{:x} {}", decl->GetNodeTypeName(), (uintptr_t)decl,
+                       decl->name);
+  }
+
+  ValueDecl *const decl;
 };
 
 class CompoundStmt : public ASTNode {

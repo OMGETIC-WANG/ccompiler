@@ -260,16 +260,12 @@ static TypeRef EvalType(ASTNode *node, GenContext &context) {
     }
   }
   if (auto var_ref = node->DynCast<VarRef>()) {
-    if (!var_ref->decl) {
-      context.Diagnostics().Fail(
-          var_ref->location, "Unknown variable or function: ", var_ref->name);
-    }
     if (auto type = context.FindDeclType(var_ref->decl)) {
       return *type;
     }
     context.Diagnostics().Fail(
         var_ref->location,
-        "Declaration has no generated value: ", var_ref->name);
+        "Declaration has no generated value: ", var_ref->decl->name);
   }
   context.Diagnostics().Fail(
       node->location, "Cannot evaluate type of node: ", node->ToString());

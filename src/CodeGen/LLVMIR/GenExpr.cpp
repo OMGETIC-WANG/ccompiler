@@ -457,10 +457,6 @@ static BinaryOpType OpAssignToOp(BinaryOpType op_assign_op) {
 
 LValue ExprEmitter::EmitLValue(ASTNode *node) {
   if (auto *var_ref = node->DynCast<VarRef>()) {
-    if (!var_ref->decl) {
-      context.Diagnostics().Fail(
-          var_ref->location, "Unknown variable or function: ", var_ref->name);
-    }
     if (auto *value = context.FindLValue(var_ref->decl)) {
       return *value;
     }
@@ -471,7 +467,7 @@ LValue ExprEmitter::EmitLValue(ASTNode *node) {
     }
     context.Diagnostics().Fail(
         var_ref->location,
-        "Declaration has no generated value: ", var_ref->name);
+        "Declaration has no generated value: ", var_ref->decl->name);
   }
   if (auto *var_decl = node->DynCast<VarDecl>()) {
     return detail::GenVarDecl(var_decl, *this);
@@ -538,10 +534,6 @@ LValue ExprEmitter::EmitLValue(ASTNode *node) {
 
 RValue ExprEmitter::EmitRValue(ASTNode *node) {
   if (auto *var_ref = node->DynCast<VarRef>()) {
-    if (!var_ref->decl) {
-      context.Diagnostics().Fail(
-          var_ref->location, "Unknown variable or function: ", var_ref->name);
-    }
     if (const auto *enum_decl = AsEnumElemDecl(var_ref->decl)) {
       if (auto enum_value = context.FindEnumValue(enum_decl)) {
         return *enum_value;
@@ -552,7 +544,7 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     }
     context.Diagnostics().Fail(
         var_ref->location,
-        "Declaration has no generated value: ", var_ref->name);
+        "Declaration has no generated value: ", var_ref->decl->name);
   }
   if (auto *literal_num = node->DynCast<LiteralNum>()) {
     if (std::holds_alternative<int64_t>(literal_num->value)) {
