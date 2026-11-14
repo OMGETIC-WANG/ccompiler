@@ -8,6 +8,7 @@ target_link_libraries(ccompiler_tests PRIVATE ccompiler_codegen
 include(cmake/CCCompilerTests.cmake)
 
 add_subdirectory(AST)
+add_subdirectory(Sema)
 add_subdirectory(CodeGen)
 add_subdirectory(Include)
 add_subdirectory(Diagnostics)

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../CodeGen/LLVMIR/Value.h"
-#include "ASTNode.h"
+#include "AST.h"
 #include "Type.h"
 #include <memory>
 #include <string>
@@ -26,11 +26,14 @@ enum class IntrinsicCallArgKind {
 using IntrinsicEvaluator =
     RValue (*)(std::vector<IntrinsicCallArg> &args,
                std::variant<ExprEmitter *, GenContext *> arg);
+using IntrinsicTypeEvaluator =
+    TypeRef (*)(const std::vector<IntrinsicCallArg> &args, TypeContext &types);
 
 struct IntrinsicDesc {
   std::string_view name;
   std::vector<IntrinsicCallArgKind> arg_kinds;
   IntrinsicEvaluator evaluator;
+  IntrinsicTypeEvaluator type_evaluator;
   bool is_constant_evalable = false;
 
   struct Hash {
@@ -57,10 +60,10 @@ struct IntrinsicDesc {
   };
 };
 
-class IntrinsicCall : public ASTNode {
+class IntrinsicCall : public Expr {
   ASTNodeImpl(IntrinsicCall);
 
-  std::string ToString() const override {
+  std::string ToStringImpl() const override {
     return desc ? std::string(desc->name) : "<unknown_intrinsic>";
   }
 

@@ -44,6 +44,7 @@
   x(TypeCast)\
   x(GetField)\
   x(PtrGetField)\
+  x(ImplicitCast)\
   x(IntrinsicCall)\
   x(EmptyStmt)\
   x(ConditionalExpr)

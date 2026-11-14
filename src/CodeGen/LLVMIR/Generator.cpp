@@ -67,10 +67,8 @@ void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
 
   llvm::Function *function = context.Module().getFunction(decl->name);
   if (function) {
-    if (function->getFunctionType() != llvm_function_type) {
-      context.Diagnostics().Fail(
-          decl->location, "Conflicting declaration for function ", decl->name);
-    }
+    ASSERT(function->getFunctionType() == llvm_function_type,
+           "Sema accepted conflicting function declarations");
   } else {
     function = llvm::Function::Create(llvm_function_type, linkage, decl->name,
                                       context.Module());
@@ -92,8 +90,7 @@ void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
     return;
   }
   if (!function->empty()) {
-    context.Diagnostics().Fail(decl->location,
-                               "Multiple definitions of function ", decl->name);
+    RAISE_ERROR("Sema accepted multiple definitions of function ", decl->name);
   }
 
   context.current_function = function;
@@ -149,8 +146,8 @@ void GenTopLevelStmt(ASTNode *stmt, GenContext &context, IRBuilder &builder) {
     break;
   }
   default:
-    context.Diagnostics().Fail(
-        stmt->location, "Unsupported top-level AST node: ", stmt->GetType());
+    RAISE_ERROR("Sema accepted an unsupported top-level AST node: ",
+                stmt->GetType());
   }
 }
 
@@ -159,6 +156,8 @@ GenerateLLVMModule(const TranslationUnit *tu, TypeContext &types,
                    llvm::LLVMContext &llvm_context,
                    DiagnosticContext &diagnostics) {
   ASSERT(tu != nullptr, "Translation unit must not be null");
+  ASSERT(tu->is_semantically_analyzed,
+         "LLVM generation requires a semantically analyzed translation unit");
 
   auto module = std::make_unique<llvm::Module>("ccompiler", llvm_context);
 

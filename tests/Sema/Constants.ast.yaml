@@ -1,0 +1,38 @@
+TranslationUnit:
+  decls:
+    - EnumDecl:
+        name: Color
+        type:
+          EnumType:
+            enum_name: Color
+        values:
+          - EnumElemDecl:
+              name: Red
+              type:
+                EnumType:
+                  enum_name: Color
+              constant_value: 3
+              value:
+                BinaryExpr:
+                  type: {BuiltinType: {type_name: int}}
+                  constant_value: 3
+                  op_type: Add
+    - FunctionDecl:
+        body:
+          CompoundStmt:
+            statements:
+              - ReturnStmt:
+                  ret_value:
+                    ImplicitCast:
+                      type: {BuiltinType: {type_name: int}}
+                      value_category: RValue
+                      constant_value: 3
+                      target_type: {BuiltinType: {type_name: int}}
+                      operand:
+                        VarRef:
+                          type:
+                            EnumType:
+                              enum_name: Color
+                          value_category: RValue
+                          constant_value: 3
+                          name: Red

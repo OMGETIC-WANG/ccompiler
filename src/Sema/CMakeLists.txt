@@ -1,0 +1,1 @@
+target_sources(ccompiler_frontend PRIVATE SemanticAnalysis.cpp)

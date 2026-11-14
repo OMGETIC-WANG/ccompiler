@@ -5,6 +5,9 @@
 #include "Declaration.h"
 #include "Type.h"
 
+#include <optional>
+#include <variant>
+
 class NamedDecl : public ASTNode {
   TreeNodeFieldAsString(name);
 
@@ -14,18 +17,68 @@ public:
 
 class ValueDecl : public NamedDecl {};
 
-class LiteralString : public ASTNode {
+using NumericValue = std::variant<long double, uint64_t, int64_t>;
+
+// clang-format off
+#define VALUE_CATEGORY_VALUES(x)\
+  x(LValue)\
+  x(RValue)\
+  x(FunctionDesignator)
+// clang-format on
+
+MAKE_ENUM(ValueCategory, VALUE_CATEGORY_VALUES)
+REGISTER_ENUM(ValueCategory, VALUE_CATEGORY_VALUES)
+
+class Expr : public ASTNode {
+public:
+  std::string ToString() const final {
+    std::string to_string_impl = ToStringImpl();
+    if (to_string_impl.empty()) {
+      return std::string(EnumRefl<ValueCategory>::GetName(value_category));
+    }
+    return std::format("{} {}",
+                       EnumRefl<ValueCategory>::GetName(value_category),
+                       to_string_impl);
+  }
+
+  virtual std::string ToStringImpl() const { return {}; }
+
+  TypeRef type = nullptr;
+  ValueCategory value_category = ValueCategory::RValue;
+  std::optional<NumericValue> constant_value;
+};
+
+#define ExprFieldAsString(field)                                               \
+  std::string ToStringImpl() const override { return std::format("{}", field); }
+
+inline void AppendExprPrintFields(std::vector<TreeNodePrintField> &fields,
+                                  const Expr &expr) {
+  AppendTreeNodePrintField(fields, "type", expr.type);
+}
+
+#define ExprPrintFields(...)                                                   \
+public:                                                                        \
+  std::vector<TreeNodePrintField> GetPrintFields() const override {            \
+    std::vector<TreeNodePrintField> print_fields;                              \
+    AppendExprPrintFields(print_fields, *this);                                \
+    FOR_EACH(__AddTreeNodePrintField __VA_OPT__(, ) __VA_ARGS__)               \
+    return print_fields;                                                       \
+  }
+
+class LiteralString : public Expr {
   ASTNodeImpl(LiteralString);
-  TreeNodeFieldAsString(value);
+  ExprPrintFields();
+  ExprFieldAsString(value);
 
 public:
   CowString value;
 };
 
-class LiteralNum : public ASTNode {
+class LiteralNum : public Expr {
   ASTNodeImpl(LiteralNum);
+  ExprPrintFields();
 
-  std::string ToString() const override {
+  std::string ToStringImpl() const override {
     std::string value_s =
         std::visit([](auto val) { return std::to_string(val); }, value);
     return std::format("{}{}:{}", type->ToString(),
@@ -33,8 +86,7 @@ class LiteralNum : public ASTNode {
   }
 
 public:
-  TypeRef type;
-  std::variant<long double, uint64_t, int64_t> value;
+  NumericValue value;
 };
 
 class Stmt : public ASTNode {
@@ -120,15 +172,16 @@ public:
   TypeRef type = nullptr;
 };
 
-class VarRef : public ASTNode {
+class VarRef : public Expr {
   ASTNodeImpl(VarRef);
+  ExprPrintFields();
 
 public:
   explicit VarRef(ValueDecl *decl) : decl(decl) {
     ASSERT(decl != nullptr, "VarRef requires a resolved declaration");
   }
 
-  std::string ToString() const override;
+  std::string ToStringImpl() const override;
 
   ValueDecl *const decl;
 };
@@ -268,9 +321,11 @@ public:
 
 class EnumElemDecl : public ValueDecl {
   ASTNodeImpl(EnumElemDecl);
-  TreeNodePrintFields(value);
+  TreeNodePrintFields(type, value);
 
 public:
+  TypeRef type = nullptr;
+  std::optional<NumericValue> constant_value;
   std::unique_ptr<ASTNode> value;
 };
 
@@ -305,9 +360,9 @@ class EmptyStmt : public Stmt {
   ASTNodeImpl(EmptyStmt);
 };
 
-class ConditionalExpr : public ASTNode {
+class ConditionalExpr : public Expr {
   ASTNodeImpl(ConditionalExpr);
-  TreeNodePrintFields(condition, true_expr, false_expr);
+  ExprPrintFields(condition, true_expr, false_expr);
 
 public:
   std::unique_ptr<ASTNode> condition;

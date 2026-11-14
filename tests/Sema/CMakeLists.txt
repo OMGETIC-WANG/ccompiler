@@ -1,0 +1,1 @@
+ccompiler_add_sema_cases(Core)

@@ -7,11 +7,9 @@
 #include <llvm/IR/Constants.h>
 
 #include <cstddef>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <variant>
 #include <vector>
 
 namespace llvm {
@@ -36,7 +34,6 @@ private:
   Integer _curr;
 };
 
-class EnumElemDecl;
 class ValueDecl;
 
 class LLVMTypeConverter {
@@ -67,8 +64,6 @@ public:
 
 class GenContext {
 public:
-  using DeclValue = std::variant<LValue, EnumType *>;
-
   GenContext(llvm::LLVMContext &llvm_context, llvm::Module &module,
              TypeContext &types, DiagnosticContext &diagnostics);
 
@@ -111,10 +106,7 @@ public:
   }
 
   void AddLValue(const ValueDecl *decl, LValue value);
-  void AddEnum(const EnumElemDecl *decl, EnumType *type);
   const LValue *FindLValue(const ValueDecl *decl) const;
-  std::optional<RValue> FindEnumValue(const EnumElemDecl *decl);
-  std::optional<TypeRef> FindDeclType(const ValueDecl *decl);
 
   llvm::Value *CreateStringConstant(std::string_view value, size_t buffer_size);
 
@@ -129,7 +121,7 @@ private:
   TypeContext &types;
   DiagnosticContext &_diagnostics;
   LLVMTypeConverter type_converter;
-  std::unordered_map<const ValueDecl *, DeclValue> values;
+  std::unordered_map<const ValueDecl *, LValue> values;
 };
 
 class GenContextLoopLayerGuard {

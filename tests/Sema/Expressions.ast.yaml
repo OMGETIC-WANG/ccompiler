@@ -1,0 +1,7 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        name: main
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}

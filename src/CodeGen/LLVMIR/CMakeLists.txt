@@ -37,7 +37,7 @@ target_sources(
           GenDecl.cpp
           GenExpr.cpp
           IRBuilder.cpp
-          ConstantEval.cpp
+          ConstantLowering.cpp
           Va.cpp
           Sizeof.cpp
           Intrinsics.cpp)

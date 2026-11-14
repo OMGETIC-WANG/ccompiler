@@ -46,6 +46,33 @@ function(ccompiler_add_ast_cases group)
   endforeach()
 endfunction()
 
+function(ccompiler_add_sema_cases group)
+  file(GLOB sema_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
+  list(SORT sema_sources)
+
+  foreach(sema_source IN LISTS sema_sources)
+    string(REGEX REPLACE "\\.c$" ".ast.yaml" sema_expected "${sema_source}")
+    ccompiler_require_test_file("${sema_expected}"
+                                "Sema expectation for ${sema_source}")
+
+    get_filename_component(case_name "${sema_source}" NAME_WE)
+    set(test_name "Sema.${group}.${case_name}")
+    add_test(NAME "${test_name}" COMMAND $<TARGET_FILE:ccompiler_tests> --sema
+                                         "${sema_source}" "${sema_expected}")
+    ccompiler_set_test_properties("${test_name}" "sema;frontend")
+  endforeach()
+
+  file(GLOB sema_expectations CONFIGURE_DEPENDS
+       "${CMAKE_CURRENT_SOURCE_DIR}/*.ast.yaml")
+  foreach(sema_expected IN LISTS sema_expectations)
+    string(REGEX REPLACE "\\.ast\\.yaml$" ".c" sema_source "${sema_expected}")
+    if(NOT EXISTS "${sema_source}")
+      message(FATAL_ERROR "Orphan Sema expectation without source: "
+                          "${sema_expected}")
+    endif()
+  endforeach()
+endfunction()
+
 function(ccompiler_add_expected_process_test)
   cmake_parse_arguments(
     CASE

@@ -11,6 +11,7 @@ void IntrinsicManager::RegisterIntrinsic(IntrinsicDesc desc) {
 
 std::vector<TreeNodePrintField> IntrinsicCall::GetPrintFields() const {
   std::vector<TreeNodePrintField> print_fields;
+  AppendExprPrintFields(print_fields, *this);
   for (const auto &arg : args) {
     if (std::holds_alternative<std::unique_ptr<ASTNode>>(arg)) {
       const auto &expr_arg = std::get<std::unique_ptr<ASTNode>>(arg);

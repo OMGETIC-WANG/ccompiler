@@ -5,7 +5,7 @@
 #include "../../AST/Operations.h"
 #include "../../AST/Type.h"
 #include "../../Util/Diagnostic.h"
-#include "ConstantEval.h"
+#include "ConstantLowering.h"
 #include "GenDecl.h"
 #include "IRBuilder.h"
 #include "Value.h"
@@ -26,48 +26,6 @@ static const EnumElemDecl *AsEnumElemDecl(const ValueDecl *decl) {
     return nullptr;
   }
   return decl->As<EnumElemDecl>();
-}
-
-static RValue TryCastTo(TypeRef type, const RValue &value, IRBuilder &builder,
-                        SourceLocation location) {
-  if (type == value.c_type) {
-    return value;
-  }
-  if (builder.Context().LLVMType(type) ==
-      builder.Context().LLVMType(value.c_type)) {
-    return RValue{type, value.ir_value};
-  }
-  if (!IsNumericType(type) || !IsNumericType(value.c_type)) {
-    builder.Context().Diagnostics().Fail(
-        location, "Failed to cast between incompatible types");
-  }
-  return builder.CreateNumericCast(value, type);
-}
-
-static bool LosesConstInPointerConversion(TypeRef from, TypeRef to) {
-  if (!from->Is<PointerType>() || !to->Is<PointerType>()) {
-    return false;
-  }
-
-  TypeRef from_pointee = from->As<PointerType>()->pointee_type;
-  TypeRef to_pointee = to->As<PointerType>()->pointee_type;
-  if (HasTypeTag(from_pointee, TypeTag::Const) &&
-      !HasTypeTag(to_pointee, TypeTag::Const)) {
-    return true;
-  }
-  return LosesConstInPointerConversion(from_pointee, to_pointee);
-}
-
-static void CheckConstAssignment(TypeRef target, TypeRef value,
-                                 SourceLocation location, GenContext &context) {
-  if (HasTypeTag(target, TypeTag::Const)) {
-    context.Diagnostics().Fail(location,
-                               "Cannot assign to a const-qualified object");
-  }
-  if (LosesConstInPointerConversion(value, target)) {
-    context.Diagnostics().Fail(
-        location, "Cannot assign a pointer after discarding const");
-  }
 }
 
 static RValue CreateIndex(size_t index, GenContext &context) {
@@ -96,11 +54,8 @@ struct ExprEmitter::detail {
       if (auto *array_init = initializer->DynCast<ArrayInitializer>()) {
         size_t array_size =
             array_type->size.value_or(array_init->initializers.size());
-        if (array_init->initializers.size() > array_size) {
-          self.context.Diagnostics().Fail(
-              array_init->location,
-              "Array initializer has more elements than the array size");
-        }
+        ASSERT(array_init->initializers.size() <= array_size,
+               "Sema accepted an oversized array initializer");
 
         RValue array_base = LoadAsRValue(value, self);
         for (size_t i = 0; i < array_size; ++i) {
@@ -122,11 +77,8 @@ struct ExprEmitter::detail {
       if (IsLiteralStringInit(array_type, initializer)) {
         auto *literal_str =
             initializer->As<ValueInitializer>()->value->As<LiteralString>();
-        if (array_type->size.value() < literal_str->value.view().size() + 1) {
-          self.context.Diagnostics().Fail(
-              literal_str->location,
-              "Array size is smaller than the literal string size");
-        }
+        ASSERT(array_type->size.value() >= literal_str->value.view().size() + 1,
+               "Sema accepted an oversized string initializer");
         auto s = self.context.CreateStringConstant(literal_str->value.view(),
                                                    array_type->size.value());
         self.builder.CreateMemcpy(value, RValue{nullptr, s},
@@ -140,10 +92,7 @@ struct ExprEmitter::detail {
         std::vector<uint8_t> fields_inited(struct_type->fields.size(), false);
         for (const auto &[name, init] : field_init->field_initializers) {
           auto field = struct_type->GetField(name);
-          if (!field.has_value()) {
-            self.context.Diagnostics().Fail(field_init->location,
-                                            "Unknown field name: ", name);
-          }
+          ASSERT(field.has_value(), "Sema accepted an unknown field");
           size_t field_index = 0;
           bool found = false;
           for (size_t i = 0; i < struct_type->fields.size(); ++i) {
@@ -153,10 +102,7 @@ struct ExprEmitter::detail {
               break;
             }
           }
-          if (!found) {
-            self.context.Diagnostics().Fail(field_init->location,
-                                            "Unknown field name: ", name);
-          }
+          ASSERT(found, "Sema accepted an unknown field");
           fields_inited[field_index] = true;
           GenVarInitializer(self.builder.GetElementPtr(value, field.value(),
                                                        field_init->location),
@@ -171,11 +117,8 @@ struct ExprEmitter::detail {
         }
       }
       if (auto *array_init = initializer->DynCast<ArrayInitializer>()) {
-        if (array_init->initializers.size() > struct_type->fields.size()) {
-          self.context.Diagnostics().Fail(
-              array_init->location,
-              "Struct initializer has more elements than the struct fields");
-        }
+        ASSERT(array_init->initializers.size() <= struct_type->fields.size(),
+               "Sema accepted an oversized struct initializer");
         for (size_t i = 0; i < array_init->initializers.size(); i++) {
           auto &field = struct_type->fields[i];
           GenVarInitializer(self.builder.GetElementPtr(value, field),
@@ -194,62 +137,17 @@ struct ExprEmitter::detail {
 
     if (auto *val_init = initializer->DynCast<ValueInitializer>()) {
       RValue val = self.EmitRValue(val_init->value.get());
-      val = TryCastTo(type, val, self.builder, val_init->location);
       self.builder.CreateStore(val, value);
       return;
     }
 
-    self.context.Diagnostics().Fail(initializer->location,
-                                    "Unexpected initializer");
+    RAISE_ERROR("Sema accepted an unsupported initializer");
   }
 
   static LValue GenVarDecl(VarDecl *decl, ExprEmitter &self) {
-    if (decl->storage_class != StorageClass::None) {
-      self.context.Diagnostics().Fail(
-          decl->location, "Local static storage is not supported yet");
-    }
+    ASSERT(decl->storage_class == StorageClass::None,
+           "Sema accepted unsupported local static storage");
     TypeRef type = decl->type;
-    if (decl->type->Is<ArrayType>()) {
-      auto array_type = decl->type->As<ArrayType>();
-      if (!array_type->size.has_value()) {
-        if (!decl->initializer) {
-          self.context.Diagnostics().Fail(
-              decl->location,
-              "Array with unspecified size requires an initializer");
-        }
-        if (auto *array_init = decl->initializer->DynCast<ArrayInitializer>()) {
-          if (!array_type->size.has_value()) {
-            type = ApplyTypeTag(
-                self.context.Types().Array(array_type->element_type,
-                                           array_init->initializers.size()),
-                static_cast<TypeTag>(type.get_tag()));
-          } else {
-            if (array_type->size.value() < array_init->initializers.size()) {
-              self.context.Diagnostics().Fail(
-                  array_init->location,
-                  "Array initializer has more elements than the array size");
-            }
-          }
-        } else {
-          if (IsLiteralStringInit(array_type, decl->initializer.get())) {
-            type = ApplyTypeTag(self.context.Types().Array(
-                                    array_type->element_type,
-                                    decl->initializer->As<ValueInitializer>()
-                                            ->value->As<LiteralString>()
-                                            ->value.view()
-                                            .size() +
-                                        1),
-                                static_cast<TypeTag>(type.get_tag()));
-          } else {
-            self.context.Diagnostics().Fail(
-                decl->initializer->location,
-                "Array initializer must be a brace list or string literal");
-          }
-        }
-      } else {
-        // TODO: check initializer and size
-      }
-    }
     LValue value = self.builder.CreateAlloca(type);
     self.context.AddLValue(decl, value);
     if (decl->initializer) {
@@ -259,14 +157,28 @@ struct ExprEmitter::detail {
   }
 
   static RValue LoadAsRValue(const LValue &value, ExprEmitter &self) {
-    if (auto *array = value.c_type->DynCast<ArrayType>()) {
-      return RValue{self.context.Types().Pointer(array->element_type),
-                    value.address};
-    }
-    if (value.c_type->Is<FunctionType>()) {
-      return RValue{self.context.Types().Pointer(value.c_type), value.address};
+    if (value.c_type->Is<ArrayType>() || value.c_type->Is<FunctionType>()) {
+      return RValue{value.c_type, value.address};
     }
     return self.builder.CreateLoad(value.c_type, value);
+  }
+
+  static RValue EmitCast(TypeRef target_type, const RValue &value,
+                         ExprEmitter &self) {
+    if (target_type == value.c_type ||
+        self.context.LLVMType(target_type) ==
+            self.context.LLVMType(value.c_type)) {
+      return RValue{target_type, value.ir_value};
+    }
+    if (target_type->Is<PointerType>() &&
+        (value.c_type->Is<PointerType>() || value.c_type->Is<ArrayType>() ||
+         value.c_type->Is<FunctionType>())) {
+      return RValue{target_type, value.ir_value};
+    }
+    if (IsNumericType(target_type) && IsNumericType(value.c_type)) {
+      return self.builder.CreateNumericCast(value, target_type);
+    }
+    RAISE_ERROR("Sema approved an unsupported implicit conversion");
   }
 
   static RValue CastToI1IfNeeded(const RValue &value, ExprEmitter &self) {
@@ -324,63 +236,28 @@ struct ExprEmitter::detail {
     return EvalAndOr<EvalAndOr::Or>(left, right, self);
   }
 
-  static TypeRef PromoteNumericOperands(RValue &left, RValue &right,
-                                        SourceLocation location,
-                                        ExprEmitter &self) {
-    TypeRef common_type =
-        UsualArithmeticType(left.c_type, right.c_type, self.context.Types());
-    left = TryCastTo(common_type, left, self.builder, location);
-    right = TryCastTo(common_type, right, self.builder, location);
-    return common_type;
-  }
-
   static RValue EvalBinaryOp(BinaryOpType op_type, RValue left, RValue right,
                              SourceLocation location, ExprEmitter &self) {
     if (op_type == BinaryOpType::BitAnd || op_type == BinaryOpType::BitOr ||
         op_type == BinaryOpType::BitXor) {
-      if (!IsIntegerType(left.c_type)) {
-        self.context.Diagnostics().Fail(
-            location, "Bitwise operators require an integer left operand");
-      }
-      if (!IsIntegerType(right.c_type)) {
-        self.context.Diagnostics().Fail(
-            location, "Bitwise operators require an integer right operand");
-      }
-      TypeRef result_type = PromoteNumericOperands(left, right, location, self);
-      return self.builder.CreateBinaryOp(op_type, left, right, result_type,
+      ASSERT(IsIntegerType(left.c_type) && IsIntegerType(right.c_type),
+             "Sema accepted non-integer bitwise operands");
+      return self.builder.CreateBinaryOp(op_type, left, right, left.c_type,
                                          location);
     }
 
     if (op_type == BinaryOpType::LShift || op_type == BinaryOpType::RShift) {
-      if (!IsIntegerType(left.c_type)) {
-        self.context.Diagnostics().Fail(
-            location, "Shift operators require an integer left operand");
-      }
-      if (!IsIntegerType(right.c_type)) {
-        self.context.Diagnostics().Fail(
-            location, "Shift operators require an integer right operand");
-      }
-      left = TryCastTo(PromoteInteger(left.c_type, self.context.Types()), left,
-                       self.builder, location);
-      right = TryCastTo(PromoteInteger(right.c_type, self.context.Types()),
-                        right, self.builder, location);
-      if (left.c_type != right.c_type) {
-        right = TryCastTo(left.c_type, right, self.builder, location);
-      }
+      ASSERT(IsIntegerType(left.c_type) && IsIntegerType(right.c_type),
+             "Sema accepted non-integer shift operands");
       return self.builder.CreateBinaryOp(op_type, left, right, left.c_type,
                                          location);
     }
 
     if (left.c_type->Is<PointerType>()) {
-      if (!IsIntegerType(right.c_type)) {
-        self.context.Diagnostics().Fail(
-            location, "Pointer arithmetic only supports integer offsets");
-      }
-      if (op_type != BinaryOpType::Add && op_type != BinaryOpType::Sub) {
-        self.context.Diagnostics().Fail(
-            location,
-            "Pointer arithmetic only supports addition and subtraction");
-      }
+      ASSERT(IsIntegerType(right.c_type),
+             "Sema accepted a non-integer pointer offset");
+      ASSERT(op_type == BinaryOpType::Add || op_type == BinaryOpType::Sub,
+             "Sema accepted an unsupported pointer operation");
       if (op_type == BinaryOpType::Sub) {
         right = self.builder.CreateInv(right);
       }
@@ -388,16 +265,7 @@ struct ExprEmitter::detail {
       return RValue{left.c_type, subscripted.address};
     }
 
-    TypeRef result_type = PromoteNumericOperands(left, right, location, self);
-    bool is_comparison =
-        op_type == BinaryOpType::Eq || op_type == BinaryOpType::Ne ||
-        op_type == BinaryOpType::Lt || op_type == BinaryOpType::Gt ||
-        op_type == BinaryOpType::Le || op_type == BinaryOpType::Ge;
-    TypeRef out_type =
-        is_comparison
-            ? ApplyTypeTag(self.context.Types().getI1(), TypeTag::Unsigned)
-            : result_type;
-    return self.builder.CreateBinaryOp(op_type, left, right, out_type,
+    return self.builder.CreateBinaryOp(op_type, left, right, left.c_type,
                                        location);
   }
 
@@ -408,10 +276,7 @@ struct ExprEmitter::detail {
     ASSERT(value.c_type->Is<UnionType>());
     auto union_type = value.c_type->As<UnionType>();
     auto field_ = union_type->GetField(field_name);
-    if (!field_.has_value()) {
-      self.context.Diagnostics().Fail(location,
-                                      "Unknown union field: ", field_name);
-    }
+    ASSERT(field_.has_value(), "Sema accepted an unknown union field");
     auto &field = field_.value();
     return LValue{field.type, value.address};
   }
@@ -460,14 +325,11 @@ LValue ExprEmitter::EmitLValue(ASTNode *node) {
     if (auto *value = context.FindLValue(var_ref->decl)) {
       return *value;
     }
-    if (const auto *enum_decl = AsEnumElemDecl(var_ref->decl)) {
-      if (context.FindEnumValue(enum_decl)) {
-        return {};
-      }
+    if (AsEnumElemDecl(var_ref->decl)) {
+      return {};
     }
-    context.Diagnostics().Fail(
-        var_ref->location,
-        "Declaration has no generated value: ", var_ref->decl->name);
+    RAISE_ERROR("Sema accepted a reference without a generated value: ",
+                var_ref->decl->name);
   }
   if (auto *var_decl = node->DynCast<VarDecl>()) {
     return detail::GenVarDecl(var_decl, *this);
@@ -484,8 +346,7 @@ LValue ExprEmitter::EmitLValue(ASTNode *node) {
       return detail::GetUnionFieldLValue(operand, get_field->field_name,
                                          get_field->location, *this);
     } else {
-      context.Diagnostics().Fail(get_field->location,
-                                 "GetField requires a struct or union operand");
+      RAISE_ERROR("Sema accepted field access on a non-aggregate");
     }
   }
   if (auto *ptr_get_field = node->DynCast<PtrGetField>()) {
@@ -499,15 +360,10 @@ LValue ExprEmitter::EmitLValue(ASTNode *node) {
             LValue{ptr_t->pointee_type, ptr.ir_value},
             ptr_get_field->field_name, ptr_get_field->location, *this);
       } else {
-        context.Diagnostics().Fail(
-            ptr_get_field->location,
-            "Unexpected pointer type for pointer field access: ",
-            ptr_t->pointee_type);
+        RAISE_ERROR("Sema accepted pointer field access on a non-aggregate");
       }
     } else {
-      context.Diagnostics().Fail(
-          ptr_get_field->location,
-          "Pointer field access requires a pointer operand");
+      RAISE_ERROR("Sema accepted pointer field access on a non-pointer");
     }
   }
   if (auto *binary = node->DynCast<BinaryOp>()) {
@@ -516,16 +372,13 @@ LValue ExprEmitter::EmitLValue(ASTNode *node) {
       RValue index = EmitRValue(binary->right.get());
       return builder.CreateSubscript(array, index, binary->location);
     }
-    context.Diagnostics().Fail(binary->location,
-                               "Unexpected lvalue binary operation");
+    RAISE_ERROR("Sema accepted an unsupported lvalue binary operation");
   }
   if (auto *unary = node->DynCast<UnaryOp>()) {
     if (unary->op_type == UnaryOpType::Deref) {
       RValue ptr = EmitRValue(unary->operand.get());
-      if (!ptr.c_type->Is<PointerType>()) {
-        context.Diagnostics().Fail(unary->location,
-                                   "Dereference requires a pointer operand");
-      }
+      ASSERT(ptr.c_type->Is<PointerType>(),
+             "Sema accepted dereference of a non-pointer");
       return LValue{ptr.c_type->As<PointerType>()->pointee_type, ptr.ir_value};
     }
   }
@@ -534,17 +387,31 @@ LValue ExprEmitter::EmitLValue(ASTNode *node) {
 
 RValue ExprEmitter::EmitRValue(ASTNode *node) {
   if (auto *var_ref = node->DynCast<VarRef>()) {
-    if (const auto *enum_decl = AsEnumElemDecl(var_ref->decl)) {
-      if (auto enum_value = context.FindEnumValue(enum_decl)) {
-        return *enum_value;
+    if (AsEnumElemDecl(var_ref->decl)) {
+      if (var_ref->constant_value.has_value()) {
+        llvm::ConstantInt *value;
+        if (std::holds_alternative<int64_t>(*var_ref->constant_value)) {
+          value = llvm::cast<llvm::ConstantInt>(llvm::ConstantInt::get(
+              context.LLVMType(var_ref->type),
+              std::get<int64_t>(*var_ref->constant_value),
+              !HasTypeTag(var_ref->type, TypeTag::Unsigned)));
+        } else if (std::holds_alternative<uint64_t>(*var_ref->constant_value)) {
+          value = llvm::cast<llvm::ConstantInt>(llvm::ConstantInt::get(
+              context.LLVMType(var_ref->type),
+              std::get<uint64_t>(*var_ref->constant_value),
+              !HasTypeTag(var_ref->type, TypeTag::Unsigned)));
+        } else {
+          RAISE_ERROR("Enum constant has a floating point value");
+        }
+        return RValue{var_ref->type, value};
       }
+      RAISE_ERROR("Sema did not cache an enum constant value");
     }
     if (auto *value = context.FindLValue(var_ref->decl)) {
       return detail::LoadAsRValue(*value, *this);
     }
-    context.Diagnostics().Fail(
-        var_ref->location,
-        "Declaration has no generated value: ", var_ref->decl->name);
+    RAISE_ERROR("Sema accepted a reference without a generated value: ",
+                var_ref->decl->name);
   }
   if (auto *literal_num = node->DynCast<LiteralNum>()) {
     if (std::holds_alternative<int64_t>(literal_num->value)) {
@@ -567,7 +434,7 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     }
   }
   if (auto *literal_str = node->DynCast<LiteralString>()) {
-    TypeRef type = context.Types().Pointer(context.Types().getChar());
+    TypeRef type = literal_str->type;
     return RValue{
         type, context.CreateStringConstant(
                   literal_str->value, literal_str->value.view().size() + 1)};
@@ -587,9 +454,7 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
             operand_lhs, get_field->field_name, get_field->location, *this);
         return detail::LoadAsRValue(field_lhs, *this);
       } else {
-        context.Diagnostics().Fail(
-            get_field->location,
-            "Unexpected operand type for GetField: ", operand_lhs.c_type);
+        RAISE_ERROR("Sema accepted field access on a non-aggregate");
       }
     }
     RValue operand_rhs = EmitRValue(get_field->operand.get());
@@ -600,32 +465,29 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
       return detail::GetUnionFieldRValue(operand_rhs, get_field->field_name,
                                          get_field->location, *this);
     } else {
-      context.Diagnostics().Fail(
-          get_field->location,
-          "Unexpected operand type for GetField: ", operand_rhs.c_type);
+      RAISE_ERROR("Sema accepted field access on a non-aggregate");
     }
   }
   if (auto *bin_expr = node->DynCast<BinaryOp>()) {
     switch (bin_expr->op_type) {
     case BinaryOpType::Assignment: {
       LValue left = EmitLValue(bin_expr->left.get());
-      if (!left.address) {
-        context.Diagnostics().Fail(bin_expr->location,
-                                   "Assignment requires an lvalue");
-      }
+      ASSERT(left.address, "Sema accepted non-lvalue assignment");
       RValue right = EmitRValue(bin_expr->right.get());
-      CheckConstAssignment(left.c_type, right.c_type, bin_expr->location,
-                           context);
-      right = TryCastTo(left.c_type, right, builder, bin_expr->location);
       builder.CreateStore(right, left);
-      return right;
+      return RValue{bin_expr->type, right.ir_value};
     }
     case BinaryOpType::And:
-      return detail::EvalLogicAnd(bin_expr->left.get(), bin_expr->right.get(),
-                                  *this);
+      return detail::EmitCast(bin_expr->type,
+                              detail::EvalLogicAnd(bin_expr->left.get(),
+                                                   bin_expr->right.get(),
+                                                   *this),
+                              *this);
     case BinaryOpType::Or:
-      return detail::EvalLogicOr(bin_expr->left.get(), bin_expr->right.get(),
-                                 *this);
+      return detail::EmitCast(bin_expr->type,
+                              detail::EvalLogicOr(bin_expr->left.get(),
+                                                  bin_expr->right.get(), *this),
+                              *this);
     case BinaryOpType::Eq:
     case BinaryOpType::Ne:
     case BinaryOpType::Lt:
@@ -644,8 +506,10 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     case BinaryOpType::RShift: {
       RValue left = EmitRValue(bin_expr->left.get());
       RValue right = EmitRValue(bin_expr->right.get());
-      return detail::EvalBinaryOp(bin_expr->op_type, left, right,
-                                  bin_expr->location, *this);
+      RValue result = detail::EvalBinaryOp(bin_expr->op_type, left, right,
+                                           bin_expr->location, *this);
+      result.c_type = bin_expr->type;
+      return result;
     }
     case BinaryOpType::AddAssign:
     case BinaryOpType::SubAssign:
@@ -658,22 +522,16 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     case BinaryOpType::LShiftAssign:
     case BinaryOpType::RShiftAssign: {
       LValue left_lhs = EmitLValue(bin_expr->left.get());
-      if (!left_lhs.address) {
-        context.Diagnostics().Fail(bin_expr->location,
-                                   "Assignment requires an lvalue");
-      }
+      ASSERT(left_lhs.address, "Sema accepted non-lvalue compound assignment");
       RValue left = detail::LoadAsRValue(left_lhs, *this);
+      left = detail::EmitCast(bin_expr->operation_type, left, *this);
       RValue right = EmitRValue(bin_expr->right.get());
 
       RValue res = detail::EvalBinaryOp(OpAssignToOp(bin_expr->op_type), left,
                                         right, bin_expr->location, *this);
-      CheckConstAssignment(left_lhs.c_type, res.c_type, bin_expr->location,
-                           context);
-      if (res.c_type != left_lhs.c_type) {
-        res = builder.CreateNumericCast(res, left_lhs.c_type);
-      }
+      res = detail::EmitCast(left_lhs.c_type, res, *this);
       builder.CreateStore(res, left_lhs);
-      return res;
+      return RValue{bin_expr->type, res.ir_value};
     }
     default:
       break;
@@ -696,69 +554,31 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
            "Intrinsic has no evaluator: ", intrinsic_call->desc->name);
     return intrinsic_call->desc->evaluator(intrinsic_call->args, this);
   }
+  if (auto *implicit_cast = node->DynCast<ImplicitCast>()) {
+    RValue operand = EmitRValue(implicit_cast->operand.get());
+    return detail::EmitCast(implicit_cast->target_type, operand, *this);
+  }
   if (auto *type_cast = node->DynCast<TypeCast>()) {
     RValue operand = EmitRValue(type_cast->operand.get());
-    TypeRef target_type = type_cast->target_type;
-    if (operand.c_type == target_type) {
-      return operand;
-    }
-    if (operand.c_type->Is<PointerType>() && target_type->Is<PointerType>()) {
-      if (LosesConstInPointerConversion(operand.c_type, target_type)) {
-        context.Diagnostics().Fail(
-            type_cast->location,
-            "Cannot cast a pointer after discarding const");
-      }
-      return RValue{target_type, operand.ir_value};
-    }
-    if (IsNumericType(operand.c_type) && IsNumericType(target_type)) {
-      return builder.CreateNumericCast(operand, target_type);
-    }
-    context.Diagnostics().Fail(
-        type_cast->location, "Unsupported type cast from ",
-        operand.c_type->ToString(), " to ", target_type->ToString());
+    return detail::EmitCast(type_cast->target_type, operand, *this);
   }
   if (auto *unary_expr = node->DynCast<UnaryOp>()) {
     switch (unary_expr->op_type) {
     case UnaryOpType::GetAddress: {
       LValue operand = EmitLValue(unary_expr->operand.get());
-      if (!operand.address) {
-        context.Diagnostics().Fail(unary_expr->location,
-                                   "Address-of requires an lvalue");
-      }
+      ASSERT(operand.address, "Sema accepted address-of on a non-lvalue");
       return RValue{context.Types().Pointer(operand.c_type), operand.address};
     }
     case UnaryOpType::UnaryPlus: {
       RValue operand = EmitRValue(unary_expr->operand.get());
-      if (!IsNumericType(operand.c_type)) {
-        context.Diagnostics().Fail(unary_expr->location,
-                                   "Unary plus requires a numeric type");
-      }
-      if (IsIntegerType(operand.c_type)) {
-        operand = TryCastTo(PromoteInteger(operand.c_type, context.Types()),
-                            operand, builder, unary_expr->location);
-      }
       return operand;
     }
     case UnaryOpType::UnaryMinus: {
       RValue operand = EmitRValue(unary_expr->operand.get());
-      if (!IsNumericType(operand.c_type)) {
-        context.Diagnostics().Fail(unary_expr->location,
-                                   "Unary minus requires a numeric type");
-      }
-      if (IsIntegerType(operand.c_type)) {
-        operand = TryCastTo(PromoteInteger(operand.c_type, context.Types()),
-                            operand, builder, unary_expr->location);
-      }
       return builder.CreateInv(operand);
     }
     case UnaryOpType::BitNot: {
       RValue operand = EmitRValue(unary_expr->operand.get());
-      if (!IsIntegerType(operand.c_type)) {
-        context.Diagnostics().Fail(unary_expr->location,
-                                   "Bitwise NOT requires an integer type");
-      }
-      operand = TryCastTo(PromoteInteger(operand.c_type, context.Types()),
-                          operand, builder, unary_expr->location);
       return builder.CreateBitNot(operand);
     }
     case UnaryOpType::IncBeforeUse:
@@ -771,14 +591,8 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
                            unary_expr->op_type == UnaryOpType::DecBeforeUse;
 
       LValue operand = EmitLValue(unary_expr->operand.get());
-      if (!operand.address) {
-        context.Diagnostics().Fail(unary_expr->location,
-                                   "Increment/decrement requires an lvalue");
-      }
-      if (HasTypeTag(operand.c_type, TypeTag::Const)) {
-        context.Diagnostics().Fail(unary_expr->location,
-                                   "Cannot modify a const-qualified object");
-      }
+      ASSERT(operand.address,
+             "Sema accepted increment/decrement on a non-lvalue");
       RValue old_value = builder.CreateLoad(operand.c_type, operand);
 
       if (operand.c_type->Is<PointerType>()) {
@@ -803,13 +617,8 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     }
     case UnaryOpType::Not: {
       RValue operand = EmitRValue(unary_expr->operand.get());
-      if (!IsNumericType(operand.c_type) &&
-          !operand.c_type->Is<PointerType>()) {
-        context.Diagnostics().Fail(
-            unary_expr->location,
-            "Logical NOT requires a numeric or pointer type");
-      }
-      return builder.CreateInvBoolCond(operand);
+      return detail::EmitCast(unary_expr->type,
+                              builder.CreateInvBoolCond(operand), *this);
     }
     default:
       break;
@@ -836,17 +645,12 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     builder.SetInsertPoint(false_block);
     RValue false_value = EmitRValue(cond_expr->false_expr.get());
 
-    TypeRef common_type = UsualArithmeticType(
-        true_value.c_type, false_value.c_type, context.Types());
-
+    true_value.c_type = cond_expr->type;
+    false_value.c_type = cond_expr->type;
     builder.SetInsertPoint(true_block);
-    true_value =
-        TryCastTo(common_type, true_value, builder, cond_expr->location);
     builder.CreateBr(end_block);
 
     builder.SetInsertPoint(false_block);
-    false_value =
-        TryCastTo(common_type, false_value, builder, cond_expr->location);
     builder.CreateBr(end_block);
 
     builder.SetInsertPoint(end_block);
@@ -857,8 +661,8 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
   if (lhs.address) {
     return detail::LoadAsRValue(lhs, *this);
   }
-  context.Diagnostics().Fail(node->location,
-                             "Unsupported AST node type: ", node->GetType());
+  RAISE_ERROR("Sema accepted an unsupported expression node: ",
+              node->GetType());
 }
 
 llvm::BasicBlock *ExprEmitter::GetOrCreateLabelBlock(std::string_view name) {
@@ -1071,11 +875,8 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     auto curr_block = builder.GetInsertBlock();
 
     RValue switched_val = EmitRValue(switch_stmt->value.get());
-    if (!IsValidSwitchValue(switched_val.c_type.get())) {
-      context.Diagnostics().Fail(
-          switch_stmt->value->location,
-          "switch requires an integer or enum controlling expression");
-    }
+    ASSERT(IsValidSwitchValue(switched_val.c_type.get()),
+           "Sema accepted an invalid switch controlling expression");
 
     llvm::BasicBlock *default_block;
     llvm::BasicBlock *end_block = llvm::BasicBlock::Create(
@@ -1119,12 +920,8 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
       builder.CreateBr(default_block);
 
       for (const auto &val : case_stmt->case_vals) {
-        if (!IsConstantFoldable(val.get())) {
-          context.Diagnostics().Fail(
-              val->location, "Case value must be a constant expression");
-        }
         auto folded =
-            EvalNumericConstant(switched_val.c_type, val.get(), context);
+            LowerNumericConstant(switched_val.c_type, val.get(), context);
         case_blocks.push_back({llvm::cast<llvm::ConstantInt>(folded), body});
       }
     }
@@ -1134,27 +931,20 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
     return;
   }
   if (node->DynCast<BreakStmt>()) {
-    if (context.loop_layers.empty()) {
-      context.Diagnostics().Fail(
-          node->location, "break statement is not inside a loop or switch");
-    }
+    ASSERT(!context.loop_layers.empty(),
+           "Sema accepted break outside a loop or switch");
     builder.CreateBr(context.CurrLoopLayer().break_block);
     return;
   }
   if (node->DynCast<ContinueStmt>()) {
-    if (context.loop_layers.empty()) {
-      context.Diagnostics().Fail(node->location,
-                                 "continue statement is not inside a loop");
-    }
+    ASSERT(!context.loop_layers.empty(),
+           "Sema accepted continue outside a loop");
     builder.CreateBr(context.CurrLoopLayer().continue_block);
     return;
   }
   if (auto *ret_stmt = node->DynCast<ReturnStmt>()) {
     if (ret_stmt->ret_value) {
       RValue ret = EmitRValue(ret_stmt->ret_value.get());
-      TypeRef return_type =
-          context.current_function_type->As<FunctionType>()->return_type;
-      ret = TryCastTo(return_type, ret, builder, ret_stmt->location);
       builder.CreateRet(ret);
     } else {
       builder.CreateVoidRet();

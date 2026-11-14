@@ -5,6 +5,7 @@
 #include "CodeGen/LLVMIR/Intrinsics.h"
 #include "Lex/Lexer.h"
 #include "Lex/Macro.h"
+#include "Sema/SemanticAnalysis.h"
 #include "SourceManager.h"
 #include "Support/ASTVerifier.h"
 #include "Support/DeclBindingTest.h"
@@ -41,7 +42,8 @@ std::filesystem::path ExpectedASTPath(const std::filesystem::path &source) {
 }
 
 int RunTest(const std::filesystem::path &source_path,
-            const std::filesystem::path &expected_path) {
+            const std::filesystem::path &expected_path,
+            bool run_semantic_analysis = false) {
   SourceManager sources;
   SourceHandle source = sources.LoadSourceFrom(source_path.string());
 
@@ -54,6 +56,10 @@ int RunTest(const std::filesystem::path &source_path,
   Lexer lexer(raw_lexer);
   auto translation_unit =
       ParseTranslationUnit(lexer, types, sources, diagnostics);
+  if (run_semantic_analysis) {
+    diagnostics.ThrowIfErrors();
+    AnalyzeTranslationUnit(*translation_unit, types, diagnostics);
+  }
 
   YAML::Node expected = YAML::LoadFile(expected_path.string());
   VerifyContext verify_context;
@@ -174,6 +180,13 @@ int RunDiagnosticSelfTest() {
 } // namespace
 
 int main(int argc, char **argv) {
+  bool run_semantic_analysis = false;
+  if (argc >= 2 && std::string_view(argv[1]) == "--sema") {
+    run_semantic_analysis = true;
+    --argc;
+    ++argv;
+  }
+
   if (argc == 2 && std::string_view(argv[1]) == "--diagnostic-self-test") {
     return RunDiagnosticSelfTest();
   }
@@ -200,6 +213,9 @@ int main(int argc, char **argv) {
               << " <source.c> [expected.ast.yaml]\n"
                  "       "
               << argv[0]
+              << " --sema <source.c> [expected.ast.yaml]\n"
+                 "       "
+              << argv[0]
               << " --check-verifiers\n"
                  "       "
               << argv[0]
@@ -214,7 +230,7 @@ int main(int argc, char **argv) {
     std::filesystem::path expected_path = argc == 3
                                               ? std::filesystem::path(argv[2])
                                               : ExpectedASTPath(source_path);
-    return RunTest(source_path, expected_path);
+    return RunTest(source_path, expected_path, run_semantic_analysis);
   } catch (const std::exception &error) {
     std::cerr << "FAIL " << argv[1] << '\n' << error.what() << '\n';
     return 1;

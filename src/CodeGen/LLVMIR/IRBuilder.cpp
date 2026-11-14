@@ -63,10 +63,9 @@ LValue IRBuilder::GetElementPtrImpl(llvm::StructType *type,
 
 LValue IRBuilder::GetElementPtr(const LValue &value, const StructField &field,
                                 SourceLocation location) {
-  if (!value.c_type->Is<StructType>()) {
-    _context.Diagnostics().Fail(location,
-                                "Field access requires a struct operand");
-  }
+  (void)location;
+  ASSERT(value.c_type->Is<StructType>(),
+         "Sema accepted field access on a non-struct");
   auto *struct_type = _context.LLVMStructType(value.c_type);
   return GetElementPtrImpl(struct_type, value.address, field);
 }
@@ -74,34 +73,26 @@ LValue IRBuilder::GetElementPtr(const LValue &value, const StructField &field,
 LValue IRBuilder::GetElementPtr(const LValue &value,
                                 std::string_view field_name,
                                 SourceLocation location) {
-  if (!value.c_type->Is<StructType>()) {
-    _context.Diagnostics().Fail(location,
-                                "Field access requires a struct operand");
-  }
+  ASSERT(value.c_type->Is<StructType>(),
+         "Sema accepted field access on a non-struct");
   auto field = value.c_type->As<StructType>()->GetField(field_name);
-  if (!field.has_value()) {
-    _context.Diagnostics().Fail(location, "Unknown struct field: ", field_name);
-  }
+  ASSERT(field.has_value(), "Sema accepted an unknown struct field");
+  (void)location;
   return GetElementPtr(value, field.value());
 }
 
 LValue IRBuilder::GetPtrElementPtr(const RValue &ptr,
                                    std::string_view field_name,
                                    SourceLocation location) {
-  if (!ptr.c_type->Is<PointerType>()) {
-    _context.Diagnostics().Fail(
-        location, "Pointer field access requires a pointer operand");
-  }
+  ASSERT(ptr.c_type->Is<PointerType>(),
+         "Sema accepted pointer field access on a non-pointer");
   auto *pointee_type =
       ptr.c_type->As<PointerType>()->pointee_type->DynCast<StructType>();
-  if (!pointee_type) {
-    _context.Diagnostics().Fail(
-        location, "Pointer field access requires a pointer to struct type");
-  }
+  ASSERT(pointee_type,
+         "Sema accepted pointer field access on a non-struct pointer");
   auto field = pointee_type->GetField(field_name);
-  if (!field.has_value()) {
-    _context.Diagnostics().Fail(location, "Unknown struct field: ", field_name);
-  }
+  ASSERT(field.has_value(), "Sema accepted an unknown struct field");
+  (void)location;
   auto *struct_type = _context.LLVMStructType(pointee_type);
   return GetElementPtrImpl(struct_type, ptr.ir_value, field.value());
 }
@@ -109,10 +100,9 @@ LValue IRBuilder::GetPtrElementPtr(const RValue &ptr,
 RValue IRBuilder::CreateExtractValue(const RValue &value,
                                      const StructField &field,
                                      SourceLocation location) {
-  if (!value.c_type->Is<StructType>()) {
-    _context.Diagnostics().Fail(location,
-                                "Field access requires a struct operand");
-  }
+  ASSERT(value.c_type->Is<StructType>(),
+         "Sema accepted field extraction from a non-struct");
+  (void)location;
   auto *val = _builder.CreateExtractValue(value.ir_value, field.index);
   return RValue{field.type, val};
 }
@@ -120,14 +110,11 @@ RValue IRBuilder::CreateExtractValue(const RValue &value,
 RValue IRBuilder::CreateExtractValue(const RValue &value,
                                      std::string_view field_name,
                                      SourceLocation location) {
-  if (!value.c_type->Is<StructType>()) {
-    _context.Diagnostics().Fail(location,
-                                "Field access requires a struct operand");
-  }
+  ASSERT(value.c_type->Is<StructType>(),
+         "Sema accepted field extraction from a non-struct");
   auto field = value.c_type->As<StructType>()->GetField(field_name);
-  if (!field.has_value()) {
-    _context.Diagnostics().Fail(location, "Unknown struct field: ", field_name);
-  }
+  ASSERT(field.has_value(), "Sema accepted an unknown struct field");
+  (void)location;
   return CreateExtractValue(value, field.value(), location);
 }
 
@@ -146,8 +133,8 @@ LValue IRBuilder::CreateSubscript(const RValue &value, const RValue &index,
                                            {index.ir_value});
     return LValue{pointer->pointee_type, ptr};
   }
-  _context.Diagnostics().Fail(location,
-                              "Subscript requires an array or pointer operand");
+  (void)location;
+  RAISE_ERROR("Sema accepted subscript on a non-array, non-pointer operand");
 }
 
 void IRBuilder::CreateRet(const RValue &value) {
@@ -255,17 +242,23 @@ RValue IRBuilder::CreatePhi(const RValue &value1, llvm::BasicBlock *block1,
 RValue IRBuilder::CreateBinaryOp(BinaryOpType op, const RValue &left,
                                  const RValue &right, TypeRef out_type,
                                  SourceLocation location) {
-  if (!left.ir_value->getType()->isIntegerTy() &&
-      !left.ir_value->getType()->isFloatingPointTy()) {
-    _context.Diagnostics().Fail(
-        location, "Binary operation only supports numeric values");
-  }
-  if (left.ir_value->getType() != right.ir_value->getType()) {
-    _context.Diagnostics().Fail(location,
-                                "Binary operation operand type mismatch");
-  }
+  (void)location;
+  ASSERT(left.ir_value->getType()->isIntegerTy() ||
+             left.ir_value->getType()->isFloatingPointTy(),
+         "Sema accepted a non-numeric binary operation");
+  ASSERT(left.ir_value->getType() == right.ir_value->getType(),
+         "Sema left binary operands with different IR types");
   bool is_float = left.ir_value->getType()->isFloatingPointTy();
   bool is_unsigned = HasTypeTag(left.c_type, TypeTag::Unsigned);
+  auto comparison_result = [&](llvm::Value *value) {
+    RValue result{ApplyTypeTag(_context.Types().getI1(), TypeTag::Unsigned),
+                  value};
+    if (_context.LLVMType(out_type) == value->getType()) {
+      result.c_type = out_type;
+      return result;
+    }
+    return CreateNumericCast(result, out_type);
+  };
 
   switch (op) {
   case BinaryOpType::Add:
@@ -295,147 +288,95 @@ RValue IRBuilder::CreateBinaryOp(BinaryOpType op, const RValue &left,
                         ? _builder.CreateURem(left.ir_value, right.ir_value)
                         : _builder.CreateSRem(left.ir_value, right.ir_value))};
   case BinaryOpType::BitAnd:
-    if (is_float) {
-      _context.Diagnostics().Fail(location,
-                                  "Bitwise AND requires integer operands");
-    }
+    ASSERT(!is_float, "Sema accepted floating point bitwise AND");
     return RValue{out_type, _builder.CreateAnd(left.ir_value, right.ir_value)};
   case BinaryOpType::BitOr:
-    if (is_float) {
-      _context.Diagnostics().Fail(location,
-                                  "Bitwise OR requires integer operands");
-    }
+    ASSERT(!is_float, "Sema accepted floating point bitwise OR");
     return RValue{out_type, _builder.CreateOr(left.ir_value, right.ir_value)};
   case BinaryOpType::BitXor:
-    if (is_float) {
-      _context.Diagnostics().Fail(location,
-                                  "Bitwise XOR requires integer operands");
-    }
+    ASSERT(!is_float, "Sema accepted floating point bitwise XOR");
     return RValue{out_type, _builder.CreateXor(left.ir_value, right.ir_value)};
   case BinaryOpType::LShift:
-    if (is_float) {
-      _context.Diagnostics().Fail(location,
-                                  "Left shift requires integer operands");
-    }
+    ASSERT(!is_float, "Sema accepted floating point left shift");
     return RValue{out_type, _builder.CreateShl(left.ir_value, right.ir_value)};
   case BinaryOpType::RShift:
-    if (is_float) {
-      _context.Diagnostics().Fail(location,
-                                  "Right shift requires integer operands");
-    }
+    ASSERT(!is_float, "Sema accepted floating point right shift");
     return RValue{out_type,
                   is_unsigned
                       ? _builder.CreateLShr(left.ir_value, right.ir_value)
                       : _builder.CreateAShr(left.ir_value, right.ir_value)};
   case BinaryOpType::Eq:
-    return RValue{out_type,
-                  is_float
-                      ? _builder.CreateFCmpOEQ(left.ir_value, right.ir_value)
-                      : _builder.CreateICmpEQ(left.ir_value, right.ir_value)};
+    return comparison_result(
+        is_float ? _builder.CreateFCmpOEQ(left.ir_value, right.ir_value)
+                 : _builder.CreateICmpEQ(left.ir_value, right.ir_value));
   case BinaryOpType::Ne:
-    return RValue{out_type,
-                  is_float
-                      ? _builder.CreateFCmpUNE(left.ir_value, right.ir_value)
-                      : _builder.CreateICmpNE(left.ir_value, right.ir_value)};
+    return comparison_result(
+        is_float ? _builder.CreateFCmpUNE(left.ir_value, right.ir_value)
+                 : _builder.CreateICmpNE(left.ir_value, right.ir_value));
   case BinaryOpType::Lt:
-    return RValue{
-        out_type,
+    return comparison_result(
         is_float
             ? _builder.CreateFCmpOLT(left.ir_value, right.ir_value)
             : (is_unsigned
                    ? _builder.CreateICmpULT(left.ir_value, right.ir_value)
-                   : _builder.CreateICmpSLT(left.ir_value, right.ir_value))};
+                   : _builder.CreateICmpSLT(left.ir_value, right.ir_value)));
   case BinaryOpType::Gt:
-    return RValue{
-        out_type,
+    return comparison_result(
         is_float
             ? _builder.CreateFCmpOGT(left.ir_value, right.ir_value)
             : (is_unsigned
                    ? _builder.CreateICmpUGT(left.ir_value, right.ir_value)
-                   : _builder.CreateICmpSGT(left.ir_value, right.ir_value))};
+                   : _builder.CreateICmpSGT(left.ir_value, right.ir_value)));
   case BinaryOpType::Le:
-    return RValue{
-        out_type,
+    return comparison_result(
         is_float
             ? _builder.CreateFCmpOLE(left.ir_value, right.ir_value)
             : (is_unsigned
                    ? _builder.CreateICmpULE(left.ir_value, right.ir_value)
-                   : _builder.CreateICmpSLE(left.ir_value, right.ir_value))};
+                   : _builder.CreateICmpSLE(left.ir_value, right.ir_value)));
   case BinaryOpType::Ge:
-    return RValue{
-        out_type,
+    return comparison_result(
         is_float
             ? _builder.CreateFCmpOGE(left.ir_value, right.ir_value)
             : (is_unsigned
                    ? _builder.CreateICmpUGE(left.ir_value, right.ir_value)
-                   : _builder.CreateICmpSGE(left.ir_value, right.ir_value))};
+                   : _builder.CreateICmpSGE(left.ir_value, right.ir_value)));
   default:
-    _context.Diagnostics().Fail(location, "Unsupported binary operation");
+    RAISE_ERROR("Sema accepted an unsupported binary operation");
   }
 }
 
 RValue IRBuilder::CreateFuncInvoke(const RValue &func,
                                    std::span<const RValue> args,
                                    SourceLocation location) {
+  (void)location;
   TypeRef c_function_type = func.c_type;
   if (auto *pointer = c_function_type->DynCast<PointerType>()) {
     c_function_type = pointer->pointee_type;
   }
-  if (!c_function_type->Is<FunctionType>()) {
-    _context.Diagnostics().Fail(
-        location,
-        "Function invocation requires a function or function pointer");
-  }
+  ASSERT(c_function_type->Is<FunctionType>(),
+         "Sema accepted invocation of a non-function");
   const auto *function = c_function_type->As<FunctionType>();
 
-  if (function->has_va_args) {
-    if (args.size() < function->parameters.size()) {
-      _context.Diagnostics().Fail(
-          location, "Function argument count mismatch, expected at least ",
-          function->parameters.size(), " arguments");
-    }
-  } else {
-    if (args.size() != function->parameters.size()) {
-      _context.Diagnostics().Fail(location,
-                                  "Function argument count mismatch, expected ",
-                                  function->parameters.size(), " arguments");
-    }
-  }
+  ASSERT(function->has_va_args ? args.size() >= function->parameters.size()
+                               : args.size() == function->parameters.size(),
+         "Sema left a function invocation with the wrong argument count");
 
   std::vector<llvm::Value *> llvm_args;
   llvm_args.reserve(args.size());
   for (size_t i = 0; i < args.size(); ++i) {
-    RValue arg = args[i];
+    const RValue &arg = args[i];
     if (i < function->parameters.size()) {
       TypeRef param_type = function->parameters[i];
       if (auto *array = param_type->DynCast<ArrayType>()) {
         param_type = _context.Types().Pointer(array->element_type);
       }
-      if (arg.c_type != param_type && IsNumericType(arg.c_type) &&
-          IsNumericType(param_type)) {
-        arg = CreateNumericCast(arg, param_type);
-      }
-      if (arg.ir_value->getType() !=
-          _context.LLVMFunctionType(c_function_type)->getParamType(i)) {
-        _context.Diagnostics().Fail(
-            location, "Function argument type mismatch at argument ", i);
-      }
+      ASSERT(arg.ir_value->getType() ==
+                 _context.LLVMFunctionType(c_function_type)->getParamType(i),
+             "Sema left a function argument with the wrong IR type");
+      (void)param_type;
     }
-    auto arg_ir_value = arg.ir_value;
-    if (function->has_va_args && i >= function->parameters.size()) {
-      if (IsIntegerType(arg.c_type)) {
-        TypeRef promoted = PromoteInteger(arg.c_type, _context.Types());
-        if (promoted != arg.c_type) {
-          arg = CreateNumericCast(arg, promoted);
-          arg_ir_value = arg.ir_value;
-        }
-      } else if (IsFloatingType(arg.c_type) &&
-                 arg.c_type->As<BuiltinType>()->Kind() == BuiltinKind::Float) {
-        arg = CreateNumericCast(arg, _context.Types().getDouble());
-        arg_ir_value = arg.ir_value;
-      }
-    }
-    llvm_args.push_back(arg_ir_value);
+    llvm_args.push_back(arg.ir_value);
   }
 
   auto *call = _builder.CreateCall(_context.LLVMFunctionType(c_function_type),

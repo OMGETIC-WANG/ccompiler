@@ -13,6 +13,7 @@ add_executable(ccompiler src/Main.cpp)
 add_subdirectory(src/Util)
 add_subdirectory(src/AST)
 add_subdirectory(src/Lex)
+add_subdirectory(src/Sema)
 
 add_subdirectory(src/CodeGen)
 

@@ -1,0 +1,33 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: values
+                  type:
+                    ArrayType:
+                      element_type: {BuiltinType: {type_name: int}}
+                      size: 3
+              - ReturnStmt:
+                  ret_value:
+                    ImplicitCast:
+                      type: {BuiltinType: {type_name: int}}
+                      value_category: RValue
+                      target_type: {BuiltinType: {type_name: int}}
+                      operand:
+                        IntrinsicCall:
+                          type: {BuiltinType: {type_name: long long}}
+                          value_category: RValue
+                          name: sizeof
+                          args:
+                            - Expr:
+                                VarRef:
+                                  type:
+                                    ArrayType:
+                                      element_type:
+                                        {BuiltinType: {type_name: int}}
+                                      size: 3
+                                  value_category: LValue
+                                  name: values

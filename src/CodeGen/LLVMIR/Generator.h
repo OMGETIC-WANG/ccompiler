@@ -11,6 +11,8 @@ class Module;
 
 class DiagnosticContext;
 
+// Requires a translation unit that has already passed
+// AnalyzeTranslationUnit().
 std::unique_ptr<llvm::Module>
 GenerateLLVMModule(const TranslationUnit *tu, TypeContext &types,
                    llvm::LLVMContext &context, DiagnosticContext &diagnostics);

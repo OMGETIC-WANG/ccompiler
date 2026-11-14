@@ -6,6 +6,7 @@
 #include "CodeGen/LLVMIR/Intrinsics.h"
 #include "JITRunner/JITRunner.h"
 #include "Lex/Lexer.h"
+#include "Sema/SemanticAnalysis.h"
 #include "SourceManager.h"
 #include "Util/CmdLine.h"
 #include "Util/Diagnostic.h"
@@ -89,6 +90,10 @@ static int Run(int argc, char **argv, SourceManager &source_manager,
   Lexer filtered_lexer(lexer);
   auto TU =
       ParseTranslationUnit(filtered_lexer, types, source_manager, diagnostics);
+
+  if (!diagnostics.HasErrors()) {
+    AnalyzeTranslationUnit(*TU, types, diagnostics);
+  }
 
   if (show_ast) {
     TU->Print(std::cout);

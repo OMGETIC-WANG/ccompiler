@@ -15,12 +15,21 @@ bool IsConstantFoldable(const ASTNode *node) {
   if (node->DynCast<LiteralNum>() || node->DynCast<LiteralString>()) {
     return true;
   }
+  if (auto *var_ref = node->DynCast<VarRef>()) {
+    return var_ref->constant_value.has_value();
+  }
   if (auto *bin_expr = node->DynCast<BinaryOp>()) {
     return IsConstantFoldable(bin_expr->left.get()) &&
            IsConstantFoldable(bin_expr->right.get());
   }
   if (auto *unary_expr = node->DynCast<UnaryOp>()) {
     return IsConstantFoldable(unary_expr->operand.get());
+  }
+  if (auto *implicit_cast = node->DynCast<ImplicitCast>()) {
+    return IsConstantFoldable(implicit_cast->operand.get());
+  }
+  if (auto *type_cast = node->DynCast<TypeCast>()) {
+    return IsConstantFoldable(type_cast->operand.get());
   }
   if (auto *cond_expr = node->DynCast<ConditionalExpr>()) {
     return IsConstantFoldable(cond_expr->condition.get()) &&
@@ -33,7 +42,7 @@ bool IsConstantFoldable(const ASTNode *node) {
   return false;
 }
 
-std::string VarRef::ToString() const {
+std::string VarRef::ToStringImpl() const {
   return ColoredFormat(
       "{} {:NodeAddress;#x} {}",
       std::make_pair(decl->GetNodeTypeName(), decl->GetColor()),

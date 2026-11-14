@@ -1,0 +1,1 @@
+@SOURCE_FILE@:5:1: error: Global variable initializer must be constant foldable

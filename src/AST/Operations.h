@@ -1,20 +1,20 @@
 #pragma once
 
-#include "ASTNode.h"
+#include "AST.h"
 #include "Type.h"
 
-class FunctionInvocation : public ASTNode {
+class FunctionInvocation : public Expr {
   ASTNodeImpl(FunctionInvocation);
-  TreeNodePrintFields(function, arguments);
+  ExprPrintFields(function, arguments);
 
 public:
   std::unique_ptr<ASTNode> function;
   std::vector<std::unique_ptr<ASTNode>> arguments;
 };
 
-class SequenceEval : public ASTNode {
+class SequenceEval : public Expr {
   ASTNodeImpl(SequenceEval);
-  TreeNodePrintFields(expressions);
+  ExprPrintFields(expressions);
 
 public:
   std::vector<std::unique_ptr<ASTNode>> expressions;
@@ -87,10 +87,10 @@ REGISTER_ENUM(BinaryOpType, BINARY_OP_TYPE_VALUES)
 MAKE_ENUM(UnaryOpType, UNARY_OP_TYPE_VALUES)
 REGISTER_ENUM(UnaryOpType, UNARY_OP_TYPE_VALUES)
 
-class BinaryOp : public ASTNode {
+class BinaryOp : public Expr {
   ASTNodeImpl(BinaryExpr);
-  TreeNodeFieldAsString(op_type);
-  TreeNodePrintFields(left, right);
+  ExprFieldAsString(op_type);
+  ExprPrintFields(operation_type, left, right);
 
 public:
   explicit BinaryOp(BinaryOpType op_type) : op_type(op_type) {}
@@ -98,14 +98,15 @@ public:
   BinaryOpType GetOpType() const { return op_type; }
 
   BinaryOpType op_type;
+  TypeRef operation_type = nullptr;
   std::unique_ptr<ASTNode> left;
   std::unique_ptr<ASTNode> right;
 };
 
-class UnaryOp : public ASTNode {
+class UnaryOp : public Expr {
   ASTNodeImpl(UnaryExpr);
-  TreeNodeFieldAsString(op_type);
-  TreeNodePrintFields(operand);
+  ExprFieldAsString(op_type);
+  ExprPrintFields(operand);
 
 public:
   explicit UnaryOp(UnaryOpType op_type) : op_type(op_type) {}
@@ -118,7 +119,7 @@ public:
 
 class TypeCast : public UnaryOp {
   ASTNodeImpl(TypeCast);
-  TreeNodePrintFields(target_type, operand);
+  ExprPrintFields(target_type, operand);
 
 public:
   explicit TypeCast(TypeRef target_type = nullptr)
@@ -127,9 +128,20 @@ public:
   TypeRef target_type;
 };
 
+class ImplicitCast : public UnaryOp {
+  ASTNodeImpl(ImplicitCast);
+  ExprPrintFields(target_type, operand);
+
+public:
+  explicit ImplicitCast(TypeRef target_type = nullptr)
+      : UnaryOp(UnaryOpType::TypeCast), target_type(target_type) {}
+
+  TypeRef target_type;
+};
+
 class GetField : public UnaryOp {
   ASTNodeImpl(GetField);
-  TreeNodePrintFields(field_name, operand);
+  ExprPrintFields(field_name, operand);
 
 public:
   explicit GetField(std::string_view field_name = "")
@@ -140,7 +152,7 @@ public:
 
 class PtrGetField : public UnaryOp {
   ASTNodeImpl(PtrGetField);
-  TreeNodePrintFields(field_name, operand);
+  ExprPrintFields(field_name, operand);
 
 public:
   explicit PtrGetField(std::string_view field_name = "")

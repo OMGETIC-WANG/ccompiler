@@ -201,6 +201,19 @@ void VerifyStorageClass(const VarDecl &decl, const YAML::Node &expected,
   }
 }
 
+void VerifyConstantValue(const std::optional<NumericValue> &value,
+                         const YAML::Node &expected, VerifyContext &context);
+
+void VerifyExprFields(const Expr &expr, const YAML::Node &expected,
+                      VerifyContext &context) {
+  VerifyField("type", expr.type, expected, context);
+  VerifyField(
+      "value_category",
+      std::string_view(EnumRefl<ValueCategory>::GetName(expr.value_category)),
+      expected, context);
+  VerifyConstantValue(expr.constant_value, expected["constant_value"], context);
+}
+
 void VerifyFunctionStorageClass(const FunctionDecl &decl,
                                 const YAML::Node &expected,
                                 VerifyContext &context) {
@@ -249,6 +262,44 @@ void VerifyLiteralValue(
   }
   if (!value_matches) {
     context.AddMessage("literal value does not match");
+  }
+}
+
+void VerifyConstantValue(const std::optional<NumericValue> &value,
+                         const YAML::Node &expected, VerifyContext &context) {
+  if (!expected) {
+    return;
+  }
+
+  VerifyContextGuard guard(context, "constant_value");
+  if (expected.IsNull()) {
+    if (value.has_value()) {
+      context.AddMessage("expected null");
+    }
+    return;
+  }
+  if (!value.has_value()) {
+    context.AddMessage("expected a constant value");
+    return;
+  }
+  if (!expected.IsScalar()) {
+    context.AddMessage("expected a scalar");
+    return;
+  }
+
+  bool value_matches = false;
+  try {
+    std::visit(
+        [&](auto actual_value) {
+          using ValueType = std::decay_t<decltype(actual_value)>;
+          value_matches = expected.as<ValueType>() == actual_value;
+        },
+        *value);
+  } catch (const YAML::BadConversion &) {
+    value_matches = false;
+  }
+  if (!value_matches) {
+    context.AddMessage("constant value does not match");
   }
 }
 
@@ -490,18 +541,20 @@ VerifyFieldInitializers(node->field_initializers, expected, context);
 END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(LiteralString)
-VERIFY_FIELDS("value")
+VERIFY_FIELDS("type", "value_category", "constant_value", "value")
+VerifyExprFields(*node, expected, context);
 VERIFY_FIELD(value)
 END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(LiteralNum)
-VERIFY_FIELDS("type", "value")
-VERIFY_FIELD(type)
+VERIFY_FIELDS("type", "value_category", "constant_value", "value")
+VerifyExprFields(*node, expected, context);
 VerifyLiteralValue(node->value, expected["value"], context);
 END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(VarRef)
-VERIFY_FIELDS("name")
+VERIFY_FIELDS("type", "value_category", "constant_value", "name")
+VerifyExprFields(*node, expected, context);
 VerifyField("name", node->decl->name, expected, context);
 END_VERIFY_NODE()
 
@@ -511,52 +564,74 @@ VERIFY_FIELD(ret_value)
 END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(BinaryOp)
-VERIFY_FIELDS("op_type", "left", "right")
+VERIFY_FIELDS("type", "value_category", "constant_value", "op_type",
+              "operation_type", "left", "right")
+VerifyExprFields(*node, expected, context);
 VERIFY_FIELD(op_type)
+VERIFY_FIELD(operation_type)
 VERIFY_FIELD(left)
 VERIFY_FIELD(right)
 END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(UnaryOp)
-VERIFY_FIELDS("op_type", "operand")
+VERIFY_FIELDS("type", "value_category", "constant_value", "op_type", "operand")
+VerifyExprFields(*node, expected, context);
 VERIFY_FIELD(op_type)
 VERIFY_FIELD(operand)
 END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(TypeCast)
-VERIFY_FIELDS("op_type", "target_type", "operand")
+VERIFY_FIELDS("type", "value_category", "constant_value", "op_type",
+              "target_type", "operand")
+VerifyExprFields(*node, expected, context);
 VERIFY_FIELD(op_type)
 VERIFY_FIELD(target_type)
 VERIFY_FIELD(operand)
 END_VERIFY_NODE()
 
+BEGIN_VERIFY_NODE(ImplicitCast)
+VERIFY_FIELDS("type", "value_category", "constant_value", "target_type",
+              "operand")
+VerifyExprFields(*node, expected, context);
+VERIFY_FIELD(target_type)
+VERIFY_FIELD(operand)
+END_VERIFY_NODE()
+
 BEGIN_VERIFY_NODE(GetField)
-VERIFY_FIELDS("op_type", "field_name", "operand")
+VERIFY_FIELDS("type", "value_category", "constant_value", "op_type",
+              "field_name", "operand")
+VerifyExprFields(*node, expected, context);
 VERIFY_FIELD(op_type)
 VERIFY_FIELD(field_name)
 VERIFY_FIELD(operand)
 END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(PtrGetField)
-VERIFY_FIELDS("op_type", "field_name", "operand")
+VERIFY_FIELDS("type", "value_category", "constant_value", "op_type",
+              "field_name", "operand")
+VerifyExprFields(*node, expected, context);
 VERIFY_FIELD(op_type)
 VERIFY_FIELD(field_name)
 VERIFY_FIELD(operand)
 END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(FunctionInvocation)
-VERIFY_FIELDS("function", "arguments")
+VERIFY_FIELDS("type", "value_category", "constant_value", "function",
+              "arguments")
+VerifyExprFields(*node, expected, context);
 VERIFY_FIELD(function)
 VERIFY_FIELD(arguments)
 END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(SequenceEval)
-VERIFY_FIELDS("expressions")
+VERIFY_FIELDS("type", "value_category", "constant_value", "expressions")
+VerifyExprFields(*node, expected, context);
 VERIFY_FIELD(expressions)
 END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(IntrinsicCall)
-VERIFY_FIELDS("name", "args")
+VERIFY_FIELDS("type", "value_category", "constant_value", "name", "args")
+VerifyExprFields(*node, expected, context);
 if (node->desc) {
   VerifyField("name", std::string_view(node->desc->name), expected, context);
 }
@@ -639,8 +714,10 @@ VERIFY_FIELD(is_definition)
 END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(EnumElemDecl)
-VERIFY_FIELDS("name", "value")
+VERIFY_FIELDS("name", "type", "constant_value", "value")
 VERIFY_FIELD(name)
+VERIFY_FIELD(type)
+VerifyConstantValue(node->constant_value, expected["constant_value"], context);
 VERIFY_FIELD(value)
 END_VERIFY_NODE()
 
@@ -659,7 +736,9 @@ VERIFY_FIELDS()
 END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(ConditionalExpr)
-VERIFY_FIELDS("condition", "true_expr", "false_expr")
+VERIFY_FIELDS("type", "value_category", "constant_value", "condition",
+              "true_expr", "false_expr")
+VerifyExprFields(*node, expected, context);
 VERIFY_FIELD(condition)
 VERIFY_FIELD(true_expr)
 VERIFY_FIELD(false_expr)
@@ -825,6 +904,7 @@ const bool context_verifiers_registered = [] {
   ContextVerifiers().emplace("BinaryExpr", VerifyBinaryOp);
   ContextVerifiers().emplace("UnaryExpr", VerifyUnaryOp);
   REGISTER_CONTEXT_VERIFIER(TypeCast);
+  REGISTER_CONTEXT_VERIFIER(ImplicitCast);
   REGISTER_CONTEXT_VERIFIER(GetField);
   REGISTER_CONTEXT_VERIFIER(PtrGetField);
   REGISTER_CONTEXT_VERIFIER(FunctionInvocation);

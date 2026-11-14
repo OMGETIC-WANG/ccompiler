@@ -17,11 +17,13 @@ cmake --build build -j2
 ctest --test-dir build --output-on-failure
 ```
 
-Useful labels are `ast`, `schema`, `codegen`, `include`, and `diagnostics`.
+Useful labels are `ast`, `sema`, `schema`, `codegen`, `include`, and
+`diagnostics`.
 For example:
 
 ```bash
 ctest --test-dir build -L ast --output-on-failure
+ctest --test-dir build -L sema --output-on-failure
 ctest --test-dir build -L diagnostics --output-on-failure
 ```
 
@@ -37,6 +39,7 @@ build/tests/ccompiler_tests tests/AST/Declarations/FunctionSignatures.c
 | --- | --- | --- |
 | AST | `<case>.c`, `<case>.ast.yaml` | none |
 | AST schema failure | `<case>.ast.yaml`, `<case>.stderr` | none |
+| Sema | `<case>.c`, `<case>.ast.yaml` | none |
 | CodeGen | `<source>.c`, `<source>.stdout` | `<source>.args` |
 | Include | source, `<source>.stdout` | `<source>.args` |
 | Diagnostics source | `<case>.c`, `<case>.stderr` | `<case>.args` |
@@ -95,6 +98,10 @@ Files under `tests/AST/Schema/` are intentionally malformed expectations. Pair
 each `<case>.ast.yaml` with an exact `<case>.stderr` file. The shared
 `tests/Support/SchemaFixture.c` source is used for these failure tests.
 
+Sema fixtures are parsed and passed through `AnalyzeTranslationUnit` before
+the same partial YAML verifier runs. They may assert expression `type`,
+`value_category`, `operation_type`, and inserted `ImplicitCast` nodes.
+
 `AST.Declarations.BindingIdentity`, `AST.Schema.VerifierRegistry`, and
 `Diagnostics.Formatting` are C++ self-tests. Their expected values remain in the
 self-test implementation because they are not CMake registration data.
@@ -107,6 +114,8 @@ self-test implementation because they are not CMake registration data.
   test name and fixture stem. A source file is appended after any `.args`.
 - AST schema failures call the suite-local `add_ast_schema_failure` in
   `tests/AST/Schema/CMakeLists.txt`.
+- Sema fixtures call `ccompiler_add_sema_cases` from
+  `tests/Sema/CMakeLists.txt`.
 - Every new expected file must remain beside the fixture it describes.
 
 See `tests/AST/COVERAGE.md` for node, type, and operator coverage.

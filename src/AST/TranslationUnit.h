@@ -12,6 +12,7 @@ class TranslationUnit : public ASTNode {
 
 public:
   std::vector<std::unique_ptr<ASTNode>> decls;
+  bool is_semantically_analyzed = false;
 };
 
 std::unique_ptr<StructDecl> ParseStructDecl(Lexer &lexer, std::string_view name,

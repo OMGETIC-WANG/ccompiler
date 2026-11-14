@@ -40,6 +40,7 @@ assertion.
 | `LabelStmt` | Covered | `Statements/Jumps` |
 | `GotoStmt` | Covered | `Statements/Jumps` |
 | `TypeCast` | Covered | `Expressions/UnaryOperators` |
+| `ImplicitCast` | Covered after Sema | `Sema.Core.ArrayDecay`, `Sema.Core.Promotions` |
 | `GetField` | Covered | `Expressions/PostfixAccess` |
 | `PtrGetField` | Covered | `Expressions/PostfixAccess` |
 | `IntrinsicCall` | Covered | `Intrinsics/Sizeof`, `Intrinsics/VaBuiltins` |
@@ -85,6 +86,16 @@ assertion.
 | Member access and pointer member access | Covered | `Expressions/PostfixAccess` |
 | Cast, conditional, sequence, call | Covered | `Expressions/UnaryOperators`, `Expressions/Conditional`, `Expressions/Sequence`, `Expressions/Calls` |
 | Precedence and associativity | Covered | `Expressions/Precedence` |
+
+## Semantic annotations
+
+| Behavior | Status | Primary fixture |
+|---|---|---|
+| Expression type and value category | Covered | `Sema.Core.Promotions`, `Sema.Core.ArrayDecay` |
+| Array-to-pointer decay | Covered | `Sema.Core.ArrayDecay` |
+| Incomplete array size deduction | Covered | `Sema.Core.ArraySize` |
+| Implicit cast insertion | Covered | `Sema.Core.Promotions`, `Sema.Core.ArrayDecay` |
+| Folded numeric and enum constants | Covered | `Sema.Core.Constants` |
 
 ## Pipeline and meta-tests
 

@@ -1,0 +1,32 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        body:
+          CompoundStmt:
+            statements:
+              - ReturnStmt:
+                  ret_value:
+                    BinaryExpr:
+                      type: {BuiltinType: {type_name: int}}
+                      value_category: RValue
+                      constant_value: 3
+                      op_type: Add
+                      operation_type: {BuiltinType: {type_name: int}}
+                      left:
+                        ImplicitCast:
+                          type: {BuiltinType: {type_name: int}}
+                          value_category: RValue
+                          constant_value: 1
+                          target_type: {BuiltinType: {type_name: int}}
+                          operand:
+                            TypeCast:
+                              target_type: {BuiltinType: {type_name: char}}
+                              operand:
+                                LiteralNum:
+                                  type: {BuiltinType: {type_name: int}}
+                                  value: 1
+                      right:
+                        LiteralNum:
+                          type: {BuiltinType: {type_name: int}}
+                          constant_value: 2
+                          value: 2
