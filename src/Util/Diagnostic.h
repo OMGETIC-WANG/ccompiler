@@ -17,7 +17,7 @@ class DiagnosticError : public Exception {
 public:
   explicit DiagnosticError(std::vector<DiagnosticMessage> messages)
       : Exception(messages.empty() ? "diagnostic error"
-                                   : messages.front().message),
+                                   : messages.back().message),
         _messages(std::move(messages)) {}
 
   const std::vector<DiagnosticMessage> &Messages() const { return _messages; }
@@ -46,17 +46,27 @@ public:
     }
   }
 
+  // Record an error that a caller can recover from without unwinding.
   template <typename... MessageChunks>
-  void AddError(SourceLocation location, const MessageChunks &...chunks) {
+  void Error(SourceLocation location, const MessageChunks &...chunks) {
     _messages.push_back(
         {.locations = {location}, .message = _BuildMessage(chunks...)});
   }
 
+  // Record a fatal error and unwind with all diagnostics collected so far.
   template <typename... MessageChunks>
-  [[noreturn]] void RaiseError(SourceLocation location,
-                               const MessageChunks &...chunks) {
-    AddError(location, chunks...);
-    throw DiagnosticError({_messages.back()});
+  [[noreturn]] void Fail(SourceLocation location,
+                         const MessageChunks &...chunks) {
+    Error(location, chunks...);
+    throw DiagnosticError(_messages);
+  }
+
+  bool HasErrors() const { return !_messages.empty(); }
+
+  void ThrowIfErrors() const {
+    if (HasErrors()) {
+      throw DiagnosticError(_messages);
+    }
   }
 
   const std::vector<DiagnosticMessage> &Messages() const { return _messages; }

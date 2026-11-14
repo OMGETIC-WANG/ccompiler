@@ -7,6 +7,7 @@
 
 #include <deque>
 #include <memory>
+#include <span>
 #include <string_view>
 #include <unordered_map>
 #include <variant>
@@ -90,6 +91,7 @@ public:
     Token tok = PeekNextToken();
     _parsed_tokens.pop_front();
     _last_consumed_location = tok.location;
+    ++_consumed_token_count;
     return tok;
   }
 
@@ -103,10 +105,33 @@ public:
     ASSERT(token == PeekNextToken(), "Token mismatch while consuming");
     _parsed_tokens.pop_front();
     _last_consumed_location = token.location;
+    ++_consumed_token_count;
   }
 
   SourceLocation GetLastConsumedLocation() const {
     return _last_consumed_location;
+  }
+
+  size_t GetConsumedTokenCount() const { return _consumed_token_count; }
+
+  // Consume until any of <types>
+  bool ConsumeUntil(std::span<const TokenType> types) {
+    while (true) {
+      Token tok = PeekNextToken();
+      if (tok.type == TokenType::EndOfFile) {
+        return false;
+      }
+      for (TokenType type : types) {
+        if (tok.type == type) {
+          return true;
+        }
+      }
+      ConsumeToken(tok);
+    }
+  }
+
+  bool ConsumeUntil(TokenType type) {
+    return ConsumeUntil(std::span<const TokenType>(&type, 1));
   }
 
 private:
@@ -114,4 +139,5 @@ private:
 
   std::deque<Token> _parsed_tokens;
   SourceLocation _last_consumed_location;
+  size_t _consumed_token_count = 0;
 };

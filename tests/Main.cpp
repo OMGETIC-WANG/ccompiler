@@ -9,6 +9,7 @@
 #include "Support/ASTVerifier.h"
 #include "Util/Diagnostic.h"
 
+#include <array>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -16,6 +17,21 @@
 #include <vector>
 
 namespace {
+
+std::string_view StripLeadingAndTrailingWhitespace(std::string_view value) {
+  constexpr std::string_view whitespace = " \t\n\r\f\v";
+  const std::size_t first = value.find_first_not_of(whitespace);
+  if (first == std::string_view::npos) {
+    return {};
+  }
+  const std::size_t last = value.find_last_not_of(whitespace);
+  return value.substr(first, last - first + 1);
+}
+
+bool OutputsMatch(std::string_view actual, std::string_view expected) {
+  return StripLeadingAndTrailingWhitespace(actual) ==
+         StripLeadingAndTrailingWhitespace(expected);
+}
 
 std::filesystem::path ExpectedASTPath(const std::filesystem::path &source) {
   std::filesystem::path expected = source;
@@ -55,6 +71,36 @@ int RunTest(const std::filesystem::path &source_path,
 }
 
 int RunDiagnosticSelfTest() {
+  FixedLexer recovery_lexer({
+      Token(TokenType::Identifier),
+      Token(TokenType::RBrace),
+      Token(TokenType::Semicolon),
+      Token(TokenType::Identifier),
+  });
+  Lexer lexer(recovery_lexer);
+  constexpr std::array recovery_stops{
+      TokenType::Semicolon,
+      TokenType::RBrace,
+  };
+  if (!lexer.ConsumeUntil(recovery_stops) ||
+      lexer.PeekNextToken().type != TokenType::RBrace) {
+    std::cerr << "ConsumeUntil did not retain its stop token\n";
+    return 1;
+  }
+  lexer.ConsumeNextToken();
+  if (!lexer.ConsumeUntil(recovery_stops) ||
+      lexer.PeekNextToken().type != TokenType::Semicolon) {
+    std::cerr << "ConsumeUntil did not recognize all stop tokens\n";
+    return 1;
+  }
+  lexer.ConsumeNextToken();
+  constexpr std::array eof_stops{TokenType::RBrace};
+  if (lexer.ConsumeUntil(eof_stops) ||
+      lexer.PeekNextToken().type != TokenType::EndOfFile) {
+    std::cerr << "ConsumeUntil did not stop at EOF\n";
+    return 1;
+  }
+
   SourceManager sources;
   SourceHandle source = sources.LoadSource("abc\n", "<stdin>");
   DiagnosticContext diagnostics(sources);
@@ -64,26 +110,55 @@ int RunDiagnosticSelfTest() {
       .end = 2,
   };
 
-  diagnostics.AddError(location, "localized");
+  diagnostics.Error(location, "localized");
   std::string formatted = diagnostics.Format(diagnostics.Messages());
-  if (formatted != "<stdin>:1:2: error: localized") {
+  if (!OutputsMatch(formatted, "<stdin>:1:2: error: localized")) {
     std::cerr << "Unexpected localized diagnostic: " << formatted << '\n';
+    return 1;
+  }
+  if (!diagnostics.HasErrors() || diagnostics.Messages().size() != 1) {
+    std::cerr << "Localized diagnostic was not recorded\n";
+    return 1;
+  }
+
+  diagnostics.Error(location, "second");
+  bool collected_error_thrown = false;
+  try {
+    diagnostics.ThrowIfErrors();
+  } catch (const DiagnosticError &error) {
+    collected_error_thrown = true;
+    formatted = diagnostics.Format(error.Messages());
+    if (!OutputsMatch(formatted, "<stdin>:1:2: error: localized\n"
+                                 "<stdin>:1:2: error: second")) {
+      std::cerr << "Unexpected collected diagnostics: " << formatted << '\n';
+      return 1;
+    }
+  }
+  if (!collected_error_thrown) {
+    std::cerr << "Collected diagnostics were not raised\n";
     return 1;
   }
 
   DiagnosticMessage global{.message = "global"};
   formatted = diagnostics.Format(global);
-  if (formatted != "ccompiler: error: global") {
+  if (!OutputsMatch(formatted, "ccompiler: error: global")) {
     std::cerr << "Unexpected global diagnostic: " << formatted << '\n';
     return 1;
   }
 
   DiagnosticContext raised(sources);
+  raised.Error(location, "collected");
   try {
-    raised.RaiseError(location, "raised");
+    raised.Fail(location, "raised");
   } catch (const DiagnosticError &error) {
+    if (std::string_view(error.what()) != "raised") {
+      std::cerr << "Unexpected fatal diagnostic payload: " << error.what()
+                << '\n';
+      return 1;
+    }
     formatted = raised.Format(error.Messages());
-    if (formatted != "<stdin>:1:2: error: raised") {
+    if (!OutputsMatch(formatted, "<stdin>:1:2: error: collected\n"
+                                 "<stdin>:1:2: error: raised")) {
       std::cerr << "Unexpected raised diagnostic: " << formatted << '\n';
       return 1;
     }

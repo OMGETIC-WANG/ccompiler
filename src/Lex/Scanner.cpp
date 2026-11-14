@@ -193,8 +193,8 @@ TryPeekAsLiteralHex(std::string_view s, DiagnosticContext &diagnostics,
       }
       size_t advanced = AdvancePureDecNum(s, pos);
       if (advanced == pos) {
-        diagnostics.RaiseError(exponent_location,
-                               "Expected decimal exponent after 'p' or 'P'");
+        diagnostics.Fail(exponent_location,
+                         "Expected decimal exponent after 'p' or 'P'");
       }
       pos = advanced;
     }
@@ -218,8 +218,8 @@ TryPeekAsLiteralDec(std::string_view s, DiagnosticContext &diagnostics,
     }
     size_t advanced = AdvancePureDecNum(s, pos);
     if (advanced == pos) {
-      diagnostics.RaiseError(exponent_location,
-                             "Expected decimal exponent after 'e' or 'E'");
+      diagnostics.Fail(exponent_location,
+                       "Expected decimal exponent after 'e' or 'E'");
     }
     pos = advanced;
   }
@@ -511,8 +511,8 @@ static ScannedToken ScanToken(std::string_view rest,
     return {single_char_tokens[rest[0]], 1};
   }
 
-  diagnostics.RaiseError(PointLocation(token_location, 0),
-                         "Unknown character: '", rest[0], "'");
+  diagnostics.Fail(PointLocation(token_location, 0), "Unknown character: '",
+                   rest[0], "'");
 }
 
 static Token MakeToken(const SourceHandle &source, size_t begin,

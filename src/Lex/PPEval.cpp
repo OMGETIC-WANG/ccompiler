@@ -113,15 +113,15 @@ static MacroValue EvalLiteral(LiteralNum *literal,
   if (auto *value = std::get_if<int64_t>(&literal->value)) {
     return *value;
   }
-  diagnostics.RaiseError(literal->location,
-                         "Floating-point literal is not allowed in "
-                         "preprocessor condition");
+  diagnostics.Fail(literal->location,
+                   "Floating-point literal is not allowed in "
+                   "preprocessor condition");
 }
 
 static MacroValue EvalBinary(BinaryOp *bin_expr,
                              DiagnosticContext &diagnostics) {
   if (!IsEvalable(bin_expr->op_type)) {
-    diagnostics.RaiseError(
+    diagnostics.Fail(
         bin_expr->location,
         "Cannot evaluate binary operation in preprocessor condition: ",
         bin_expr->op_type);
@@ -184,7 +184,7 @@ static MacroValue EvalBinary(BinaryOp *bin_expr,
   case BinaryOpType::RShift:
     return Calc<shift_right>(left, right);
   default:
-    diagnostics.RaiseError(
+    diagnostics.Fail(
         bin_expr->location,
         "Unsupported binary operation for preprocessor evaluation");
   }
@@ -193,7 +193,7 @@ static MacroValue EvalBinary(BinaryOp *bin_expr,
 static MacroValue EvalUnary(UnaryOp *unary_expr,
                             DiagnosticContext &diagnostics) {
   if (!IsEvalable(unary_expr->op_type)) {
-    diagnostics.RaiseError(
+    diagnostics.Fail(
         unary_expr->location,
         "Cannot evaluate unary operation in preprocessor condition: ",
         unary_expr->op_type);
@@ -217,9 +217,8 @@ static MacroValue EvalUnary(UnaryOp *unary_expr,
         },
         operand);
   default:
-    diagnostics.RaiseError(
-        unary_expr->location,
-        "Unsupported unary operation for preprocessor evaluation");
+    diagnostics.Fail(unary_expr->location,
+                     "Unsupported unary operation for preprocessor evaluation");
   }
 }
 
@@ -245,7 +244,7 @@ static MacroValue EvalNode(ASTNode *node, DiagnosticContext &diagnostics) {
   if (auto *cond_expr = node->DynCast<ConditionalExpr>()) {
     return EvalConditional(cond_expr, diagnostics);
   }
-  diagnostics.RaiseError(
+  diagnostics.Fail(
       node->location,
       "Unexpected ASTNode type in preprocessor condition: ", node->GetType());
 }

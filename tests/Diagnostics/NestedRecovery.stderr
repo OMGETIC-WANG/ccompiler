@@ -1,0 +1,3 @@
+SOURCE_FILE_PLACEHOLDER:2:9: error: Expected ')'
+SOURCE_FILE_PLACEHOLDER:2:19: error: Unexpected token
+SOURCE_FILE_PLACEHOLDER:3:3: error: volatile types are not supported yet

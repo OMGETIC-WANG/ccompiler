@@ -83,8 +83,21 @@ function(add_source_diagnostic_failure name source line column message)
       -DEXPECTED_LINE=${line} -DEXPECTED_COLUMN=${column}
       "-DEXPECTED_MESSAGE=${message}" -P
       ${CMAKE_CURRENT_SOURCE_DIR}/ExpectDiagnostic.cmake)
-  set_tests_properties("Diagnostics.${name}" PROPERTIES LABELS
-                                                        "diagnostics;frontend")
+  set_tests_properties("Diagnostics.${name}"
+                       PROPERTIES LABELS "diagnostics;frontend" TIMEOUT 15)
+endfunction()
+
+function(add_source_diagnostic_failures name source expected_file)
+  add_test(
+    NAME "Diagnostics.${name}"
+    COMMAND
+      ${CMAKE_COMMAND} -DTEST_EXECUTABLE=$<TARGET_FILE:ccompiler>
+      -DSOURCE_DIAGNOSTIC=ON
+      -DSOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/Diagnostics/${source}
+      -DEXPECTED_DIAGNOSTIC_FILE=${CMAKE_CURRENT_SOURCE_DIR}/Diagnostics/${expected_file}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/ExpectDiagnostic.cmake)
+  set_tests_properties("Diagnostics.${name}"
+                       PROPERTIES LABELS "diagnostics;frontend" TIMEOUT 15)
 endfunction()
 
 function(add_command_diagnostic_failure name expected_message)
@@ -106,6 +119,16 @@ add_source_diagnostic_failure(Preprocessor.UnknownDirective UnknownDirective.c
                               1 2 "Unexpected preprocessor name: unknown")
 add_source_diagnostic_failure(Parser.MissingColon MissingColon.c 1 30
                               "Expected ':' in conditional expression")
+add_source_diagnostic_failures(Parser.MultipleStatements MultipleStatements.c
+                               MultipleStatements.stderr)
+add_source_diagnostic_failures(Parser.MultipleTopLevel MultipleTopLevel.c
+                               MultipleTopLevel.stderr)
+add_source_diagnostic_failures(Parser.MissingSemicolon MissingSemicolon.c
+                               MissingSemicolon.stderr)
+add_source_diagnostic_failures(Parser.NestedRecovery NestedRecovery.c
+                               NestedRecovery.stderr)
+add_source_diagnostic_failures(Parser.MissingBrace MissingBrace.c
+                               MissingBrace.stderr)
 add_source_diagnostic_failure(Sema.UnsupportedType UnsupportedType.c 1 1
                               "volatile types are not supported yet")
 add_source_diagnostic_failure(Codegen.UnknownIdentifier UnknownIdentifier.c 1

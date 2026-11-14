@@ -26,9 +26,13 @@ build/tests/ccompiler_tests tests/AST/Declarations/FunctionSignatures.c
 
 The `diagnostics` label covers user-facing error handling. Source fixtures live
 under `tests/Diagnostics/` and are run through the `ccompiler` executable by
-`ExpectDiagnostic.cmake`, which checks the exact `file:line:column: error:`
-line, empty stdout, and nonzero exit status. Driver cases verify errors without
-a source location use the `ccompiler: error:` prefix.
+`ExpectDiagnostic.cmake`, which checks the expected `file:line:column: error:`
+lines, empty stdout, and nonzero exit status. Leading and trailing whitespace
+in the captured output and expectations is ignored. Driver cases verify errors
+without a source location use the `ccompiler: error:` prefix.
+
+Multi-error recovery cases pair a `.c` fixture with a `.stderr` file. Use
+`SOURCE_FILE_PLACEHOLDER` wherever the absolute fixture path should appear.
 
 `Diagnostics.Formatting` directly checks `DiagnosticContext` formatting and the
 payload carried by `DiagnosticError`.

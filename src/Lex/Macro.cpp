@@ -75,15 +75,15 @@ Token MacroScanner::PeekNextToken() {
 
   if (curr_body_tok.type == TokenType::Sharp) {
     if (_idx + 1 >= _def.body.size()) {
-      _diagnostics.RaiseError(curr_body_tok.location,
-                              "Expected macro parameter after '#'");
+      _diagnostics.Fail(curr_body_tok.location,
+                        "Expected macro parameter after '#'");
     }
     Token next_tok = _def.body[_idx + 1];
 
     size_t param_idx = _def.GetParamIndex(_source_manager.GetText(next_tok));
     if (param_idx == (size_t)-1) {
-      _diagnostics.RaiseError(next_tok.location, "Unknown macro parameter: ",
-                              _source_manager.GetText(next_tok));
+      _diagnostics.Fail(next_tok.location, "Unknown macro parameter: ",
+                        _source_manager.GetText(next_tok));
     }
 
     Token res{
@@ -104,7 +104,7 @@ Token MacroScanner::PeekNextToken() {
     std::vector<Token> &arg0s = _args[param0_idx];
     std::vector<Token> &arg1s = _args[param1_idx];
     if (arg0s.size() != 1 || arg1s.size() != 1) {
-      _diagnostics.RaiseError(
+      _diagnostics.Fail(
           curr_body_tok.location,
           "Macro argument concatenation only supports single-token arguments");
     }
@@ -112,7 +112,7 @@ Token MacroScanner::PeekNextToken() {
     Token arg1 = arg1s[0];
     if (!IsMacroArgConcatable(arg0, _source_manager) ||
         !IsMacroArgConcatable(arg1, _source_manager)) {
-      _diagnostics.RaiseError(
+      _diagnostics.Fail(
           curr_body_tok.location,
           "Macro argument concatenation only supports identifiers and "
           "keywords");

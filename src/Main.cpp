@@ -89,6 +89,12 @@ static int Run(int argc, char **argv, SourceManager &source_manager,
     TU->Print(std::cout);
   }
 
+  if (diagnostics.HasErrors()) {
+    std::cerr
+        << DiagnosticError(diagnostics.Messages()).ToString(source_manager);
+    return 1;
+  }
+
   auto llvm_context = std::make_unique<llvm::LLVMContext>();
   auto module = GenerateLLVMModule(TU.get(), types, *llvm_context, diagnostics);
   std::string ir = PrintModule(*module);

@@ -65,7 +65,7 @@ void GenEnumDecl(EnumDecl *decl, GenContext &context) {
     if (element->value) {
       NumericValue val = EvalNumeric(element->value.get(), context);
       if (std::holds_alternative<long double>(val)) {
-        context.Diagnostics().RaiseError(
+        context.Diagnostics().Fail(
             element->location, "Enum value cannot be a floating point number");
       }
       if (std::holds_alternative<int64_t>(val)) {
@@ -110,7 +110,7 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
       size_t array_size =
           array_type->size.value_or(array_init->initializers.size());
       if (array_init->initializers.size() > array_size) {
-        context.Diagnostics().RaiseError(
+        context.Diagnostics().Fail(
             array_init->location,
             "Array initializer has more elements than the array size");
       }
@@ -139,7 +139,7 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
       auto *literal_str =
           initializer->As<ValueInitializer>()->value->As<LiteralString>();
       if (array_type->size.value() < literal_str->value.view().size() + 1) {
-        context.Diagnostics().RaiseError(
+        context.Diagnostics().Fail(
             literal_str->location,
             "Array size is smaller than the literal string size");
       }
@@ -154,8 +154,8 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
       for (const auto &[name, init] : field_init->field_initializers) {
         auto field = struct_type->GetField(name);
         if (!field.has_value()) {
-          context.Diagnostics().RaiseError(initializer->location,
-                                           "Unknown field name: ", name);
+          context.Diagnostics().Fail(initializer->location,
+                                     "Unknown field name: ", name);
         }
         size_t field_index = 0;
         bool found = false;
@@ -167,8 +167,8 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
           }
         }
         if (!found) {
-          context.Diagnostics().RaiseError(initializer->location,
-                                           "Unknown field name: ", name);
+          context.Diagnostics().Fail(initializer->location,
+                                     "Unknown field name: ", name);
         }
         fields[field_index] =
             GenConstInitializer(field->type, init.get(), context);
@@ -183,7 +183,7 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
     }
     if (auto *array_init = initializer->DynCast<ArrayInitializer>()) {
       if (array_init->initializers.size() > struct_type->fields.size()) {
-        context.Diagnostics().RaiseError(
+        context.Diagnostics().Fail(
             array_init->location,
             "Struct initializer has more elements than the struct fields");
       }
@@ -205,13 +205,13 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
 
   if (auto *builtin_type = type->DynCast<BuiltinType>()) {
     if (!IsNumericType(builtin_type)) {
-      context.Diagnostics().RaiseError(
-          initializer->location, "Builtin initializer requires a numeric type");
+      context.Diagnostics().Fail(initializer->location,
+                                 "Builtin initializer requires a numeric type");
     }
     auto *val_init = initializer->DynCast<ValueInitializer>();
     if (!val_init) {
-      context.Diagnostics().RaiseError(
-          initializer->location, "Builtin type requires a value initializer");
+      context.Diagnostics().Fail(initializer->location,
+                                 "Builtin type requires a value initializer");
     }
     return EvalNumericConstant(type, val_init->value.get(), context);
   }
@@ -219,16 +219,16 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
   if (auto *ptr_type = type->DynCast<PointerType>()) {
     auto *val_init = initializer->DynCast<ValueInitializer>();
     if (!val_init) {
-      context.Diagnostics().RaiseError(
-          initializer->location, "Pointer type requires a value initializer");
+      context.Diagnostics().Fail(initializer->location,
+                                 "Pointer type requires a value initializer");
     }
     auto *intptr = EvalNumericConstant(context.Types().getInt(),
                                        val_init->value.get(), context);
     return llvm::ConstantExpr::getIntToPtr(intptr, context.LLVMType(ptr_type));
   }
 
-  context.Diagnostics().RaiseError(initializer->location,
-                                   "Unexpected initializer type");
+  context.Diagnostics().Fail(initializer->location,
+                             "Unexpected initializer type");
 }
 
 LValue GenGlobalVarDecl(VarDecl *decl, GenContext &context) {
@@ -246,7 +246,7 @@ LValue GenGlobalVarDecl(VarDecl *decl, GenContext &context) {
         if (!array_type->element_type->Is<BuiltinType>() ||
             array_type->element_type->As<BuiltinType>()->Kind() !=
                 BuiltinKind::Char) {
-          context.Diagnostics().RaiseError(
+          context.Diagnostics().Fail(
               decl->location, "Array type must be a char array for string "
                               "literal initializer");
         }
@@ -259,7 +259,7 @@ LValue GenGlobalVarDecl(VarDecl *decl, GenContext &context) {
       }
     }
     if (!array_type->size.has_value()) {
-      context.Diagnostics().RaiseError(
+      context.Diagnostics().Fail(
           decl->location,
           "Can't infer array size from initializer for global variable: ",
           decl->name);
@@ -268,7 +268,7 @@ LValue GenGlobalVarDecl(VarDecl *decl, GenContext &context) {
 
   auto *llvm_type = context.LLVMType(type);
   if (!IsConstantFoldable(decl->initializer.get())) {
-    context.Diagnostics().RaiseError(
+    context.Diagnostics().Fail(
         decl->location,
         "Global variable initializer must be constant foldable");
   }

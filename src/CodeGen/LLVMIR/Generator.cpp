@@ -68,7 +68,7 @@ void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
   llvm::Function *function = context.Module().getFunction(decl->name);
   if (function) {
     if (function->getFunctionType() != llvm_function_type) {
-      context.Diagnostics().RaiseError(
+      context.Diagnostics().Fail(
           decl->location, "Conflicting declaration for function ", decl->name);
     }
   } else {
@@ -92,8 +92,8 @@ void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
     return;
   }
   if (!function->empty()) {
-    context.Diagnostics().RaiseError(
-        decl->location, "Multiple definitions of function ", decl->name);
+    context.Diagnostics().Fail(decl->location,
+                               "Multiple definitions of function ", decl->name);
   }
 
   GenContextLayerGuard guard(context);
@@ -149,7 +149,7 @@ void GenTopLevelStmt(ASTNode *stmt, GenContext &context, IRBuilder &builder) {
     break;
   }
   default:
-    context.Diagnostics().RaiseError(
+    context.Diagnostics().Fail(
         stmt->location, "Unsupported top-level AST node: ", stmt->GetType());
   }
 }

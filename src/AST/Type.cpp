@@ -22,32 +22,32 @@ TypeRef GetOrCreateBaseType(const TypeSpecifier &specifier,
     if (specifier.is_unsigned) {
       const auto *builtin = type->As<BuiltinType>();
       if (!IsIntegerKind(builtin->Kind())) {
-        context.Diagnostics().RaiseError(
-            specifier.location, "unsigned is only valid for integer types");
+        context.Diagnostics().Fail(specifier.location,
+                                   "unsigned is only valid for integer types");
       }
       type = ApplyTypeTag(type, TypeTag::Unsigned);
     }
   } else if (specifier.is_struct) {
     if (specifier.is_unsigned) {
-      context.Diagnostics().RaiseError(specifier.location,
-                                       "unsigned cannot qualify a struct type");
+      context.Diagnostics().Fail(specifier.location,
+                                 "unsigned cannot qualify a struct type");
     }
     type = types.GetOrCreateStruct(specifier.scope_id, specifier.type_name);
   } else if (specifier.is_union) {
     if (specifier.is_unsigned) {
-      context.Diagnostics().RaiseError(specifier.location,
-                                       "unsigned cannot qualify a union type");
+      context.Diagnostics().Fail(specifier.location,
+                                 "unsigned cannot qualify a union type");
     }
     type = types.GetOrCreateUnion(specifier.scope_id, specifier.type_name);
   } else if (specifier.is_enum) {
     if (specifier.is_unsigned) {
-      context.Diagnostics().RaiseError(specifier.location,
-                                       "unsigned cannot qualify an enum type");
+      context.Diagnostics().Fail(specifier.location,
+                                 "unsigned cannot qualify an enum type");
     }
     type = types.GetOrCreateEnum(specifier.scope_id, specifier.type_name);
   } else if (specifier.is_named_type) {
     if (specifier.is_unsigned) {
-      context.Diagnostics().RaiseError(
+      context.Diagnostics().Fail(
           specifier.location,
           "unsigned cannot qualify a typedef in a type specifier");
     }
@@ -59,12 +59,12 @@ TypeRef GetOrCreateBaseType(const TypeSpecifier &specifier,
     if (type) {
       return type;
     }
-    context.Diagnostics().RaiseError(specifier.location, "Unknown type name ",
-                                     specifier.type_name);
+    context.Diagnostics().Fail(specifier.location, "Unknown type name ",
+                               specifier.type_name);
   } else {
-    context.Diagnostics().RaiseError(specifier.location,
-                                     "Unable to resolve type name ",
-                                     specifier.type_name);
+    context.Diagnostics().Fail(specifier.location,
+                               "Unable to resolve type name ",
+                               specifier.type_name);
   }
 
   if (specifier.is_const) {
@@ -113,9 +113,9 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
       for (const auto &param : param_list->params) {
         TypeRef param_type = context.GetType(param.specifier.type_spec);
         if (!param_type) {
-          context.Diagnostics().RaiseError(param.specifier.type_spec.location,
-                                           "Unknown struct/union/enum: ",
-                                           param.specifier.type_spec.type_name);
+          context.Diagnostics().Fail(param.specifier.type_spec.location,
+                                     "Unknown struct/union/enum: ",
+                                     param.specifier.type_spec.type_name);
         }
         if (!param.declarator) {
           parameter_types.push_back(param_type);
@@ -283,10 +283,9 @@ std::vector<ParsedType> ParseType(const Declaration *decl,
   TypeRef base_type = context.GetType(decl->declaration_specifier.type_spec);
 
   if (!base_type) {
-    context.Diagnostics().RaiseError(
-        decl->declaration_specifier.type_spec.location,
-        "Unknown struct/union/enum: ",
-        decl->declaration_specifier.type_spec.type_name);
+    context.Diagnostics().Fail(decl->declaration_specifier.type_spec.location,
+                               "Unknown struct/union/enum: ",
+                               decl->declaration_specifier.type_spec.type_name);
   }
 
   if (decl->init_declarators.size()) {
@@ -318,10 +317,9 @@ TypeRef ParseType(Lexer &lexer, CompileContext &context) {
   auto decl = ParseDeclaration(lexer, context);
   TypeRef base_type = context.GetType(decl->declaration_specifier.type_spec);
   if (!base_type) {
-    context.Diagnostics().RaiseError(
-        decl->declaration_specifier.type_spec.location,
-        "Unknown struct/union/enum: ",
-        decl->declaration_specifier.type_spec.type_name);
+    context.Diagnostics().Fail(decl->declaration_specifier.type_spec.location,
+                               "Unknown struct/union/enum: ",
+                               decl->declaration_specifier.type_spec.type_name);
   }
   if (decl->init_declarators.size()) {
     ASSERT(decl->init_declarators.size() == 1, "Expected a single declarator");
