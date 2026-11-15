@@ -7,6 +7,7 @@
 #include "Lex/Macro.h"
 #include "Sema/SemanticAnalysis.h"
 #include "SourceManager.h"
+#include "Support/ASTPrintTest.h"
 #include "Support/ASTVerifier.h"
 #include "Support/DeclBindingTest.h"
 #include "Util/Diagnostic.h"
@@ -208,6 +209,10 @@ int main(int argc, char **argv) {
     return RunDeclBindingSelfTest();
   }
 
+  if (argc == 2 && std::string_view(argv[1]) == "--ast-print-self-test") {
+    return RunASTPrintSelfTest();
+  }
+
   if (argc < 2 || argc > 3) {
     std::cerr << "Usage: " << argv[0]
               << " <source.c> [expected.ast.yaml]\n"
@@ -221,7 +226,10 @@ int main(int argc, char **argv) {
               << argv[0]
               << " --diagnostic-self-test\n"
                  "       "
-              << argv[0] << " --decl-binding-self-test\n";
+              << argv[0]
+              << " --decl-binding-self-test\n"
+                 "       "
+              << argv[0] << " --ast-print-self-test\n";
     return 2;
   }
 

@@ -1,7 +1,8 @@
 find_package(yaml-cpp REQUIRED)
 
-add_executable(ccompiler_tests Main.cpp Support/ASTVerifier.cpp
-                               Support/DeclBindingTest.cpp)
+add_executable(
+  ccompiler_tests Main.cpp Support/ASTVerifier.cpp Support/DeclBindingTest.cpp
+                  Support/ASTPrintTest.cpp)
 target_link_libraries(ccompiler_tests PRIVATE ccompiler_codegen
                                               yaml-cpp::yaml-cpp)
 

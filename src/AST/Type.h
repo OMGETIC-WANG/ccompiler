@@ -72,8 +72,6 @@ public:
 
   virtual TypeBaseType GetType() const = 0;
 
-  virtual int GetColor() const override { return 0x3399ff; }
-
   std::string_view GetNodeTypeName() const override;
 
   size_t GetSize() const {
@@ -178,7 +176,8 @@ public:                                                                        \
 
 class BuiltinType : public TypeBase {
   TypeNodeImpl(BuiltinType);
-  TreeNodeFieldAsString(type_name);
+
+  std::string ToString() const override { return std::string(type_name); }
 
 private:
   friend class TypeContext;
@@ -260,7 +259,8 @@ struct StructField {
 
 class StructType : public TypeBase {
   TypeNodeImpl(StructType);
-  TreeNodeFieldAsString(type_name);
+
+  std::string ToString() const override;
 
 private:
   friend class TypeContext;
@@ -333,7 +333,8 @@ struct UnionField {
 
 class UnionType : public TypeBase {
   TypeNodeImpl(UnionType);
-  TreeNodeFieldAsString(type_name);
+
+  std::string ToString() const override;
 
 private:
   friend class TypeContext;
@@ -412,7 +413,8 @@ struct EnumValue {
 
 class EnumType : public TypeBase {
   TypeNodeImpl(EnumType);
-  TreeNodeFieldAsString(enum_name);
+
+  std::string ToString() const override;
 
 private:
   friend class TypeContext;
@@ -452,7 +454,8 @@ protected:
 
 class FunctionType : public TypeBase {
   TypeNodeImpl(FunctionType);
-  TreeNodePrintFields(return_type, parameters);
+
+  std::string ToString() const override;
 
 protected:
   size_t EvalSize() const override { return sizeof(void *); }
@@ -471,7 +474,8 @@ private:
 
 class PointerType : public TypeBase {
   TypeNodeImpl(PointerType);
-  TreeNodePrintFields(pointee_type);
+
+  std::string ToString() const override;
 
 protected:
   size_t EvalSize() const override { return sizeof(void *); }
@@ -488,13 +492,10 @@ private:
 
 class ArrayType : public TypeBase {
   TypeNodeImpl(ArrayType);
-  TreeNodePrintFields(element_type);
+
+  std::string ToString() const override;
 
 public:
-  std::string ToString() const override {
-    return size ? "[" + std::to_string(*size) + "]" : "[]";
-  }
-
   TypeRef element_type = nullptr;
   std::optional<size_t> size;
 

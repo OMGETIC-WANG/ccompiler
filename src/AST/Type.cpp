@@ -341,3 +341,39 @@ TypeRef ParseType(Lexer &lexer, CompileContext &context) {
 std::string_view TypeBase::GetNodeTypeName() const {
   return EnumRefl<TypeBaseType>::GetName(GetType());
 }
+
+std::string PointerType::ToString() const {
+  return std::format("Ptr<{}>", pointee_type->ToString());
+}
+
+std::string ArrayType::ToString() const {
+  if (size.has_value()) {
+    return std::format("Array<{}, {}>", element_type->ToString(), *size);
+  } else {
+    return std::format("Array<{}, unknown>", element_type->ToString());
+  }
+}
+
+std::string FunctionType::ToString() const {
+  std::string result = std::format("Func<{}", return_type->ToString());
+  for (const auto &param : parameters) {
+    result += std::format(",{}", param->ToString());
+  }
+  if (has_va_args) {
+    result += ",...";
+  }
+  result += ">";
+  return result;
+}
+
+std::string StructType::ToString() const {
+  return std::format("struct {}", type_name);
+}
+
+std::string UnionType::ToString() const {
+  return std::format("union {}", type_name);
+}
+
+std::string EnumType::ToString() const {
+  return std::format("enum {}", enum_name);
+}

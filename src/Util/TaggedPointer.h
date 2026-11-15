@@ -199,12 +199,16 @@ struct formatter<TaggedPointer<T, pointer_align>> : std::formatter<char> {
   template <typename FormatContext>
   auto format(const TaggedPointer<T, pointer_align> &ptr,
               FormatContext &ctx) const {
-    if (ptr.get() == nullptr) {
-      return std::format_to(ctx.out(), "nullptr");
-    } else {
-      return std::format_to(ctx.out(), "{}",
-                            static_cast<const void *>(ptr.get()));
+    if constexpr (std::formattable<T, char>) {
+      if (ptr.get() != nullptr) {
+        return std::format_to(ctx.out(), "{}", *(ptr.get()));
+      }
+    } else if constexpr (std::formattable<T *, char>) {
+      if (ptr.get() != nullptr) {
+        return std::format_to(ctx.out(), "{}", ptr.get());
+      }
     }
+    return std::format_to(ctx.out(), "{:#x}", (uintptr_t)ptr.get());
   }
 };
 

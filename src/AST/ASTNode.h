@@ -1,7 +1,10 @@
 #pragma once
 
+#include "ASTPrint.h"
+
 #include <concepts>
 #include <string_view>
+#include <vector>
 
 #include "../Exception.h"
 #include "../Lex/Token.h"
@@ -64,9 +67,15 @@ public:
 
   virtual ASTNodeType GetType() const = 0;
 
-  virtual int GetColor() const override { return 0x00cc00; }
+  virtual ASTPrintRole GetPrintRole() const { return ASTPrintRole::Expression; }
+
+  virtual std::vector<ASTPrintField> GetPrintFields() const { return {}; }
+
+  virtual std::vector<const ASTNode *> GetPrintChildren() const { return {}; }
 
   std::string_view GetNodeTypeName() const override;
+
+  void Print(std::ostream &out, ASTPrintOptions options = {}) const;
 
   template <std::derived_from<ASTNode> T> T *As() {
 #ifdef ENABLE_AS_TYPE_CHECK

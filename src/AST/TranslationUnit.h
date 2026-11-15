@@ -8,7 +8,8 @@
 
 class TranslationUnit : public ASTNode {
   ASTNodeImpl(TranslationUnit);
-  TreeNodePrintFields(decls);
+  AST_PRINT_ROLE_DECL(TranslationUnit);
+  AST_PRINT_CHILDREN_DECL();
 
 public:
   std::vector<std::unique_ptr<ASTNode>> decls;

@@ -2,6 +2,7 @@
 #include "../AST/AST.h"
 #include "../AST/Context.h"
 #include "../AST/Expr.h"
+#include "../Util/Util.h"
 #include "PPEval.h"
 
 #include <string>

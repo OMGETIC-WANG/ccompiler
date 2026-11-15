@@ -14,8 +14,10 @@
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Support/Process.h>
 #include <llvm/Support/raw_ostream.h>
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -35,12 +37,25 @@ CMDLINE_ARG(bool, show_ast, false);
 CMDLINE_ARG(bool, show_tokens, false);
 CMDLINE_ARG(bool, lex_only, false);
 CMDLINE_ARG(bool, jit_run, false);
+CMDLINE_ARG(bool, no_ir, false)
 CMDLINE_ARG(std::string, output_file, "o", "");
 CMDLINE_ARG(std::vector<std::string>, include_paths, "I", {});
+CMDLINE_ARG(std::string, color, "auto");
 
 static int Run(int argc, char **argv, SourceManager &source_manager,
                DiagnosticContext &diagnostics) {
   std::vector<std::string_view> rest = CmdLine::Parse(argc, argv);
+  const auto color_mode = ParseASTPrintColorMode(color);
+  if (!color_mode) {
+    throw CmdLineArgParseError("Invalid --color value: " + color +
+                               " (expected auto, always, or never)");
+  }
+  const char *no_color_env = std::getenv("NO_COLOR");
+  const bool no_color_requested =
+      no_color_env != nullptr && no_color_env[0] != '\0';
+  const bool use_ast_color = ShouldEnableASTColor(
+      *color_mode, llvm::sys::Process::StandardOutIsDisplayed(),
+      no_color_requested);
   for (const std::string &include_path : include_paths) {
     source_manager.AddIncludePath(include_path);
   }
@@ -96,13 +111,17 @@ static int Run(int argc, char **argv, SourceManager &source_manager,
   }
 
   if (show_ast) {
-    TU->Print(std::cout);
+    TU->Print(std::cout, {.use_color = use_ast_color});
   }
 
   if (diagnostics.HasErrors()) {
     std::cerr
         << DiagnosticError(diagnostics.Messages()).ToString(source_manager);
     return 1;
+  }
+
+  if (no_ir) {
+    return 0;
   }
 
   auto llvm_context = std::make_unique<llvm::LLVMContext>();

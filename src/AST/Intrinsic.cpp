@@ -3,25 +3,41 @@
 #include "Expr.h"
 #include "ParserError.h"
 
+#include <format>
+#include <vector>
+
 void IntrinsicManager::RegisterIntrinsic(IntrinsicDesc desc) {
   ASSERT(!Intrinsics().contains(desc.name),
          "Intrinsic already registered: ", desc.name);
   Intrinsics().insert(std::move(desc));
 }
 
-std::vector<TreeNodePrintField> IntrinsicCall::GetPrintFields() const {
-  std::vector<TreeNodePrintField> print_fields;
+std::vector<ASTPrintField> IntrinsicCall::GetPrintFields() const {
+  std::vector<ASTPrintField> print_fields;
   AppendExprPrintFields(print_fields, *this);
-  for (const auto &arg : args) {
-    if (std::holds_alternative<std::unique_ptr<ASTNode>>(arg)) {
-      const auto &expr_arg = std::get<std::unique_ptr<ASTNode>>(arg);
-      print_fields.push_back({"arg_expr", expr_arg.get()});
-    } else if (std::holds_alternative<TypeRef>(arg)) {
-      const auto &type_arg = std::get<TypeRef>(arg);
-      print_fields.push_back({"arg_type", type_arg.get()});
+  AppendASTPrintField(print_fields, "intrinsic_name",
+                      desc ? std::string(desc->name) : "<unknown_intrinsic>");
+  for (size_t index = 0; index < args.size(); ++index) {
+    if (std::holds_alternative<TypeRef>(args[index])) {
+      const TypeRef type = std::get<TypeRef>(args[index]);
+      if (type) {
+        AppendASTPrintField(print_fields, std::format("arg{}_type", index),
+                            type->ToString(), ASTPrintRole::Type);
+      }
     }
   }
   return print_fields;
+}
+
+std::vector<const ASTNode *> IntrinsicCall::GetPrintChildren() const {
+  std::vector<const ASTNode *> print_children;
+  for (const auto &arg : args) {
+    if (std::holds_alternative<std::unique_ptr<ASTNode>>(arg)) {
+      const auto &expr_arg = std::get<std::unique_ptr<ASTNode>>(arg);
+      AppendASTPrintChild(print_children, expr_arg.get());
+    }
+  }
+  return print_children;
 }
 
 std::unique_ptr<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,

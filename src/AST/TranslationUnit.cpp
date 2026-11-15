@@ -878,3 +878,5 @@ ParseTranslationUnit(Lexer &lexer, TypeContext &types, SourceManager &sources,
   TU->location = translation_unit_location;
   return TU;
 }
+
+AST_PRINT_CHILDREN_IMPL(TranslationUnit, AST_CHILDREN(decls))

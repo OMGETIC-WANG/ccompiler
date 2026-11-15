@@ -42,8 +42,6 @@ public:
 
   std::string_view GetNodeTypeName() const override;
 
-  int GetColor() const override { return 0xc68dff; }
-
   template <std::derived_from<DeclBase> T> T *As() {
 #ifdef ENABLE_AS_TYPE_CHECK
     if (GetType() != T::__type) {
@@ -90,7 +88,6 @@ public:                                                                        \
 
 class DirectDeclarator : public DeclBase {
   DeclBaseImpl(DirectDeclarator);
-  TreeNodePrintFields(declarator, suffixes);
 
 public:
   std::unique_ptr<DeclBase> declarator;
@@ -99,7 +96,6 @@ public:
 
 class Declarator : public DeclBase {
   DeclBaseImpl(Declarator);
-  TreeNodePrintFields(direct_declarator);
 
 public:
   std::string ToString() const override {
@@ -116,7 +112,6 @@ public:
 
 class IdentifierDeclarator : public DeclBase {
   DeclBaseImpl(IdentifierDeclarator);
-  TreeNodeFieldAsString(identifier);
 
 public:
   IdentifierDeclarator(std::string_view id = {}) : identifier(id) {}
@@ -145,19 +140,6 @@ class ParamList : public DeclBase {
   DeclBaseImpl(ParamList);
 
 public:
-  std::vector<TreeNodePrintField> GetPrintFields() const override {
-    std::vector<TreeNodePrintField> print_fields;
-    for (const auto &param : params) {
-      if (param.declarator) {
-        AppendTreeNodePrintField(print_fields, "declarator", param.declarator);
-      } else {
-        AppendTreeNodePrintField(print_fields, "parameter",
-                                 param.specifier.type_spec.type_name);
-      }
-    }
-    return print_fields;
-  }
-
   std::vector<ParamListItem> params;
   bool has_va_args = false;
 };
@@ -168,7 +150,6 @@ class Initializer : public DeclBase {
 
 class ValueInitializer : public Initializer {
   DeclBaseImpl(ValueInitializer);
-  TreeNodePrintFields(value);
 
 public:
   std::unique_ptr<ASTNode> value;
@@ -176,7 +157,6 @@ public:
 
 class FieldInitializer : public Initializer {
   DeclBaseImpl(FieldInitializer);
-  TreeNodePrintFields(field_initializers);
 
 public:
   std::vector<std::pair<std::string_view, std::unique_ptr<Initializer>>>
@@ -185,7 +165,6 @@ public:
 
 class ArrayInitializer : public Initializer {
   DeclBaseImpl(ArrayInitializer);
-  TreeNodePrintFields(initializers);
 
 public:
   std::vector<std::unique_ptr<Initializer>> initializers;
@@ -193,7 +172,6 @@ public:
 
 class InitDeclarator : public DeclBase {
   DeclBaseImpl(InitDeclarator);
-  TreeNodePrintFields(declarator, initializer);
 
 public:
   std::unique_ptr<Declarator> declarator;
@@ -202,7 +180,6 @@ public:
 
 class Declaration : public DeclBase {
   DeclBaseImpl(Declaration);
-  TreeNodePrintFields(init_declarators);
 
 public:
   std::string ToString() const override {

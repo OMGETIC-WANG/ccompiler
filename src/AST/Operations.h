@@ -7,7 +7,7 @@
 
 class FunctionInvocation : public Expr {
   ASTNodeImpl(FunctionInvocation);
-  ExprPrintFields(function, arguments);
+  AST_PRINT_MEMBERS_DECL();
 
 public:
   std::unique_ptr<ASTNode> function;
@@ -16,7 +16,7 @@ public:
 
 class SequenceEval : public Expr {
   ASTNodeImpl(SequenceEval);
-  ExprPrintFields(expressions);
+  AST_PRINT_MEMBERS_DECL();
 
 public:
   std::vector<std::unique_ptr<ASTNode>> expressions;
@@ -76,28 +76,9 @@ REGISTER_ENUM(BinaryOpType, BINARY_OP_TYPE_VALUES)
 MAKE_ENUM(UnaryOpType, UNARY_OP_TYPE_VALUES)
 REGISTER_ENUM(UnaryOpType, UNARY_OP_TYPE_VALUES)
 
-inline void
-AppendTreeNodePrintField(std::vector<TreeNodePrintField> &fields,
-                         std::string_view name,
-                         const std::optional<BinaryOpType> &op_type) {
-  if (op_type) {
-    AppendTreeNodePrintField(fields, name,
-                             EnumRefl<BinaryOpType>::GetName(*op_type));
-  }
-}
-
-inline void AppendTreeNodePrintField(std::vector<TreeNodePrintField> &fields,
-                                     std::string_view name,
-                                     const std::optional<TypeRef> &type) {
-  if (type) {
-    AppendTreeNodePrintField(fields, name, *type);
-  }
-}
-
 class UnaryOp : public Expr {
   ASTNodeImpl(UnaryExpr);
-  ExprFieldAsString(op_type);
-  ExprPrintFields(operand);
+  AST_PRINT_MEMBERS_DECL();
 
 public:
   explicit UnaryOp(UnaryOpType op_type) : op_type(op_type) {}
@@ -110,7 +91,7 @@ public:
 
 class TypeCast : public UnaryOp {
   ASTNodeImpl(TypeCast);
-  ExprPrintFields(target_type, operand);
+  AST_PRINT_FIELDS_DECL();
 
 public:
   explicit TypeCast(TypeRef target_type = nullptr)
@@ -121,7 +102,7 @@ public:
 
 class ImplicitCast : public UnaryOp {
   ASTNodeImpl(ImplicitCast);
-  ExprPrintFields(target_type, operand);
+  AST_PRINT_FIELDS_DECL();
 
 public:
   explicit ImplicitCast(TypeRef target_type = nullptr)
@@ -132,9 +113,7 @@ public:
 
 class BinaryOp : public Expr {
   ASTNodeImpl(BinaryExpr);
-  ExprFieldAsString(op_type);
-  ExprPrintFields(operation_type, compound_op, left_value_cast_type,
-                  result_cast_type, left, right);
+  AST_PRINT_MEMBERS_DECL();
 
 public:
   explicit BinaryOp(BinaryOpType op_type) : op_type(op_type) {}
@@ -152,7 +131,7 @@ public:
 
 class GetField : public UnaryOp {
   ASTNodeImpl(GetField);
-  ExprPrintFields(field_name, operand);
+  AST_PRINT_FIELDS_DECL();
 
 public:
   explicit GetField(std::string_view field_name = "")
@@ -163,7 +142,7 @@ public:
 
 class PtrGetField : public UnaryOp {
   ASTNodeImpl(PtrGetField);
-  ExprPrintFields(field_name, operand);
+  AST_PRINT_FIELDS_DECL();
 
 public:
   explicit PtrGetField(std::string_view field_name = "")

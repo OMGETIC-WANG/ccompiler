@@ -62,17 +62,12 @@ struct IntrinsicDesc {
 
 class IntrinsicCall : public Expr {
   ASTNodeImpl(IntrinsicCall);
-
-  std::string ToStringImpl() const override {
-    return desc ? std::string(desc->name) : "<unknown_intrinsic>";
-  }
+  AST_PRINT_MEMBERS_DECL();
 
   RValue Eval(ExprEmitter *emitter) { return desc->evaluator(args, emitter); }
   RValue Eval(GenContext *context) { return desc->evaluator(args, context); }
 
 public:
-  virtual std::vector<TreeNodePrintField> GetPrintFields() const override;
-
   const IntrinsicDesc *desc = nullptr;
   std::vector<IntrinsicCallArg> args;
 };
