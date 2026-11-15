@@ -307,11 +307,12 @@ Token RawLexer::PeekScannerNextToken() {
 }
 
 Token RawLexer::EmitToken() {
-  Token tok = EmitTokenImpl();
-  while (!IsInValidPPCond() && tok.type != TokenType::EndOfFile) {
+  std::optional<Token> tok = EmitTokenImpl();
+  while (!tok.has_value() ||
+         (!IsInValidPPCond() && tok->type != TokenType::EndOfFile)) {
     tok = EmitTokenImpl();
   }
-  return tok;
+  return *tok;
 }
 
 static bool IsPreprocessor(std::string_view name) {
@@ -357,7 +358,7 @@ ScanPreprocessorMessage(Scanner &scanner, SourceManager &source_manager) {
   }
 }
 
-Token RawLexer::EmitTokenImpl() {
+std::optional<Token> RawLexer::EmitTokenImpl() {
   bool is_active_group = IsInValidPPCond();
   Token tok = PeekScannerNextToken();
   if (tok.type != TokenType::Sharp) {
@@ -380,7 +381,7 @@ Token RawLexer::EmitTokenImpl() {
             *macro, std::vector<std::vector<Token>>(), _source_manager,
             _compile_context.Diagnostics()));
       }
-      return EmitToken();
+      return std::nullopt;
     }
     if (tok.type != TokenType::EndOfFile) {
       CurrScanner()->ConsumeToken(tok);
@@ -405,7 +406,7 @@ Token RawLexer::EmitTokenImpl() {
     curr_scanner.ConsumeToken(preproc_tok);
     if (!is_active_group) {
       SkipPreprocessorLine(curr_scanner);
-      return EmitToken();
+      return std::nullopt;
     }
     std::string curr_file(_source_manager.GetFileName(preproc_tok.location));
     std::string_view include_file = ScanIncludeFile(
@@ -494,7 +495,7 @@ Token RawLexer::EmitTokenImpl() {
     }
   }
 
-  return EmitToken();
+  return std::nullopt;
 }
 
 bool RawLexer::IsInValidPPCond() const {

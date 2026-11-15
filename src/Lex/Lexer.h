@@ -36,7 +36,7 @@ public:
   Token EmitToken() override;
 
 private:
-  Token EmitTokenImpl();
+  std::optional<Token> EmitTokenImpl();
 
   Token PeekScannerNextToken();
 
