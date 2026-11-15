@@ -1,5 +1,6 @@
 #include "GenDecl.h"
 
+#include "../../AST/Operations.h"
 #include "Value.h"
 
 #include <llvm/IR/Constants.h>
@@ -149,15 +150,24 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
            "Sema accepted a non-numeric builtin initializer");
     auto *val_init = initializer->DynCast<ValueInitializer>();
     ASSERT(val_init, "Sema accepted an invalid builtin initializer");
-    return LowerNumericConstant(type, val_init->value.get(), context);
+    auto *value = dynamic_cast<Expr *>(val_init->value.get());
+    ASSERT(value && value->type == builtin_type,
+           "Sema left an initializer with the wrong type");
+    return LowerNumericConstant(value->type, value, context);
   }
 
   if (auto *ptr_type = type->DynCast<PointerType>()) {
     auto *val_init = initializer->DynCast<ValueInitializer>();
     ASSERT(val_init, "Sema accepted an invalid pointer initializer");
-    auto *intptr = LowerNumericConstant(context.Types().getInt(),
-                                        val_init->value.get(), context);
-    return llvm::ConstantExpr::getIntToPtr(intptr, context.LLVMType(ptr_type));
+    auto *cast = val_init->value->DynCast<ImplicitCast>();
+    ASSERT(cast && cast->target_type == ptr_type,
+           "Sema omitted the global pointer initializer conversion");
+    auto *source = dynamic_cast<Expr *>(cast->operand.get());
+    ASSERT(source && source->constant_value.has_value(),
+           "Sema did not retain the pointer initializer constant");
+    auto *intptr = LowerNumericConstant(source->type, source, context);
+    return llvm::ConstantExpr::getIntToPtr(intptr,
+                                           context.LLVMType(cast->target_type));
   }
 
   RAISE_ERROR("Sema accepted an unsupported global initializer");

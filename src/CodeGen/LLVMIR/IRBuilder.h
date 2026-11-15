@@ -70,16 +70,13 @@ public:
 
   RValue CreateBoolCond(const RValue &value);
 
-  RValue CreateInvBoolCond(const RValue &value);
-
   RValue CreateNumericCast(const RValue &value, TypeRef target_type);
 
   RValue CreatePhi(const RValue &value1, llvm::BasicBlock *block1,
                    const RValue &value2, llvm::BasicBlock *block2);
 
   RValue CreateBinaryOp(BinaryOpType op, const RValue &left,
-                        const RValue &right, TypeRef out_type,
-                        SourceLocation location = {});
+                        const RValue &right, SourceLocation location = {});
 
   RValue CreateFuncInvoke(const RValue &func, std::span<const RValue> args,
                           SourceLocation location = {});

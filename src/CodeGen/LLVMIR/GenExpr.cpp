@@ -174,6 +174,13 @@ struct ExprEmitter::detail {
             self.context.LLVMType(value.c_type)) {
       return RValue{target_type, value.ir_value};
     }
+    if (target_type->Is<BuiltinType>() &&
+        target_type->As<BuiltinType>()->Kind() == BuiltinKind::I1) {
+      ASSERT(IsNumericType(value.c_type) || value.c_type->Is<PointerType>() ||
+                 value.c_type->Is<EnumType>(),
+             "Sema approved a non-scalar boolean conversion");
+      return self.builder.CreateBoolCond(value);
+    }
     if (target_type->Is<PointerType>() &&
         (value.c_type->Is<PointerType>() || value.c_type->Is<ArrayType>() ||
          value.c_type->Is<FunctionType>())) {
@@ -185,14 +192,6 @@ struct ExprEmitter::detail {
     RAISE_ERROR("Sema approved an unsupported implicit conversion");
   }
 
-  static RValue CastToI1IfNeeded(const RValue &value, ExprEmitter &self) {
-    if (value.c_type->Is<BuiltinType>() &&
-        value.c_type->As<BuiltinType>()->Kind() == BuiltinKind::I1) {
-      return value;
-    }
-    return self.builder.CreateBoolCond(value);
-  }
-
   enum class EvalAndOr { And, Or };
 
   template <EvalAndOr eval_kind>
@@ -200,6 +199,8 @@ struct ExprEmitter::detail {
     TypeRef bool_type =
         ApplyTypeTag(self.context.Types().getI1(), TypeTag::Unsigned);
     RValue left_value = self.EmitRValue(left);
+    ASSERT(left_value.c_type == bool_type,
+           "Sema left a non-boolean logical left operand");
     llvm::BasicBlock *left_block = self.builder.GetInsertBlock();
     ASSERT(left_block, "Missing insertion block in logical expression");
 
@@ -219,7 +220,8 @@ struct ExprEmitter::detail {
 
     self.builder.SetInsertPoint(right_block);
     RValue right_value = self.EmitRValue(right);
-    right_value = CastToI1IfNeeded(right_value, self);
+    ASSERT(right_value.c_type == bool_type,
+           "Sema left a non-boolean logical right operand");
     llvm::BasicBlock *right_end_block = self.builder.GetInsertBlock();
     self.builder.CreateBr(end_block);
 
@@ -246,15 +248,13 @@ struct ExprEmitter::detail {
         op_type == BinaryOpType::BitXor) {
       ASSERT(IsIntegerType(left.c_type) && IsIntegerType(right.c_type),
              "Sema accepted non-integer bitwise operands");
-      return self.builder.CreateBinaryOp(op_type, left, right, left.c_type,
-                                         location);
+      return self.builder.CreateBinaryOp(op_type, left, right, location);
     }
 
     if (op_type == BinaryOpType::LShift || op_type == BinaryOpType::RShift) {
       ASSERT(IsIntegerType(left.c_type) && IsIntegerType(right.c_type),
              "Sema accepted non-integer shift operands");
-      return self.builder.CreateBinaryOp(op_type, left, right, left.c_type,
-                                         location);
+      return self.builder.CreateBinaryOp(op_type, left, right, location);
     }
 
     if (left.c_type->Is<PointerType>()) {
@@ -269,8 +269,7 @@ struct ExprEmitter::detail {
       return RValue{left.c_type, subscripted.address};
     }
 
-    return self.builder.CreateBinaryOp(op_type, left, right, left.c_type,
-                                       location);
+    return self.builder.CreateBinaryOp(op_type, left, right, location);
   }
 
   static LValue GetUnionFieldLValue(const LValue &value,
@@ -296,33 +295,6 @@ struct ExprEmitter::detail {
     return LoadAsRValue(field_lval, self);
   }
 };
-
-static BinaryOpType OpAssignToOp(BinaryOpType op_assign_op) {
-  switch (op_assign_op) {
-  case BinaryOpType::AddAssign:
-    return BinaryOpType::Add;
-  case BinaryOpType::SubAssign:
-    return BinaryOpType::Sub;
-  case BinaryOpType::MulAssign:
-    return BinaryOpType::Mul;
-  case BinaryOpType::DivAssign:
-    return BinaryOpType::Div;
-  case BinaryOpType::ModAssign:
-    return BinaryOpType::Mod;
-  case BinaryOpType::BitAndAssign:
-    return BinaryOpType::BitAnd;
-  case BinaryOpType::BitOrAssign:
-    return BinaryOpType::BitOr;
-  case BinaryOpType::BitXorAssign:
-    return BinaryOpType::BitXor;
-  case BinaryOpType::LShiftAssign:
-    return BinaryOpType::LShift;
-  case BinaryOpType::RShiftAssign:
-    return BinaryOpType::RShift;
-  default:
-    RAISE_ERROR("Unsupported assignment operator");
-  }
-}
 
 LValue ExprEmitter::EmitLValue(ASTNode *node) {
   if (auto *var_ref = node->DynCast<VarRef>()) {
@@ -475,23 +447,41 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
   if (auto *bin_expr = node->DynCast<BinaryOp>()) {
     switch (bin_expr->op_type) {
     case BinaryOpType::Assignment: {
-      LValue left = EmitLValue(bin_expr->left.get());
-      ASSERT(left.address, "Sema accepted non-lvalue assignment");
+      LValue left_lhs = EmitLValue(bin_expr->left.get());
+      ASSERT(left_lhs.address, "Sema accepted non-lvalue assignment");
+      if (!bin_expr->compound_op) {
+        RValue right = EmitRValue(bin_expr->right.get());
+        builder.CreateStore(right, left_lhs);
+        return RValue{bin_expr->type, right.ir_value};
+      }
+
+      RValue left = detail::LoadAsRValue(left_lhs, *this);
+      if (bin_expr->left_value_cast_type) {
+        left = detail::EmitCast(*bin_expr->left_value_cast_type, left, *this);
+      } else {
+        ASSERT(left.c_type == bin_expr->operation_type,
+               "Sema omitted a compound-assignment input conversion");
+      }
       RValue right = EmitRValue(bin_expr->right.get());
-      builder.CreateStore(right, left);
-      return RValue{bin_expr->type, right.ir_value};
+      ASSERT(bin_expr->operation_type != nullptr,
+             "Sema omitted a compound-assignment operation type");
+      RValue res = detail::EvalBinaryOp(*bin_expr->compound_op, left, right,
+                                        bin_expr->location, *this);
+      if (bin_expr->result_cast_type) {
+        res = detail::EmitCast(*bin_expr->result_cast_type, res, *this);
+      } else {
+        ASSERT(res.c_type == bin_expr->type,
+               "Sema omitted a compound-assignment result conversion");
+      }
+      builder.CreateStore(res, left_lhs);
+      return res;
     }
     case BinaryOpType::And:
-      return detail::EmitCast(bin_expr->type,
-                              detail::EvalLogicAnd(bin_expr->left.get(),
-                                                   bin_expr->right.get(),
-                                                   *this),
-                              *this);
+      return detail::EvalLogicAnd(bin_expr->left.get(), bin_expr->right.get(),
+                                  *this);
     case BinaryOpType::Or:
-      return detail::EmitCast(bin_expr->type,
-                              detail::EvalLogicOr(bin_expr->left.get(),
-                                                  bin_expr->right.get(), *this),
-                              *this);
+      return detail::EvalLogicOr(bin_expr->left.get(), bin_expr->right.get(),
+                                 *this);
     case BinaryOpType::Eq:
     case BinaryOpType::Ne:
     case BinaryOpType::Lt:
@@ -512,30 +502,9 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
       RValue right = EmitRValue(bin_expr->right.get());
       RValue result = detail::EvalBinaryOp(bin_expr->op_type, left, right,
                                            bin_expr->location, *this);
-      result.c_type = bin_expr->type;
+      ASSERT(result.c_type == bin_expr->type,
+             "Sema left a binary expression with a mismatched result type");
       return result;
-    }
-    case BinaryOpType::AddAssign:
-    case BinaryOpType::SubAssign:
-    case BinaryOpType::MulAssign:
-    case BinaryOpType::DivAssign:
-    case BinaryOpType::ModAssign:
-    case BinaryOpType::BitAndAssign:
-    case BinaryOpType::BitOrAssign:
-    case BinaryOpType::BitXorAssign:
-    case BinaryOpType::LShiftAssign:
-    case BinaryOpType::RShiftAssign: {
-      LValue left_lhs = EmitLValue(bin_expr->left.get());
-      ASSERT(left_lhs.address, "Sema accepted non-lvalue compound assignment");
-      RValue left = detail::LoadAsRValue(left_lhs, *this);
-      left = detail::EmitCast(bin_expr->operation_type, left, *this);
-      RValue right = EmitRValue(bin_expr->right.get());
-
-      RValue res = detail::EvalBinaryOp(OpAssignToOp(bin_expr->op_type), left,
-                                        right, bin_expr->location, *this);
-      res = detail::EmitCast(left_lhs.c_type, res, *this);
-      builder.CreateStore(res, left_lhs);
-      return RValue{bin_expr->type, res.ir_value};
     }
     default:
       break;
@@ -575,14 +544,20 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     }
     case UnaryOpType::UnaryPlus: {
       RValue operand = EmitRValue(unary_expr->operand.get());
+      ASSERT(operand.c_type == unary_expr->type,
+             "Sema left unary plus with a mismatched result type");
       return operand;
     }
     case UnaryOpType::UnaryMinus: {
       RValue operand = EmitRValue(unary_expr->operand.get());
+      ASSERT(operand.c_type == unary_expr->type,
+             "Sema left unary minus with a mismatched result type");
       return builder.CreateInv(operand);
     }
     case UnaryOpType::BitNot: {
       RValue operand = EmitRValue(unary_expr->operand.get());
+      ASSERT(operand.c_type == unary_expr->type,
+             "Sema left bitwise NOT with a mismatched result type");
       return builder.CreateBitNot(operand);
     }
     case UnaryOpType::IncBeforeUse:
@@ -610,19 +585,26 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
         builder.CreateStore(updated, operand);
         return is_before_use ? updated : old_value;
       } else {
-        RValue one{operand.c_type,
-                   llvm::ConstantInt::get(context.LLVMType(operand.c_type), 1)};
+        RValue one{operand.c_type, nullptr};
+        if (IsFloatingType(operand.c_type)) {
+          one.ir_value =
+              llvm::ConstantFP::get(context.LLVMType(operand.c_type), 1.0);
+        } else {
+          one.ir_value =
+              llvm::ConstantInt::get(context.LLVMType(operand.c_type), 1);
+        }
         RValue updated = builder.CreateBinaryOp(
             is_inc ? BinaryOpType::Add : BinaryOpType::Sub, old_value, one,
-            operand.c_type, unary_expr->location);
+            unary_expr->location);
         builder.CreateStore(updated, operand);
         return is_before_use ? updated : old_value;
       }
     }
     case UnaryOpType::Not: {
       RValue operand = EmitRValue(unary_expr->operand.get());
-      return detail::EmitCast(unary_expr->type,
-                              builder.CreateInvBoolCond(operand), *this);
+      ASSERT(operand.c_type == unary_expr->type,
+             "Sema left logical NOT with a mismatched operand type");
+      return builder.CreateBitNot(operand);
     }
     default:
       break;
@@ -649,8 +631,6 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     builder.SetInsertPoint(false_block);
     RValue false_value = EmitRValue(cond_expr->false_expr.get());
 
-    true_value.c_type = cond_expr->type;
-    false_value.c_type = cond_expr->type;
     builder.SetInsertPoint(true_block);
     builder.CreateBr(end_block);
 
@@ -924,8 +904,11 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
       builder.CreateBr(default_block);
 
       for (const auto &val : case_stmt->case_vals) {
-        auto folded =
-            LowerNumericConstant(switched_val.c_type, val.get(), context);
+        auto *case_expr = dynamic_cast<Expr *>(val.get());
+        ASSERT(case_expr && case_expr->type == switched_val.c_type,
+               "Sema left a switch case value with the wrong type");
+        auto *folded =
+            LowerNumericConstant(case_expr->type, val.get(), context);
         case_blocks.push_back({llvm::cast<llvm::ConstantInt>(folded), body});
       }
     }

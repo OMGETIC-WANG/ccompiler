@@ -565,10 +565,14 @@ END_VERIFY_NODE()
 
 BEGIN_VERIFY_NODE(BinaryOp)
 VERIFY_FIELDS("type", "value_category", "constant_value", "op_type",
-              "operation_type", "left", "right")
+              "operation_type", "compound_op", "left_value_cast_type",
+              "result_cast_type", "left", "right")
 VerifyExprFields(*node, expected, context);
 VERIFY_FIELD(op_type)
 VERIFY_FIELD(operation_type)
+VERIFY_FIELD(compound_op)
+VERIFY_FIELD(left_value_cast_type)
+VERIFY_FIELD(result_cast_type)
 VERIFY_FIELD(left)
 VERIFY_FIELD(right)
 END_VERIFY_NODE()

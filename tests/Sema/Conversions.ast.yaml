@@ -1,0 +1,149 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: global_ptr
+        initializer:
+          ValueInitializer:
+            value:
+              ImplicitCast:
+                type:
+                  PointerType:
+                    pointee_type: {BuiltinType: {type_name: int}}
+                value_category: RValue
+                target_type:
+                  PointerType:
+                    pointee_type: {BuiltinType: {type_name: int}}
+                operand:
+                  LiteralNum:
+                    type: {BuiltinType: {type_name: int}}
+                    value_category: RValue
+                    value: 0
+    - FunctionDecl:
+        name: main
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: narrow
+              - BinaryExpr:
+                  type: {BuiltinType: {type_name: char}}
+                  operation_type: {BuiltinType: {type_name: double}}
+                  op_type: Assignment
+                  compound_op: Add
+                  left_value_cast_type: {BuiltinType: {type_name: double}}
+                  result_cast_type: {BuiltinType: {type_name: char}}
+                  left:
+                    VarRef:
+                      type: {BuiltinType: {type_name: char}}
+                      value_category: LValue
+                      name: narrow
+                  right:
+                    LiteralNum:
+                      type: {BuiltinType: {type_name: double}}
+                      value: 2.5
+              - VarDecl:
+                  name: value
+              - IfStmt:
+                  condition:
+                    ImplicitCast:
+                      type: {BuiltinType: {type_name: i1}}
+                      target_type: {BuiltinType: {type_name: i1}}
+                      operand:
+                        ImplicitCast:
+                          type: {BuiltinType: {type_name: int}}
+                          target_type: {BuiltinType: {type_name: int}}
+                          operand:
+                            BinaryExpr:
+                              type: {BuiltinType: {type_name: i1}}
+                              operation_type: {BuiltinType: {type_name: i1}}
+                              op_type: And
+                              left:
+                                ImplicitCast:
+                                  type: {BuiltinType: {type_name: i1}}
+                                  target_type: {BuiltinType: {type_name: i1}}
+                                  operand:
+                                    VarRef:
+                                      type: {BuiltinType: {type_name: int}}
+                                      value_category: LValue
+                                      name: value
+                              right:
+                                ImplicitCast:
+                                  type: {BuiltinType: {type_name: i1}}
+                                  target_type: {BuiltinType: {type_name: i1}}
+                                  operand:
+                                    LiteralNum:
+                                      type: {BuiltinType: {type_name: int}}
+                                      value: 2
+                  then_branch:
+                    CompoundStmt:
+                      statements:
+                        - BinaryExpr:
+                            type: {BuiltinType: {type_name: int}}
+                            op_type: Assignment
+                            left:
+                              VarRef:
+                                type: {BuiltinType: {type_name: int}}
+                                value_category: LValue
+                                name: value
+                            right:
+                              ImplicitCast:
+                                type: {BuiltinType: {type_name: int}}
+                                target_type: {BuiltinType: {type_name: int}}
+                                operand:
+                                  UnaryExpr:
+                                    type: {BuiltinType: {type_name: i1}}
+                                    op_type: Not
+                                    operand:
+                                      ImplicitCast:
+                                        type: {BuiltinType: {type_name: i1}}
+                                        target_type:
+                                          {BuiltinType: {type_name: i1}}
+                                        operand:
+                                          LiteralNum:
+                                            type:
+                                              {BuiltinType: {type_name: int}}
+                                            value: 0
+              - SwitchStmt:
+                  value:
+                    VarRef:
+                      type: {BuiltinType: {type_name: char}}
+                      value_category: LValue
+                      name: narrow
+                  cases:
+                    - CaseStmt:
+                        case_vals:
+                          - ImplicitCast:
+                              type: {BuiltinType: {type_name: char}}
+                              target_type: {BuiltinType: {type_name: char}}
+                              operand:
+                                LiteralNum:
+                                  type: {BuiltinType: {type_name: int}}
+                                  value: 257
+                        body:
+                          - ReturnStmt:
+                              ret_value:
+                                ImplicitCast:
+                                  type: {BuiltinType: {type_name: int}}
+                                  target_type: {BuiltinType: {type_name: int}}
+                                  operand:
+                                    BinaryExpr:
+                                      type: {BuiltinType: {type_name: i1}}
+                                      operation_type:
+                                        {BuiltinType: {type_name: int}}
+                                      op_type: Lt
+              - ReturnStmt:
+                  ret_value:
+                    ConditionalExpr:
+                      type: {BuiltinType: {type_name: int}}
+                      condition:
+                        ImplicitCast:
+                          type: {BuiltinType: {type_name: i1}}
+                          target_type: {BuiltinType: {type_name: i1}}
+                          operand:
+                            VarRef:
+                              type:
+                                PointerType:
+                                  pointee_type:
+                                    {BuiltinType: {type_name: int}}
+                              value_category: LValue
+                              name: global_ptr

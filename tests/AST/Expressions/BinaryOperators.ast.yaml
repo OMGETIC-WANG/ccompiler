@@ -92,52 +92,52 @@ TranslationUnit:
         name: add_assign_expr
         initializer:
           ValueInitializer:
-            value: {BinaryExpr: {op_type: AddAssign}}
+            value: {BinaryExpr: {op_type: Assignment, compound_op: Add}}
     - VarDecl:
         name: sub_assign_expr
         initializer:
           ValueInitializer:
-            value: {BinaryExpr: {op_type: SubAssign}}
+            value: {BinaryExpr: {op_type: Assignment, compound_op: Sub}}
     - VarDecl:
         name: mul_assign_expr
         initializer:
           ValueInitializer:
-            value: {BinaryExpr: {op_type: MulAssign}}
+            value: {BinaryExpr: {op_type: Assignment, compound_op: Mul}}
     - VarDecl:
         name: div_assign_expr
         initializer:
           ValueInitializer:
-            value: {BinaryExpr: {op_type: DivAssign}}
+            value: {BinaryExpr: {op_type: Assignment, compound_op: Div}}
     - VarDecl:
         name: mod_assign_expr
         initializer:
           ValueInitializer:
-            value: {BinaryExpr: {op_type: ModAssign}}
+            value: {BinaryExpr: {op_type: Assignment, compound_op: Mod}}
     - VarDecl:
         name: bitand_assign_expr
         initializer:
           ValueInitializer:
-            value: {BinaryExpr: {op_type: BitAndAssign}}
+            value: {BinaryExpr: {op_type: Assignment, compound_op: BitAnd}}
     - VarDecl:
         name: bitor_assign_expr
         initializer:
           ValueInitializer:
-            value: {BinaryExpr: {op_type: BitOrAssign}}
+            value: {BinaryExpr: {op_type: Assignment, compound_op: BitOr}}
     - VarDecl:
         name: bitxor_assign_expr
         initializer:
           ValueInitializer:
-            value: {BinaryExpr: {op_type: BitXorAssign}}
+            value: {BinaryExpr: {op_type: Assignment, compound_op: BitXor}}
     - VarDecl:
         name: lshift_assign_expr
         initializer:
           ValueInitializer:
-            value: {BinaryExpr: {op_type: LShiftAssign}}
+            value: {BinaryExpr: {op_type: Assignment, compound_op: LShift}}
     - VarDecl:
         name: rshift_assign_expr
         initializer:
           ValueInitializer:
-            value: {BinaryExpr: {op_type: RShiftAssign}}
+            value: {BinaryExpr: {op_type: Assignment, compound_op: RShift}}
     - VarDecl:
         name: subscript_expr
         initializer:

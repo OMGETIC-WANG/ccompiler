@@ -3,6 +3,8 @@
 #include "AST.h"
 #include "Type.h"
 
+#include <optional>
+
 class FunctionInvocation : public Expr {
   ASTNodeImpl(FunctionInvocation);
   ExprPrintFields(function, arguments);
@@ -21,18 +23,6 @@ public:
 };
 
 // clang-format off
-#define BINARY_COMPOUNT_ASSIGN_OP_VALUES(x)\
-  x(AddAssign)\
-  x(SubAssign)\
-  x(MulAssign)\
-  x(DivAssign)\
-  x(ModAssign)\
-  x(BitAndAssign)\
-  x(BitOrAssign)\
-  x(BitXorAssign)\
-  x(LShiftAssign)\
-  x(RShiftAssign)
-
 #define BINARY_NUMERIC_ARITHMETIC_OP_VALUES(x)\
   x(Add)\
   x(Sub)\
@@ -57,7 +47,6 @@ public:
   x(Assignment)\
   BINARY_NUMERIC_ARITHMETIC_OP_VALUES(x)\
   BINARY_BITWISE_ARITHMETIC_OP_VALUES(x)\
-  BINARY_COMPOUNT_ASSIGN_OP_VALUES(x)\
   x(Subscript)\
   x(And)\
   x(Or)
@@ -87,21 +76,23 @@ REGISTER_ENUM(BinaryOpType, BINARY_OP_TYPE_VALUES)
 MAKE_ENUM(UnaryOpType, UNARY_OP_TYPE_VALUES)
 REGISTER_ENUM(UnaryOpType, UNARY_OP_TYPE_VALUES)
 
-class BinaryOp : public Expr {
-  ASTNodeImpl(BinaryExpr);
-  ExprFieldAsString(op_type);
-  ExprPrintFields(operation_type, left, right);
+inline void
+AppendTreeNodePrintField(std::vector<TreeNodePrintField> &fields,
+                         std::string_view name,
+                         const std::optional<BinaryOpType> &op_type) {
+  if (op_type) {
+    AppendTreeNodePrintField(fields, name,
+                             EnumRefl<BinaryOpType>::GetName(*op_type));
+  }
+}
 
-public:
-  explicit BinaryOp(BinaryOpType op_type) : op_type(op_type) {}
-
-  BinaryOpType GetOpType() const { return op_type; }
-
-  BinaryOpType op_type;
-  TypeRef operation_type = nullptr;
-  std::unique_ptr<ASTNode> left;
-  std::unique_ptr<ASTNode> right;
-};
+inline void AppendTreeNodePrintField(std::vector<TreeNodePrintField> &fields,
+                                     std::string_view name,
+                                     const std::optional<TypeRef> &type) {
+  if (type) {
+    AppendTreeNodePrintField(fields, name, *type);
+  }
+}
 
 class UnaryOp : public Expr {
   ASTNodeImpl(UnaryExpr);
@@ -137,6 +128,26 @@ public:
       : UnaryOp(UnaryOpType::TypeCast), target_type(target_type) {}
 
   TypeRef target_type;
+};
+
+class BinaryOp : public Expr {
+  ASTNodeImpl(BinaryExpr);
+  ExprFieldAsString(op_type);
+  ExprPrintFields(operation_type, compound_op, left_value_cast_type,
+                  result_cast_type, left, right);
+
+public:
+  explicit BinaryOp(BinaryOpType op_type) : op_type(op_type) {}
+
+  BinaryOpType GetOpType() const { return op_type; }
+
+  BinaryOpType op_type;
+  TypeRef operation_type = nullptr;
+  std::optional<BinaryOpType> compound_op;
+  std::optional<TypeRef> left_value_cast_type;
+  std::optional<TypeRef> result_cast_type;
+  std::unique_ptr<ASTNode> left;
+  std::unique_ptr<ASTNode> right;
 };
 
 class GetField : public UnaryOp {

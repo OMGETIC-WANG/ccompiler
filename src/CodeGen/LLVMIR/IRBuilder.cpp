@@ -28,12 +28,12 @@ void IRBuilder::CreateBr(llvm::BasicBlock *target) {
 
 void IRBuilder::CreateCondBr(const RValue &cond, llvm::BasicBlock *true_block,
                              llvm::BasicBlock *false_block) {
-  RValue bool_cond = cond;
-  if (!cond.c_type->Is<BuiltinType>() ||
-      cond.c_type->As<BuiltinType>()->Kind() != BuiltinKind::I1) {
-    bool_cond = CreateBoolCond(cond);
-  }
-  _builder.CreateCondBr(bool_cond.ir_value, true_block, false_block);
+  ASSERT(cond.c_type->Is<BuiltinType>() &&
+             cond.c_type->As<BuiltinType>()->Kind() == BuiltinKind::I1,
+         "Sema left a non-boolean branch condition type");
+  ASSERT(cond.ir_value->getType()->isIntegerTy(1),
+         "Sema left a non-boolean branch condition");
+  _builder.CreateCondBr(cond.ir_value, true_block, false_block);
 }
 
 RValue IRBuilder::CreateLoad(TypeRef type, const LValue &ptr) {
@@ -169,26 +169,6 @@ RValue IRBuilder::CreateBoolCond(const RValue &value) {
   return RValue{bool_type, cond};
 }
 
-RValue IRBuilder::CreateInvBoolCond(const RValue &value) {
-  TypeRef bool_type = ApplyTypeTag(_context.Types().getI1(), TypeTag::Unsigned);
-  llvm::Value *cond = nullptr;
-  if (value.c_type->Is<PointerType>()) {
-    cond = _builder.CreateICmpEQ(
-        value.ir_value,
-        llvm::ConstantPointerNull::get(
-            llvm::cast<llvm::PointerType>(_context.LLVMType(value.c_type))));
-  } else if (IsFloatingType(value.c_type)) {
-    cond = _builder.CreateFCmpUEQ(
-        value.ir_value,
-        llvm::ConstantFP::get(_context.LLVMType(value.c_type), 0.0));
-  } else {
-    cond = _builder.CreateICmpEQ(
-        value.ir_value,
-        llvm::Constant::getNullValue(_context.LLVMType(value.c_type)));
-  }
-  return RValue{bool_type, cond};
-}
-
 RValue IRBuilder::CreateNumericCast(const RValue &value, TypeRef target_type) {
   llvm::Type *from_type = _context.LLVMType(value.c_type);
   llvm::Type *to_type = _context.LLVMType(target_type);
@@ -240,8 +220,7 @@ RValue IRBuilder::CreatePhi(const RValue &value1, llvm::BasicBlock *block1,
 }
 
 RValue IRBuilder::CreateBinaryOp(BinaryOpType op, const RValue &left,
-                                 const RValue &right, TypeRef out_type,
-                                 SourceLocation location) {
+                                 const RValue &right, SourceLocation location) {
   (void)location;
   ASSERT(left.ir_value->getType()->isIntegerTy() ||
              left.ir_value->getType()->isFloatingPointTy(),
@@ -250,58 +229,57 @@ RValue IRBuilder::CreateBinaryOp(BinaryOpType op, const RValue &left,
          "Sema left binary operands with different IR types");
   bool is_float = left.ir_value->getType()->isFloatingPointTy();
   bool is_unsigned = HasTypeTag(left.c_type, TypeTag::Unsigned);
+  TypeRef bool_type = ApplyTypeTag(_context.Types().getI1(), TypeTag::Unsigned);
   auto comparison_result = [&](llvm::Value *value) {
-    RValue result{ApplyTypeTag(_context.Types().getI1(), TypeTag::Unsigned),
-                  value};
-    if (_context.LLVMType(out_type) == value->getType()) {
-      result.c_type = out_type;
-      return result;
-    }
-    return CreateNumericCast(result, out_type);
+    return RValue{bool_type, value};
   };
 
   switch (op) {
   case BinaryOpType::Add:
-    return RValue{out_type,
+    return RValue{left.c_type,
                   is_float ? _builder.CreateFAdd(left.ir_value, right.ir_value)
                            : _builder.CreateAdd(left.ir_value, right.ir_value)};
   case BinaryOpType::Sub:
-    return RValue{out_type,
+    return RValue{left.c_type,
                   is_float ? _builder.CreateFSub(left.ir_value, right.ir_value)
                            : _builder.CreateSub(left.ir_value, right.ir_value)};
   case BinaryOpType::Mul:
-    return RValue{out_type,
+    return RValue{left.c_type,
                   is_float ? _builder.CreateFMul(left.ir_value, right.ir_value)
                            : _builder.CreateMul(left.ir_value, right.ir_value)};
   case BinaryOpType::Div:
     return RValue{
-        out_type,
+        left.c_type,
         is_float ? _builder.CreateFDiv(left.ir_value, right.ir_value)
                  : (is_unsigned
                         ? _builder.CreateUDiv(left.ir_value, right.ir_value)
                         : _builder.CreateSDiv(left.ir_value, right.ir_value))};
   case BinaryOpType::Mod:
     return RValue{
-        out_type,
+        left.c_type,
         is_float ? _builder.CreateFRem(left.ir_value, right.ir_value)
                  : (is_unsigned
                         ? _builder.CreateURem(left.ir_value, right.ir_value)
                         : _builder.CreateSRem(left.ir_value, right.ir_value))};
   case BinaryOpType::BitAnd:
     ASSERT(!is_float, "Sema accepted floating point bitwise AND");
-    return RValue{out_type, _builder.CreateAnd(left.ir_value, right.ir_value)};
+    return RValue{left.c_type,
+                  _builder.CreateAnd(left.ir_value, right.ir_value)};
   case BinaryOpType::BitOr:
     ASSERT(!is_float, "Sema accepted floating point bitwise OR");
-    return RValue{out_type, _builder.CreateOr(left.ir_value, right.ir_value)};
+    return RValue{left.c_type,
+                  _builder.CreateOr(left.ir_value, right.ir_value)};
   case BinaryOpType::BitXor:
     ASSERT(!is_float, "Sema accepted floating point bitwise XOR");
-    return RValue{out_type, _builder.CreateXor(left.ir_value, right.ir_value)};
+    return RValue{left.c_type,
+                  _builder.CreateXor(left.ir_value, right.ir_value)};
   case BinaryOpType::LShift:
     ASSERT(!is_float, "Sema accepted floating point left shift");
-    return RValue{out_type, _builder.CreateShl(left.ir_value, right.ir_value)};
+    return RValue{left.c_type,
+                  _builder.CreateShl(left.ir_value, right.ir_value)};
   case BinaryOpType::RShift:
     ASSERT(!is_float, "Sema accepted floating point right shift");
-    return RValue{out_type,
+    return RValue{left.c_type,
                   is_unsigned
                       ? _builder.CreateLShr(left.ir_value, right.ir_value)
                       : _builder.CreateAShr(left.ir_value, right.ir_value)};

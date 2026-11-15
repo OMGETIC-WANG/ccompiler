@@ -97,6 +97,27 @@ inline void VerifyField(std::string_view field_name, TypeRef value,
 }
 
 inline void VerifyField(std::string_view field_name,
+                        const std::optional<TypeRef> &value,
+                        const YAML::Node &parent, VerifyContext &context) {
+  YAML::Node field_node = parent[field_name];
+  if (!field_node) {
+    return;
+  }
+  VerifyContextGuard guard(context, field_name);
+  if (field_node.IsNull()) {
+    if (value.has_value()) {
+      context.AddMessage("expected null");
+    }
+    return;
+  }
+  if (!value.has_value()) {
+    context.AddMessage("expected a type, got null");
+    return;
+  }
+  VerifyTypeRef(*value, field_node, context);
+}
+
+inline void VerifyField(std::string_view field_name,
                         const std::vector<TypeRef> &value,
                         const YAML::Node &parent, VerifyContext &context) {
   YAML::Node field_node = parent[field_name];
@@ -269,6 +290,36 @@ inline void VerifyField(std::string_view field_name, E value,
                         const YAML::Node &parent, VerifyContext &context) {
   VerifyField(field_name, std::string(EnumRefl<E>::GetName(value)), parent,
               context);
+}
+
+template <EnumReflRegistered E>
+inline void VerifyField(std::string_view field_name,
+                        const std::optional<E> &value, const YAML::Node &parent,
+                        VerifyContext &context) {
+  YAML::Node field_node = parent[field_name];
+  if (!field_node) {
+    return;
+  }
+  VerifyContextGuard guard(context, field_name);
+  if (field_node.IsNull()) {
+    if (value.has_value()) {
+      context.AddMessage("expected null");
+    }
+    return;
+  }
+  if (!value.has_value()) {
+    context.AddMessage("expected an enum value, got null");
+    return;
+  }
+  if (!field_node.IsScalar()) {
+    context.AddMessage("expected an enum value");
+    return;
+  }
+  std::string expected = std::string(EnumRefl<E>::GetName(value.value()));
+  if (field_node.Scalar() != expected) {
+    context.AddMessage(
+        std::format("expected {}, got {}", expected, field_node.Scalar()));
+  }
 }
 
 #define BEGIN_VERIFY_NODE(NODE)                                                \

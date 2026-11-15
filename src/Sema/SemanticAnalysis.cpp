@@ -117,8 +117,19 @@ NumericValue ConvertConstant(NumericValue value, TypeRef type) {
     return value;
   }
 
-  const unsigned width =
-      kind == BuiltinKind::I1 ? 1 : static_cast<unsigned>(type->GetSize() * 8);
+  if (kind == BuiltinKind::I1) {
+    const bool truth = std::visit(
+        [](auto constant) {
+          return constant != static_cast<decltype(constant)>(0);
+        },
+        value);
+    if (HasTypeTag(type, TypeTag::Unsigned)) {
+      return uint64_t{truth};
+    }
+    return int64_t{truth};
+  }
+
+  const unsigned width = static_cast<unsigned>(type->GetSize() * 8);
   uint64_t raw = 0;
   if (std::holds_alternative<long double>(value)) {
     raw = static_cast<uint64_t>(std::get<long double>(value));
@@ -158,6 +169,41 @@ private:
     return expr;
   }
 
+  TypeRef BooleanType() const {
+    return ApplyTypeTag(types.getI1(), TypeTag::Unsigned);
+  }
+
+  static bool IsBooleanType(TypeRef type) {
+    return type->Is<BuiltinType>() &&
+           type->As<BuiltinType>()->Kind() == BuiltinKind::I1;
+  }
+
+  static bool IsComparison(BinaryOpType op) {
+    switch (op) {
+    case BinaryOpType::Eq:
+    case BinaryOpType::Ne:
+    case BinaryOpType::Lt:
+    case BinaryOpType::Gt:
+    case BinaryOpType::Le:
+    case BinaryOpType::Ge:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  static bool HasBooleanOperationResult(ASTNode *node) {
+    if (auto *binary = node->DynCast<BinaryOp>()) {
+      return IsComparison(binary->op_type) ||
+             binary->op_type == BinaryOpType::And ||
+             binary->op_type == BinaryOpType::Or;
+    }
+    if (auto *unary = node->DynCast<UnaryOp>()) {
+      return unary->op_type == UnaryOpType::Not;
+    }
+    return false;
+  }
+
   ExprInfo AnalyzeExpr(std::unique_ptr<ASTNode> &node) {
     ASSERT(node != nullptr, "Cannot analyze a null expression");
     ExprInfo result = AnalyzeExprNode(node.get());
@@ -166,6 +212,12 @@ private:
     expr->value_category = result.value_category;
     if (auto value = EvaluateConstant(expr)) {
       expr->constant_value = std::move(value);
+    }
+    if (HasBooleanOperationResult(node.get())) {
+      ASSERT(IsBooleanType(result.type),
+             "Logical operation did not produce a boolean result");
+      InsertImplicitCast(node, types.getInt());
+      result = {types.getInt(), ValueCategory::RValue};
     }
     return result;
   }
@@ -272,6 +324,14 @@ private:
     if (info.type == target_type) {
       return {target_type, ValueCategory::RValue};
     }
+    if (IsBooleanType(target_type)) {
+      if (!IsScalar(info.type)) {
+        diagnostics.Fail(location,
+                         "Boolean conversion requires a scalar expression");
+      }
+      InsertImplicitCast(node, target_type);
+      return {target_type, ValueCategory::RValue};
+    }
     if (info.type->Is<PointerType>() && target_type->Is<PointerType>()) {
       if (LosesConstInPointerConversion(info.type, target_type)) {
         diagnostics.Fail(location,
@@ -291,54 +351,25 @@ private:
     diagnostics.Fail(location, "Failed to cast between incompatible types");
   }
 
-  static BinaryOpType UnderlyingBinaryOp(BinaryOpType op_type) {
-    switch (op_type) {
-    case BinaryOpType::AddAssign:
-      return BinaryOpType::Add;
-    case BinaryOpType::SubAssign:
-      return BinaryOpType::Sub;
-    case BinaryOpType::MulAssign:
-      return BinaryOpType::Mul;
-    case BinaryOpType::DivAssign:
-      return BinaryOpType::Div;
-    case BinaryOpType::ModAssign:
-      return BinaryOpType::Mod;
-    case BinaryOpType::BitAndAssign:
-      return BinaryOpType::BitAnd;
-    case BinaryOpType::BitOrAssign:
-      return BinaryOpType::BitOr;
-    case BinaryOpType::BitXorAssign:
-      return BinaryOpType::BitXor;
-    case BinaryOpType::LShiftAssign:
-      return BinaryOpType::LShift;
-    case BinaryOpType::RShiftAssign:
-      return BinaryOpType::RShift;
-    default:
-      return op_type;
+  ExprInfo ConvertToBool(std::unique_ptr<ASTNode> &node, ExprInfo info,
+                         SourceLocation location,
+                         std::string_view invalid_message) {
+    info = Decay(node, info);
+    if (!IsScalar(info.type)) {
+      diagnostics.Fail(location, invalid_message);
     }
-  }
-
-  static bool IsCompoundAssignment(BinaryOpType op_type) {
-    switch (op_type) {
-    case BinaryOpType::AddAssign:
-    case BinaryOpType::SubAssign:
-    case BinaryOpType::MulAssign:
-    case BinaryOpType::DivAssign:
-    case BinaryOpType::ModAssign:
-    case BinaryOpType::BitAndAssign:
-    case BinaryOpType::BitOrAssign:
-    case BinaryOpType::BitXorAssign:
-    case BinaryOpType::LShiftAssign:
-    case BinaryOpType::RShiftAssign:
-      return true;
-    default:
-      return false;
+    TypeRef bool_type = BooleanType();
+    if (info.type != bool_type) {
+      InsertImplicitCast(node, bool_type);
     }
+    return {bool_type, ValueCategory::RValue};
   }
 
   ExprInfo AnalyzeBinary(BinaryOp *binary) {
     BinaryOpType op = binary->op_type;
-    if (op == BinaryOpType::Assignment) {
+    ASSERT(!binary->compound_op || op == BinaryOpType::Assignment,
+           "Compound operation attached to a non-assignment expression");
+    if (op == BinaryOpType::Assignment && !binary->compound_op) {
       ExprInfo left_info = AnalyzeExpr(binary->left);
       if (left_info.value_category != ValueCategory::LValue) {
         diagnostics.Fail(binary->location, "Assignment requires an lvalue");
@@ -371,17 +402,16 @@ private:
     if (op == BinaryOpType::And || op == BinaryOpType::Or) {
       ExprInfo left_info = AnalyzeExpr(binary->left);
       ExprInfo right_info = AnalyzeExpr(binary->right);
-      left_info = Decay(binary->left, left_info);
-      right_info = Decay(binary->right, right_info);
-      if (!IsScalar(left_info.type) || !IsScalar(right_info.type)) {
-        diagnostics.Fail(binary->location,
-                         "Logical operators require scalar operands");
-      }
-      binary->operation_type = types.getInt();
-      return {types.getInt(), ValueCategory::RValue};
+      left_info = ConvertToBool(binary->left, left_info, binary->location,
+                                "Logical operators require scalar operands");
+      right_info = ConvertToBool(binary->right, right_info, binary->location,
+                                 "Logical operators require scalar operands");
+      binary->operation_type = BooleanType();
+      return {BooleanType(), ValueCategory::RValue};
     }
 
-    const bool is_compound = IsCompoundAssignment(op);
+    const bool is_compound = binary->compound_op.has_value();
+    TypeRef compound_left_type = nullptr;
     ExprInfo left_info = AnalyzeExpr(binary->left);
     if (is_compound) {
       if (left_info.value_category != ValueCategory::LValue) {
@@ -392,6 +422,7 @@ private:
                          "Cannot modify a const-qualified object");
       }
       left_info.type = Unqualified(left_info.type);
+      compound_left_type = left_info.type;
     } else {
       left_info = Decay(binary->left, left_info);
     }
@@ -401,7 +432,7 @@ private:
       right_info = Decay(binary->right, right_info);
     }
 
-    BinaryOpType base_op = UnderlyingBinaryOp(op);
+    BinaryOpType base_op = is_compound ? *binary->compound_op : op;
     if (!is_compound &&
         (base_op == BinaryOpType::BitAnd || base_op == BinaryOpType::BitOr ||
          base_op == BinaryOpType::BitXor)) {
@@ -463,15 +494,21 @@ private:
     }
     ConvertExpr(binary->right, right_info, common, binary->location);
     binary->operation_type = common;
+    if (is_compound) {
+      if (left_info.type != common) {
+        binary->left_value_cast_type = common;
+      }
+      if (common != compound_left_type) {
+        binary->result_cast_type = compound_left_type;
+      }
+    }
 
     TypeRef result_type = common;
-    if (base_op == BinaryOpType::Eq || base_op == BinaryOpType::Ne ||
-        base_op == BinaryOpType::Lt || base_op == BinaryOpType::Gt ||
-        base_op == BinaryOpType::Le || base_op == BinaryOpType::Ge) {
-      result_type = types.getInt();
+    if (IsComparison(base_op)) {
+      result_type = BooleanType();
     }
     if (is_compound) {
-      result_type = Unqualified(left_info.type);
+      result_type = compound_left_type;
     }
     return {result_type, ValueCategory::RValue};
   }
@@ -533,12 +570,9 @@ private:
       return {result_type, ValueCategory::RValue};
     }
     case UnaryOpType::Not: {
-      operand = Decay(unary->operand, operand);
-      if (!IsScalar(operand.type)) {
-        diagnostics.Fail(unary->location,
-                         "Logical NOT requires a scalar operand");
-      }
-      return {types.getInt(), ValueCategory::RValue};
+      ConvertToBool(unary->operand, operand, unary->location,
+                    "Logical NOT requires a scalar operand");
+      return {BooleanType(), ValueCategory::RValue};
     }
     default:
       diagnostics.Fail(unary->location,
@@ -707,11 +741,8 @@ private:
 
   ExprInfo AnalyzeConditional(ConditionalExpr *conditional) {
     ExprInfo condition = AnalyzeExpr(conditional->condition);
-    condition = Decay(conditional->condition, condition);
-    if (!IsScalar(condition.type)) {
-      diagnostics.Fail(conditional->location,
-                       "Conditional expression requires a scalar condition");
-    }
+    ConvertToBool(conditional->condition, condition, conditional->location,
+                  "Conditional expression requires a scalar condition");
 
     ExprInfo true_info = AnalyzeExpr(conditional->true_expr);
     ExprInfo false_info = AnalyzeExpr(conditional->false_expr);
@@ -812,7 +843,9 @@ private:
 
     FunctionDecl *previous_function = current_function;
     current_function = function;
-    AnalyzeStatement(function->body.get());
+    for (auto &statement : function->body->statements) {
+      AnalyzeStatement(statement);
+    }
     current_function = previous_function;
   }
 
@@ -1022,6 +1055,13 @@ private:
               value_init->location,
               "Global pointer initializer must be a constant expression");
         }
+        if (!value.type->Is<PointerType>()) {
+          if (!IsIntegerType(value.type) && !value.type->Is<EnumType>()) {
+            diagnostics.Fail(value_init->location,
+                             "Failed to cast between incompatible types");
+          }
+          InsertImplicitCast(value_init->value, pointer);
+        }
       } else {
         ConvertExpr(value_init->value, value, pointer, value_init->location);
       }
@@ -1041,97 +1081,98 @@ private:
     diagnostics.Fail(initializer->location, "Unexpected initializer");
   }
 
-  void AnalyzeStatement(ASTNode *node) {
+  void AnalyzeStatement(std::unique_ptr<ASTNode> &node) {
     if (!node) {
       return;
     }
-    if (node->Is<EmptyStmt>() || node->Is<LabelStmt>() ||
-        node->Is<GotoStmt>() || node->Is<TypedefDecl>()) {
+    ASTNode *current = node.get();
+    if (current->Is<EmptyStmt>() || current->Is<LabelStmt>() ||
+        current->Is<GotoStmt>() || current->Is<TypedefDecl>()) {
       return;
     }
-    if (auto *decl_stmt = node->DynCast<DeclStmt>()) {
+    if (auto *decl_stmt = current->DynCast<DeclStmt>()) {
       AnalyzeDeclStmt(decl_stmt, false);
       return;
     }
-    if (auto *var = node->DynCast<VarDecl>()) {
+    if (auto *var = current->DynCast<VarDecl>()) {
       AnalyzeVarDecl(var, false);
       return;
     }
-    if (auto *struct_decl = node->DynCast<StructDecl>()) {
+    if (auto *struct_decl = current->DynCast<StructDecl>()) {
       (void)struct_decl;
       return;
     }
-    if (auto *union_decl = node->DynCast<UnionDecl>()) {
+    if (auto *union_decl = current->DynCast<UnionDecl>()) {
       (void)union_decl;
       return;
     }
-    if (auto *enum_decl = node->DynCast<EnumDecl>()) {
+    if (auto *enum_decl = current->DynCast<EnumDecl>()) {
       AnalyzeEnumDecl(enum_decl);
       return;
     }
-    if (auto *compound = node->DynCast<CompoundStmt>()) {
-      for (const auto &statement : compound->statements) {
-        AnalyzeStatement(statement.get());
+    if (auto *compound = current->DynCast<CompoundStmt>()) {
+      for (auto &statement : compound->statements) {
+        AnalyzeStatement(statement);
       }
       return;
     }
-    if (auto *if_stmt = node->DynCast<IfStmt>()) {
+    if (auto *if_stmt = current->DynCast<IfStmt>()) {
       AnalyzeCondition(if_stmt->condition);
-      AnalyzeStatement(if_stmt->then_branch.get());
-      AnalyzeStatement(if_stmt->else_branch.get());
+      AnalyzeStatement(if_stmt->then_branch);
+      AnalyzeStatement(if_stmt->else_branch);
       return;
     }
-    if (auto *while_stmt = node->DynCast<WhileStmt>()) {
+    if (auto *while_stmt = current->DynCast<WhileStmt>()) {
       AnalyzeCondition(while_stmt->condition);
       flow_contexts.push_back({.allows_break = true, .allows_continue = true});
-      AnalyzeStatement(while_stmt->body.get());
+      AnalyzeStatement(while_stmt->body);
       flow_contexts.pop_back();
       return;
     }
-    if (auto *do_while = node->DynCast<DoWhileStmt>()) {
+    if (auto *do_while = current->DynCast<DoWhileStmt>()) {
       flow_contexts.push_back({.allows_break = true, .allows_continue = true});
-      AnalyzeStatement(do_while->body.get());
+      AnalyzeStatement(do_while->body);
       flow_contexts.pop_back();
       AnalyzeCondition(do_while->condition);
       return;
     }
-    if (auto *for_stmt = node->DynCast<ForStmt>()) {
-      AnalyzeStatement(for_stmt->init.get());
+    if (auto *for_stmt = current->DynCast<ForStmt>()) {
+      AnalyzeStatement(for_stmt->init);
       AnalyzeCondition(for_stmt->condition);
-      AnalyzeStatement(for_stmt->increment.get());
+      AnalyzeStatement(for_stmt->increment);
       flow_contexts.push_back({.allows_break = true, .allows_continue = true});
-      AnalyzeStatement(for_stmt->body.get());
+      AnalyzeStatement(for_stmt->body);
       flow_contexts.pop_back();
       return;
     }
-    if (auto *switch_stmt = node->DynCast<SwitchStmt>()) {
+    if (auto *switch_stmt = current->DynCast<SwitchStmt>()) {
       AnalyzeSwitch(switch_stmt);
       return;
     }
-    if (node->Is<BreakStmt>()) {
+    if (current->Is<BreakStmt>()) {
       if (flow_contexts.empty() || !flow_contexts.back().allows_break) {
-        diagnostics.Fail(node->location,
+        diagnostics.Fail(current->location,
                          "break statement is not inside a loop or switch");
       }
       return;
     }
-    if (node->Is<ContinueStmt>()) {
+    if (current->Is<ContinueStmt>()) {
       if (flow_contexts.empty() || !flow_contexts.back().allows_continue) {
-        diagnostics.Fail(node->location,
+        diagnostics.Fail(current->location,
                          "continue statement is not inside a loop");
       }
       return;
     }
-    if (auto *return_stmt = node->DynCast<ReturnStmt>()) {
+    if (auto *return_stmt = current->DynCast<ReturnStmt>()) {
       AnalyzeReturn(return_stmt);
       return;
     }
-    if (dynamic_cast<Expr *>(node)) {
-      AnalyzeStandaloneExpr(node);
+    if (dynamic_cast<Expr *>(current)) {
+      AnalyzeExpr(node);
       return;
     }
-    diagnostics.Fail(node->location,
-                     "Unsupported statement AST node: ", node->GetType());
+    diagnostics.Fail(current->location,
+                     "Unsupported statement AST node: ", current->GetType());
   }
 
   void AnalyzeCondition(std::unique_ptr<ASTNode> &condition) {
@@ -1139,21 +1180,8 @@ private:
       return;
     }
     ExprInfo info = AnalyzeExpr(condition);
-    info = Decay(condition, info);
-    if (!IsScalar(info.type)) {
-      diagnostics.Fail(condition->location,
-                       "Condition requires a scalar expression");
-    }
-  }
-
-  void AnalyzeStandaloneExpr(ASTNode *node) {
-    ExprInfo result = AnalyzeExprNode(node);
-    Expr *expr = AsExpr(node);
-    expr->type = result.type;
-    expr->value_category = result.value_category;
-    if (auto value = EvaluateConstant(expr)) {
-      expr->constant_value = std::move(value);
-    }
+    ConvertToBool(condition, info, condition->location,
+                  "Condition requires a scalar expression");
   }
 
   void AnalyzeSwitch(SwitchStmt *switch_stmt) {
@@ -1170,7 +1198,7 @@ private:
     for (const auto &case_node : switch_stmt->cases) {
       if (auto *case_stmt = case_node->DynCast<CaseStmt>()) {
         for (auto &value : case_stmt->case_vals) {
-          AnalyzeExpr(value);
+          ExprInfo value_info = AnalyzeExpr(value);
           if (!AsExpr(value.get())->constant_value) {
             diagnostics.Fail(value->location,
                              "Case value must be a constant expression");
@@ -1179,13 +1207,14 @@ private:
             diagnostics.Fail(value->location,
                              "Integer initializer type mismatch");
           }
+          ConvertExpr(value, value_info, switch_type, value->location);
         }
-        for (const auto &statement : case_stmt->body) {
-          AnalyzeStatement(statement.get());
+        for (auto &statement : case_stmt->body) {
+          AnalyzeStatement(statement);
         }
       } else if (auto *default_stmt = case_node->DynCast<DefaultStmt>()) {
-        for (const auto &statement : default_stmt->body) {
-          AnalyzeStatement(statement.get());
+        for (auto &statement : default_stmt->body) {
+          AnalyzeStatement(statement);
         }
       }
     }
@@ -1320,7 +1349,7 @@ private:
 
   NumericValue EvaluateBinaryConstant(BinaryOpType op, NumericValue left,
                                       NumericValue right, TypeRef result_type) {
-    BinaryOpType base_op = UnderlyingBinaryOp(op);
+    BinaryOpType base_op = op;
     if (std::holds_alternative<long double>(left) ||
         std::holds_alternative<long double>(right)) {
       auto to_long_double = [](const NumericValue &value) {

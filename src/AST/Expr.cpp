@@ -96,28 +96,6 @@ static BinaryOpType GetBinaryOpType(TokenType type) {
     return BinaryOpType::LShift;
   case TokenType::RShift:
     return BinaryOpType::RShift;
-  case TokenType::AddEqual:
-    return BinaryOpType::AddAssign;
-  case TokenType::SubEqual:
-    return BinaryOpType::SubAssign;
-  case TokenType::MulEqual:
-    return BinaryOpType::MulAssign;
-  case TokenType::DivEqual:
-    return BinaryOpType::DivAssign;
-  case TokenType::ModEqual:
-    return BinaryOpType::ModAssign;
-  case TokenType::BitAndEqual:
-    return BinaryOpType::BitAndAssign;
-  case TokenType::BitOrEqual:
-    return BinaryOpType::BitOrAssign;
-  case TokenType::BitXorEqual:
-    return BinaryOpType::BitXorAssign;
-  case TokenType::LShiftEqual:
-    return BinaryOpType::LShiftAssign;
-  case TokenType::RShiftEqual:
-    return BinaryOpType::RShiftAssign;
-  case TokenType::Equal:
-    return BinaryOpType::Assignment;
   case TokenType::Eq:
     return BinaryOpType::Eq;
   case TokenType::Ne:
@@ -136,6 +114,35 @@ static BinaryOpType GetBinaryOpType(TokenType type) {
     return BinaryOpType::Ge;
   default:
     RAISE_ERROR("Operator not supported yet");
+  }
+}
+
+static std::optional<BinaryOpType> GetAssignmentOperation(TokenType type) {
+  switch (type) {
+  case TokenType::Equal:
+    return std::nullopt;
+  case TokenType::AddEqual:
+    return BinaryOpType::Add;
+  case TokenType::SubEqual:
+    return BinaryOpType::Sub;
+  case TokenType::MulEqual:
+    return BinaryOpType::Mul;
+  case TokenType::DivEqual:
+    return BinaryOpType::Div;
+  case TokenType::ModEqual:
+    return BinaryOpType::Mod;
+  case TokenType::BitAndEqual:
+    return BinaryOpType::BitAnd;
+  case TokenType::BitOrEqual:
+    return BinaryOpType::BitOr;
+  case TokenType::BitXorEqual:
+    return BinaryOpType::BitXor;
+  case TokenType::LShiftEqual:
+    return BinaryOpType::LShift;
+  case TokenType::RShiftEqual:
+    return BinaryOpType::RShift;
+  default:
+    RAISE_ERROR("Operator is not an assignment");
   }
 }
 
@@ -774,11 +781,18 @@ std::unique_ptr<ASTNode> ParseSingleExpr(Lexer &lexer, CompileContext &context,
 
       lexer.ConsumeToken(tok);
 
-      int next_min_prec = IsRightCombineOp(tok.type) ? op_prec : op_prec + 1;
+      const bool is_assignment = IsRightCombineOp(tok.type);
+      int next_min_prec = is_assignment ? op_prec : op_prec + 1;
 
       auto rhs = ParseSingleExpr(lexer, context, next_min_prec);
 
-      auto bin_op = std::make_unique<BinaryOp>(GetBinaryOpType(tok.type));
+      std::unique_ptr<BinaryOp> bin_op;
+      if (is_assignment) {
+        bin_op = std::make_unique<BinaryOp>(BinaryOpType::Assignment);
+        bin_op->compound_op = GetAssignmentOperation(tok.type);
+      } else {
+        bin_op = std::make_unique<BinaryOp>(GetBinaryOpType(tok.type));
+      }
       bin_op->left = std::move(lhs);
       bin_op->right = std::move(rhs);
       bin_op->location = CombineLocation(start_token.location,

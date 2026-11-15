@@ -100,7 +100,9 @@ each `<case>.ast.yaml` with an exact `<case>.stderr` file. The shared
 
 Sema fixtures are parsed and passed through `AnalyzeTranslationUnit` before
 the same partial YAML verifier runs. They may assert expression `type`,
-`value_category`, `operation_type`, and inserted `ImplicitCast` nodes.
+`value_category`, `operation_type`, inserted `ImplicitCast` nodes, and the
+compound-assignment `compound_op`, `left_value_cast_type`, and
+`result_cast_type` annotations.
 
 `AST.Declarations.BindingIdentity`, `AST.Schema.VerifierRegistry`, and
 `Diagnostics.Formatting` are C++ self-tests. Their expected values remain in the
