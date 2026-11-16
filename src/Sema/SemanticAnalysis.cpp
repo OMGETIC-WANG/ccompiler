@@ -28,6 +28,21 @@ struct FlowContext {
   bool allows_continue = false;
 };
 
+enum class Linkage { Internal, External };
+enum class LinkageEntityKind { Object, Function };
+
+struct ObjectInfo {
+  TypeRef type = nullptr;
+  Linkage linkage = Linkage::External;
+  bool has_initialized_definition = false;
+};
+
+struct FunctionInfo {
+  TypeRef type = nullptr;
+  Linkage linkage = Linkage::External;
+  bool has_definition = false;
+};
+
 bool IsIntegerOrEnum(TypeRef type) {
   return IsIntegerType(type) || type->Is<EnumType>();
 }
@@ -36,7 +51,44 @@ bool IsScalar(TypeRef type) {
   return IsNumericType(type) || type->Is<PointerType>() || type->Is<EnumType>();
 }
 
-TypeRef Unqualified(TypeRef type) { return StripTypeTag(type, TypeTag::Const); }
+TypeRef Unqualified(TypeRef type) { return StripTypeQualifiers(type); }
+
+TypeRef AdjustedType(TypeRef type, TypeContext &types) {
+  if (auto *array = type->DynCast<ArrayType>()) {
+    return types.Pointer(array->element_type);
+  }
+  if (type->Is<FunctionType>()) {
+    return types.Pointer(type);
+  }
+  return type;
+}
+
+bool CompatibleFunctionTypes(TypeRef left, TypeRef right, TypeContext &types) {
+  if (left == right) {
+    return true;
+  }
+  if (!left->Is<FunctionType>() || !right->Is<FunctionType>()) {
+    return false;
+  }
+
+  const auto *left_function = left->As<FunctionType>();
+  const auto *right_function = right->As<FunctionType>();
+  if (left_function->return_type != right_function->return_type ||
+      left_function->has_va_args != right_function->has_va_args ||
+      left_function->parameters.size() != right_function->parameters.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < left_function->parameters.size(); ++i) {
+    TypeRef left_parameter =
+        Unqualified(AdjustedType(left_function->parameters[i], types));
+    TypeRef right_parameter =
+        Unqualified(AdjustedType(right_function->parameters[i], types));
+    if (left_parameter != right_parameter) {
+      return false;
+    }
+  }
+  return true;
+}
 
 TypeRef RepresentationType(TypeRef type) {
   if (auto *enum_type = type->DynCast<EnumType>()) {
@@ -59,18 +111,20 @@ bool HaveSameRepresentation(TypeRef left, TypeRef right) {
          IsFloatingType(left) == IsFloatingType(right);
 }
 
-bool LosesConstInPointerConversion(TypeRef from, TypeRef to) {
+bool LosesPointerQualifiers(TypeRef from, TypeRef to) {
   if (!from->Is<PointerType>() || !to->Is<PointerType>()) {
     return false;
   }
 
   TypeRef from_pointee = from->As<PointerType>()->pointee_type;
   TypeRef to_pointee = to->As<PointerType>()->pointee_type;
-  if (HasTypeTag(from_pointee, TypeTag::Const) &&
-      !HasTypeTag(to_pointee, TypeTag::Const)) {
-    return true;
+  for (TypeTag qualifier : {TypeTag::Const, TypeTag::Volatile}) {
+    if (HasTypeTag(from_pointee, qualifier) &&
+        !HasTypeTag(to_pointee, qualifier)) {
+      return true;
+    }
   }
-  return LosesConstInPointerConversion(from_pointee, to_pointee);
+  return LosesPointerQualifiers(from_pointee, to_pointee);
 }
 
 uint64_t TruncateToWidth(uint64_t value, unsigned width) {
@@ -276,7 +330,7 @@ private:
       return {var->type, ValueCategory::LValue};
     }
     if (auto *param = dynamic_cast<ParamDecl *>(decl)) {
-      return {AdjustedParameterType(param->type), ValueCategory::LValue};
+      return {AdjustedType(param->type, types), ValueCategory::LValue};
     }
     if (auto *function = dynamic_cast<FunctionDecl *>(decl)) {
       return {function->function_type, ValueCategory::FunctionDesignator};
@@ -333,9 +387,10 @@ private:
       return {target_type, ValueCategory::RValue};
     }
     if (info.type->Is<PointerType>() && target_type->Is<PointerType>()) {
-      if (LosesConstInPointerConversion(info.type, target_type)) {
+      if (LosesPointerQualifiers(info.type, target_type)) {
         diagnostics.Fail(location,
-                         "Cannot assign a pointer after discarding const");
+                         "Cannot assign a pointer after discarding const or "
+                         "volatile qualifiers");
       }
       InsertImplicitCast(node, target_type);
       return {target_type, ValueCategory::RValue};
@@ -586,9 +641,10 @@ private:
     TypeRef target = type_cast->target_type;
     if (operand.type != target) {
       if (operand.type->Is<PointerType>() && target->Is<PointerType>()) {
-        if (LosesConstInPointerConversion(operand.type, target)) {
+        if (LosesPointerQualifiers(operand.type, target)) {
           diagnostics.Fail(type_cast->location,
-                           "Cannot cast a pointer after discarding const");
+                           "Cannot cast a pointer after discarding const or "
+                           "volatile qualifiers");
         }
       } else if (!IsNumericType(operand.type) || !IsNumericType(target)) {
         diagnostics.Fail(type_cast->location, "Unsupported type cast from ",
@@ -605,14 +661,14 @@ private:
       if (!field) {
         diagnostics.Fail(location, "Unknown struct field: ", field_name);
       }
-      return field->type;
+      return ApplyAggregateMemberQualifiers(field->type, type, types);
     }
     if (auto *union_type = type->DynCast<UnionType>()) {
       auto field = union_type->GetField(field_name);
       if (!field) {
         diagnostics.Fail(location, "Unknown union field: ", field_name);
       }
-      return field->type;
+      return ApplyAggregateMemberQualifiers(field->type, type, types);
     }
     diagnostics.Fail(location,
                      "Field access requires a struct or union operand");
@@ -638,16 +694,6 @@ private:
     }
     diagnostics.Fail(ptr_get_field->location,
                      "Pointer field access requires a pointer operand");
-  }
-
-  TypeRef AdjustedParameterType(TypeRef type) {
-    if (auto *array = type->DynCast<ArrayType>()) {
-      return types.Pointer(array->element_type);
-    }
-    if (type->Is<FunctionType>()) {
-      return types.Pointer(type);
-    }
-    return type;
   }
 
   ExprInfo AnalyzeFunctionInvocation(FunctionInvocation *call) {
@@ -679,8 +725,7 @@ private:
     for (size_t i = 0; i < call->arguments.size(); ++i) {
       ExprInfo argument = AnalyzeExpr(call->arguments[i]);
       if (i < signature->parameters.size()) {
-        TypeRef parameter_type =
-            AdjustedParameterType(signature->parameters[i]);
+        TypeRef parameter_type = AdjustedType(signature->parameters[i], types);
         ConvertExpr(call->arguments[i], argument, parameter_type,
                     call->location);
       } else {
@@ -810,36 +855,73 @@ private:
     }
   }
 
+  void CheckLinkageEntityKind(std::string_view name, LinkageEntityKind kind,
+                              SourceLocation location) {
+    auto [found, inserted] = linkage_kinds.try_emplace(name, kind);
+    if (!inserted && found->second != kind) {
+      diagnostics.Fail(
+          location, "Conflicting declaration for ", name,
+          ": object and function declarations cannot share a name");
+    }
+  }
+
   void AnalyzeFunctionDecl(FunctionDecl *function, bool global) {
-    if (!global) {
+    if (!global && function->storage_class == StorageClass::Static) {
+      diagnostics.Fail(function->location,
+                       "Block-scope function declarations cannot be static");
+    }
+    if (!global && function->body) {
       diagnostics.Fail(function->location,
                        "Function definitions are only valid at file scope");
     }
     ASSERT(function->function_type != nullptr,
            "Function declaration is missing its type");
-    const auto *function_type = function->function_type->As<FunctionType>();
+    ASSERT(function->function_type->Is<FunctionType>(),
+           "Function declaration has a non-function type");
+
+    CheckLinkageEntityKind(function->name, LinkageEntityKind::Function,
+                           function->location);
     auto found = functions.find(function->name);
+    const Linkage requested_linkage =
+        function->storage_class == StorageClass::Static ? Linkage::Internal
+                                                        : Linkage::External;
     if (found != functions.end()) {
-      const auto *previous = found->second->function_type->As<FunctionType>();
-      if (function->function_type != found->second->function_type ||
-          function_type->has_va_args != previous->has_va_args) {
+      FunctionInfo &previous = found->second;
+      if (!CompatibleFunctionTypes(function->function_type, previous.type,
+                                   types)) {
         diagnostics.Fail(function->location,
                          "Conflicting declaration for function ",
                          function->name);
       }
+      if (function->storage_class == StorageClass::Static &&
+          previous.linkage == Linkage::External) {
+        diagnostics.Fail(function->location, "Static declaration of function ",
+                         function->name,
+                         " follows a declaration with external linkage");
+      }
+      if (previous.linkage == Linkage::Internal &&
+          function->storage_class != StorageClass::Extern) {
+        diagnostics.Fail(function->location, "Declaration of function ",
+                         function->name,
+                         " follows a static declaration without extern");
+      }
     } else {
-      functions.emplace(function->name, function);
+      functions.emplace(function->name, FunctionInfo{
+                                            .type = function->function_type,
+                                            .linkage = requested_linkage,
+                                            .has_definition = false,
+                                        });
     }
 
     if (!function->body) {
       return;
     }
-    if (auto found_definition = definitions.find(function->name);
-        found_definition != definitions.end()) {
+    FunctionInfo &info = functions.at(function->name);
+    if (info.has_definition) {
       diagnostics.Fail(function->location, "Multiple definitions of function ",
                        function->name);
     }
-    definitions.emplace(function->name, function);
+    info.has_definition = true;
 
     FunctionDecl *previous_function = current_function;
     current_function = function;
@@ -901,10 +983,64 @@ private:
     types.CompleteEnum(decl->type, decl->underlying_type, values);
   }
 
+  void AnalyzeLinkedObject(VarDecl *var, TypeRef type, bool global) {
+    CheckLinkageEntityKind(var->name, LinkageEntityKind::Object, var->location);
+
+    auto found = objects.find(var->name);
+    if (found != objects.end()) {
+      ObjectInfo &previous = found->second;
+      if (previous.type != type) {
+        diagnostics.Fail(var->location, "Conflicting declaration for variable ",
+                         var->name);
+      }
+      if (var->storage_class == StorageClass::Static &&
+          previous.linkage == Linkage::External) {
+        diagnostics.Fail(var->location, "Static declaration of variable ",
+                         var->name,
+                         " follows a declaration with external linkage");
+      }
+      if (previous.linkage == Linkage::Internal &&
+          var->storage_class != StorageClass::Extern) {
+        diagnostics.Fail(var->location, "Declaration of variable ", var->name,
+                         " follows a static declaration without extern");
+      }
+    } else {
+      const Linkage linkage = var->storage_class == StorageClass::Static
+                                  ? Linkage::Internal
+                                  : Linkage::External;
+      found = objects
+                  .emplace(var->name,
+                           ObjectInfo{
+                               .type = type,
+                               .linkage = linkage,
+                           })
+                  .first;
+    }
+
+    if (!global) {
+      return;
+    }
+
+    ObjectInfo &info = found->second;
+    const bool has_initialized_definition = var->initializer != nullptr;
+    if (has_initialized_definition && info.has_initialized_definition) {
+      diagnostics.Fail(var->location,
+                       "Multiple initialized definitions of variable ",
+                       var->name);
+    }
+    info.has_initialized_definition |= has_initialized_definition;
+  }
+
   void AnalyzeVarDecl(VarDecl *var, bool global) {
-    if (!global && var->storage_class != StorageClass::None) {
+    if (!global && var->storage_class == StorageClass::Static) {
       diagnostics.Fail(var->location,
                        "Local static storage is not supported yet");
+    }
+    if (!global && var->storage_class == StorageClass::Extern &&
+        var->initializer) {
+      diagnostics.Fail(var->location,
+                       "Block-scope extern declarations cannot have an "
+                       "initializer");
     }
     TypeRef type = var->type;
     if (auto *array = type->DynCast<ArrayType>();
@@ -953,6 +1089,9 @@ private:
       type = completed;
     }
 
+    if (global || var->storage_class == StorageClass::Extern) {
+      AnalyzeLinkedObject(var, type, global);
+    }
     if (var->initializer) {
       AnalyzeInitializer(var->initializer.get(), type, var->location, global);
       if (global && !IsConstantFoldable(var->initializer.get())) {
@@ -1096,6 +1235,10 @@ private:
     }
     if (auto *var = current->DynCast<VarDecl>()) {
       AnalyzeVarDecl(var, false);
+      return;
+    }
+    if (auto *function = current->DynCast<FunctionDecl>()) {
+      AnalyzeFunctionDecl(function, false);
       return;
     }
     if (auto *struct_decl = current->DynCast<StructDecl>()) {
@@ -1476,8 +1619,9 @@ private:
   DiagnosticContext &diagnostics;
   FunctionDecl *current_function = nullptr;
   std::vector<FlowContext> flow_contexts;
-  std::unordered_map<std::string_view, FunctionDecl *> functions;
-  std::unordered_map<std::string_view, FunctionDecl *> definitions;
+  std::unordered_map<std::string_view, ObjectInfo> objects;
+  std::unordered_map<std::string_view, FunctionInfo> functions;
+  std::unordered_map<std::string_view, LinkageEntityKind> linkage_kinds;
 };
 
 } // namespace

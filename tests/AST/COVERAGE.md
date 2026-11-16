@@ -62,7 +62,11 @@ assertion.
 | `float`, `double`, `long double` literal type | Covered | `Expressions/FloatLiterals` |
 | `I1` | Internal only | Not produced by source declarations |
 | `const` tag | Covered | `Declarations/StorageAndQualifiers` |
+| `volatile` tag | Covered | `Declarations/QualifiedDeclarators` |
+| `restrict` tag | Covered | `Declarations/QualifiedDeclarators` |
 | `unsigned` tag | Covered | `Declarations/BuiltinTypes` |
+| `static` storage class | Covered | `Declarations/StorageAndQualifiers` |
+| `extern` storage class | Covered | `Declarations/ExternDeclarations` |
 
 ## Initializers
 
@@ -129,7 +133,7 @@ AST:
 | Variadic parameter lists | Current parse probe aborts on type specifiers |
 | `sizeof` applied without parentheses | Intrinsic parser currently requires `(` |
 | `long double` declarations | Explicitly rejected; `L` literal type is covered |
-| `volatile`, `extern`, and `register` declarations | Explicitly rejected or unsupported |
+| `register` declarations | Explicitly rejected |
 | Nested brace initializers and compound literals | No stable supported AST path |
 | Intermediate `Declaration`/`Declarator` trees | Out of scope; final resolved types are tested |
 | Source locations and invalid-program diagnostics | Out of scope for this AST suite |

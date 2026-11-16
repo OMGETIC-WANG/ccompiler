@@ -25,8 +25,15 @@ void AppendTypePrintField(std::vector<ASTPrintField> &fields,
 
 void AppendStorageClassPrintField(std::vector<ASTPrintField> &fields,
                                   StorageClass storage_class) {
-  if (storage_class == StorageClass::Static) {
+  switch (storage_class) {
+  case StorageClass::None:
+    return;
+  case StorageClass::Static:
     AppendASTPrintField(fields, "storage_class", "static");
+    return;
+  case StorageClass::Extern:
+    AppendASTPrintField(fields, "storage_class", "extern");
+    return;
   }
 }
 

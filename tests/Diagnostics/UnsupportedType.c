@@ -1,1 +1,1 @@
-volatile int value;
+restrict int value;

@@ -1,0 +1,27 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: external_value
+        type: {BuiltinType: {type_name: int}}
+        storage_class: Extern
+    - FunctionDecl:
+        name: external_function
+        storage_class: Extern
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}
+            parameters:
+              - PointerType:
+                  pointee_type:
+                    {BuiltinType: {type_name: int, tags: [const]}}
+    - VarDecl:
+        name: internal_value
+        type: {BuiltinType: {type_name: int}}
+        storage_class: Static
+    - FunctionDecl:
+        name: internal_function
+        storage_class: None
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}
+            parameters: []

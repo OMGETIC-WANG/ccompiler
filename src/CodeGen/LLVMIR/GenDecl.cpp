@@ -176,13 +176,49 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
 LValue GenGlobalVarDecl(VarDecl *decl, GenContext &context) {
   TypeRef type = decl->type;
   auto *llvm_type = context.LLVMType(type);
+  const bool is_definition =
+      decl->initializer || decl->storage_class != StorageClass::Extern;
   llvm::Constant *initializer =
-      GenConstInitializer(type, decl->initializer.get(), context);
-  auto *global = new llvm::GlobalVariable(
-      context.Module(), llvm_type, HasTypeTag(type, TypeTag::Const),
-      llvm::GlobalValue::ExternalLinkage, initializer, decl->name);
+      is_definition
+          ? GenConstInitializer(type, decl->initializer.get(), context)
+          : nullptr;
+  auto *global = context.Module().getGlobalVariable(decl->name, true);
+  if (global) {
+    ASSERT(global->getValueType() == llvm_type,
+           "Sema accepted conflicting global variable types");
+    if (decl->initializer || (is_definition && global->isDeclaration())) {
+      global->setInitializer(initializer);
+    }
+  } else {
+    auto linkage = decl->storage_class == StorageClass::Static
+                       ? llvm::GlobalValue::InternalLinkage
+                       : llvm::GlobalValue::ExternalLinkage;
+    global = new llvm::GlobalVariable(context.Module(), llvm_type,
+                                      HasTypeTag(type, TypeTag::Const), linkage,
+                                      initializer, decl->name);
+  }
   global->setDSOLocal(true);
   global->setAlignment(llvm::Align(type->GetAlign()));
+
+  LValue value{type, global};
+  context.AddLValue(decl, value);
+  return value;
+}
+
+LValue GenExternVarDecl(VarDecl *decl, GenContext &context) {
+  TypeRef type = decl->type;
+  auto *llvm_type = context.LLVMType(type);
+  auto *global = context.Module().getGlobalVariable(decl->name, true);
+  if (!global) {
+    global = new llvm::GlobalVariable(
+        context.Module(), llvm_type, HasTypeTag(type, TypeTag::Const),
+        llvm::GlobalValue::ExternalLinkage, nullptr, decl->name);
+    global->setDSOLocal(true);
+    global->setAlignment(llvm::Align(type->GetAlign()));
+  } else {
+    ASSERT(global->getValueType() == llvm_type,
+           "Sema accepted conflicting extern variable types");
+  }
 
   LValue value{type, global};
   context.AddLValue(decl, value);

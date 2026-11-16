@@ -1,0 +1,30 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        name: function
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}
+            parameters:
+              - {BuiltinType: {type_name: int, tags: [const, volatile]}}
+    - FunctionDecl:
+        name: function
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}
+            parameters:
+              - {BuiltinType: {type_name: int}}
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: local
+                  type:
+                    {BuiltinType: {type_name: int, tags: [volatile]}}
+                  initializer:
+                    ValueInitializer:
+                      value: {LiteralNum: {value: 1}}
+              - BinaryExpr:
+                  op_type: Assignment
+              - ReturnStmt:
+                  ret_value: {VarRef: {name: local}}

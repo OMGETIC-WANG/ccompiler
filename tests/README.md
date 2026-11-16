@@ -82,8 +82,9 @@ TranslationUnit:
 ```
 
 Type references use the same single-node-key descriptor as AST nodes. Add
-`tags` when the test depends on type qualifiers. Supported tags are `const`
-and `unsigned`; optional values use YAML `null`.
+`tags` when the test depends on type qualifiers. Supported tags are `const`,
+`unsigned`, `volatile`, and `restrict`; optional values use YAML `null`.
+The `storage_class` field accepts `None`, `Static`, or `Extern`.
 
 ```yaml
 type:

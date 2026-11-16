@@ -1,0 +1,79 @@
+TranslationUnit:
+  decls:
+    - TypedefDecl:
+        name: integer_pointer
+        type:
+          PointerType:
+            pointee_type: {BuiltinType: {type_name: int}}
+    - VarDecl:
+        name: object
+        type: {BuiltinType: {type_name: int, tags: [volatile]}}
+    - VarDecl:
+        name: values
+        type:
+          ArrayType:
+            size: 2
+            element_type:
+              {BuiltinType: {type_name: int, tags: [volatile]}}
+    - VarDecl:
+        name: typedef_restrict
+        type:
+          PointerType:
+            tags: [restrict]
+            pointee_type: {BuiltinType: {type_name: int}}
+    - VarDecl:
+        name: volatile_pointer
+        type:
+          PointerType:
+            tags: [volatile]
+            pointee_type: {BuiltinType: {type_name: int}}
+    - VarDecl:
+        name: restrict_pointer
+        type:
+          PointerType:
+            tags: [restrict]
+            pointee_type:
+              {BuiltinType: {type_name: int, tags: [const, volatile]}}
+    - VarDecl:
+        name: gnu_restrict
+        type:
+          PointerType:
+            tags: [restrict]
+            pointee_type: {BuiltinType: {type_name: int}}
+    - VarDecl:
+        name: gnu_restrict_compat
+        type:
+          PointerType:
+            tags: [restrict]
+            pointee_type: {BuiltinType: {type_name: int}}
+    - VarDecl:
+        name: standard_restrict
+        type:
+          PointerType:
+            tags: [restrict]
+            pointee_type: {BuiltinType: {type_name: int}}
+    - StructDecl:
+        name: Holder
+        type:
+          StructType:
+            type_name: Holder
+            is_complete: true
+            fields:
+              - name: field
+                type:
+                  {BuiltinType: {type_name: int, tags: [volatile]}}
+              - name: pointer
+                type:
+                  PointerType:
+                    tags: [restrict]
+                    pointee_type: {BuiltinType: {type_name: int}}
+    - FunctionDecl:
+        name: apply
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}
+            parameters:
+              - PointerType:
+                  tags: [restrict]
+                  pointee_type: {BuiltinType: {type_name: int}}
+              - BuiltinType: {type_name: int, tags: [volatile]}

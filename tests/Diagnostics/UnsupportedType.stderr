@@ -1,1 +1,1 @@
-@SOURCE_FILE@:1:1: error: volatile types are not supported yet
+@SOURCE_FILE@:1:1: error: restrict qualifier requires a pointer to an object type

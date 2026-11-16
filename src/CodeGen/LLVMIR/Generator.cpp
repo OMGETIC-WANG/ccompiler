@@ -56,6 +56,10 @@ static void FinalizeFunctionBlocks(llvm::Function *function,
   }
 }
 
+static bool IsRestrictObjectPointer(TypeRef type) {
+  return type->Is<PointerType>() && HasTypeTag(type, TypeTag::Restrict);
+}
+
 void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
   TypeRef resolved = decl->function_type;
   ASSERT(resolved->Is<FunctionType>());
@@ -73,7 +77,6 @@ void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
     function = llvm::Function::Create(llvm_function_type, linkage, decl->name,
                                       context.Module());
   }
-  function->setLinkage(linkage);
   if (auto attr = GetIntegerABIAttribute(function_type->return_type)) {
     function->addRetAttr(*attr);
   }
@@ -82,6 +85,19 @@ void GenFunction(FunctionDecl *decl, IRBuilder &builder, GenContext &context) {
         GetParameterType(function_type->parameters[i], context.Types());
     if (auto attr = GetIntegerABIAttribute(parameter_type)) {
       function->addParamAttr(static_cast<unsigned>(i), *attr);
+    }
+  }
+  if (decl->body) {
+    if (IsRestrictObjectPointer(function_type->return_type)) {
+      function->addRetAttr(llvm::Attribute::NoAlias);
+    }
+    for (size_t i = 0; i < function_type->parameters.size(); ++i) {
+      TypeRef parameter_type =
+          GetParameterType(function_type->parameters[i], context.Types());
+      if (IsRestrictObjectPointer(parameter_type)) {
+        function->addParamAttr(static_cast<unsigned>(i),
+                               llvm::Attribute::NoAlias);
+      }
     }
   }
   context.AddLValue(decl, LValue{resolved, function});

@@ -6,12 +6,13 @@
 
 namespace {
 
-TypeRef ApplyConstQualifier(TypeRef type, TypeContext &types) {
+TypeRef ApplyCVQualifier(TypeRef type, TypeTag qualifier, TypeContext &types) {
   if (auto *array_type = type->DynCast<ArrayType>()) {
-    TypeRef element_type = ApplyConstQualifier(array_type->element_type, types);
+    TypeRef element_type =
+        ApplyCVQualifier(array_type->element_type, qualifier, types);
     return types.Array(element_type, array_type->size);
   }
-  return ApplyTypeTag(type, TypeTag::Const);
+  return ApplyTypeTag(type, qualifier);
 }
 
 TypeRef GetOrCreateBaseType(const TypeSpecifier &specifier,
@@ -53,23 +54,21 @@ TypeRef GetOrCreateBaseType(const TypeSpecifier &specifier,
           "unsigned cannot qualify a typedef in a type specifier");
     }
     if (auto *decl = context.FindTypedef(specifier.type_name)) {
-      return decl->type;
+      type = decl->type;
+    } else if (auto *decl = context.FindEnum(specifier.type_name)) {
+      type = decl->type;
+    } else {
+      context.Diagnostics().Fail(specifier.location, "Unknown type name ",
+                                 specifier.type_name);
     }
-    if (auto *decl = context.FindEnum(specifier.type_name)) {
-      return decl->type;
-    }
-    context.Diagnostics().Fail(specifier.location, "Unknown type name ",
-                               specifier.type_name);
   } else {
     context.Diagnostics().Fail(specifier.location,
                                "Unable to resolve type name ",
                                specifier.type_name);
   }
 
-  if (specifier.is_const) {
-    type = ApplyConstQualifier(type, types);
-  }
-  return type;
+  return ApplyTypeSpecifierQualifiers(type, specifier, types,
+                                      context.Diagnostics());
 }
 
 static ParsedType
@@ -82,7 +81,19 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
     for (const Declarator::PointerQualifier &pointer : declarator->pointers) {
       curr_type = types.Pointer(curr_type);
       if (pointer.is_const) {
-        curr_type = ApplyTypeTag(curr_type, TypeTag::Const);
+        curr_type =
+            ApplyTypeQualifier(curr_type, TypeTag::Const, types,
+                               context.Diagnostics(), declarator->location);
+      }
+      if (pointer.is_volatile) {
+        curr_type =
+            ApplyTypeQualifier(curr_type, TypeTag::Volatile, types,
+                               context.Diagnostics(), declarator->location);
+      }
+      if (pointer.is_restrict) {
+        curr_type =
+            ApplyTypeQualifier(curr_type, TypeTag::Restrict, types,
+                               context.Diagnostics(), declarator->location);
       }
     }
     function_parameters.clear();
@@ -191,6 +202,54 @@ static ParsedType ParseInitDeclarator(TypeRef base_type,
 
 } // namespace
 
+TypeRef ApplyTypeQualifier(TypeRef type, TypeTag qualifier, TypeContext &types,
+                           DiagnosticContext &diagnostics,
+                           SourceLocation location) {
+  if (qualifier == TypeTag::Const || qualifier == TypeTag::Volatile) {
+    return ApplyCVQualifier(type, qualifier, types);
+  }
+  if (qualifier != TypeTag::Restrict) {
+    RAISE_ERROR("Unexpected type qualifier");
+  }
+  if (!type->Is<PointerType>() ||
+      type->As<PointerType>()->pointee_type->Is<FunctionType>()) {
+    diagnostics.Fail(location,
+                     "restrict qualifier requires a pointer to an object type");
+  }
+  return ApplyTypeTag(type, TypeTag::Restrict);
+}
+
+TypeRef ApplyTypeSpecifierQualifiers(TypeRef type,
+                                     const TypeSpecifier &specifier,
+                                     TypeContext &types,
+                                     DiagnosticContext &diagnostics) {
+  if (specifier.is_const) {
+    type = ApplyTypeQualifier(type, TypeTag::Const, types, diagnostics,
+                              specifier.location);
+  }
+  if (specifier.is_volatile) {
+    type = ApplyTypeQualifier(type, TypeTag::Volatile, types, diagnostics,
+                              specifier.location);
+  }
+  if (specifier.is_restrict) {
+    type = ApplyTypeQualifier(type, TypeTag::Restrict, types, diagnostics,
+                              specifier.location);
+  }
+  return type;
+}
+
+TypeRef ApplyAggregateMemberQualifiers(TypeRef member_type,
+                                       TypeRef aggregate_type,
+                                       TypeContext &types) {
+  if (HasTypeTag(aggregate_type, TypeTag::Const)) {
+    member_type = ApplyCVQualifier(member_type, TypeTag::Const, types);
+  }
+  if (HasTypeTag(aggregate_type, TypeTag::Volatile)) {
+    member_type = ApplyCVQualifier(member_type, TypeTag::Volatile, types);
+  }
+  return member_type;
+}
+
 int IntegerConversionRank(BuiltinKind kind) {
   switch (kind) {
   case BuiltinKind::I1:
@@ -212,7 +271,7 @@ int IntegerConversionRank(BuiltinKind kind) {
 
 TypeRef PromoteInteger(TypeRef type, TypeContext &types) {
   ASSERT(IsIntegerType(type), "Integer promotion requires an integer type");
-  type = StripTypeTag(type, TypeTag::Const);
+  type = StripTypeQualifiers(type);
 
   const auto *builtin = type->As<BuiltinType>();
   const BuiltinKind kind = builtin->Kind();
@@ -232,8 +291,8 @@ TypeRef PromoteInteger(TypeRef type, TypeContext &types) {
 TypeRef UsualArithmeticType(TypeRef left, TypeRef right, TypeContext &types) {
   ASSERT(IsNumericType(left) && IsNumericType(right),
          "Usual arithmetic conversions require numeric operands");
-  left = StripTypeTag(left, TypeTag::Const);
-  right = StripTypeTag(right, TypeTag::Const);
+  left = StripTypeQualifiers(left);
+  right = StripTypeQualifiers(right);
 
   const auto *left_builtin = left->As<BuiltinType>();
   const auto *right_builtin = right->As<BuiltinType>();

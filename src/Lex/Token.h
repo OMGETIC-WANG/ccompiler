@@ -36,6 +36,7 @@
   x(KwUnsigned)\
   x(KwLong)\
   x(KwVolatile)\
+  x(KwRestrict)\
   x(KwExtern)\
   x(KwRegister)
 
@@ -130,7 +131,8 @@ inline bool IsStorageSpecifierKeyword(TokenType type) {
 }
 
 inline bool IsTypeQualifierKeyword(TokenType type) {
-  return type == TokenType::KwConst || type == TokenType::KwVolatile;
+  return type == TokenType::KwConst || type == TokenType::KwVolatile ||
+         type == TokenType::KwRestrict;
 }
 
 inline bool IsDeclarationSpecifierKeyword(TokenType type) {

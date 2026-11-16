@@ -1,0 +1,1 @@
+@SOURCE_FILE@:1:6: error: restrict qualifier requires a pointer to an object type

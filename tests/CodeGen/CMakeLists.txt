@@ -5,3 +5,6 @@ ccompiler_add_jit_case(CodeGen.SemanticTypes SemanticTypes.c "codegen;frontend")
 ccompiler_add_jit_case(CodeGen.ConstantFlow ConstantFlow.c "codegen;frontend")
 ccompiler_add_jit_case(CodeGen.SizeofTypes SizeofTypes.c "codegen;frontend")
 ccompiler_add_jit_case(CodeGen.Conversions Conversions.c "codegen;frontend")
+ccompiler_add_jit_case(CodeGen.Qualifiers Qualifiers.c "codegen;frontend")
+ccompiler_add_self_test(CodeGen.QualifiedIR --qualified-ir-self-test
+                        "codegen;frontend")

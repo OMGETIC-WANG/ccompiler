@@ -37,13 +37,15 @@ void IRBuilder::CreateCondBr(const RValue &cond, llvm::BasicBlock *true_block,
 }
 
 RValue IRBuilder::CreateLoad(TypeRef type, const LValue &ptr) {
-  auto *load = _builder.CreateLoad(_context.LLVMType(type), ptr.address);
+  auto *load = _builder.CreateLoad(_context.LLVMType(type), ptr.address,
+                                   HasTypeTag(type, TypeTag::Volatile));
   load->setAlignment(llvm::Align(type->GetAlign()));
-  return RValue{type, load};
+  return RValue{StripTypeQualifiers(type), load};
 }
 
 LValue IRBuilder::CreateStore(const RValue &value, const LValue &ptr) {
-  auto *store = _builder.CreateStore(value.ir_value, ptr.address);
+  auto *store = _builder.CreateStore(value.ir_value, ptr.address,
+                                     HasTypeTag(ptr.c_type, TypeTag::Volatile));
   store->setAlignment(llvm::Align(ptr.c_type->GetAlign()));
   return ptr;
 }
@@ -55,10 +57,13 @@ LValue IRBuilder::CreateAlloca(TypeRef type) {
 }
 
 LValue IRBuilder::GetElementPtrImpl(llvm::StructType *type,
+                                    TypeRef aggregate_type,
                                     llvm::Value *address,
                                     const StructField &field) {
   auto *ptr = _builder.CreateStructGEP(type, address, field.index);
-  return LValue{field.type, ptr};
+  return LValue{ApplyAggregateMemberQualifiers(field.type, aggregate_type,
+                                               _context.Types()),
+                ptr};
 }
 
 LValue IRBuilder::GetElementPtr(const LValue &value, const StructField &field,
@@ -67,7 +72,7 @@ LValue IRBuilder::GetElementPtr(const LValue &value, const StructField &field,
   ASSERT(value.c_type->Is<StructType>(),
          "Sema accepted field access on a non-struct");
   auto *struct_type = _context.LLVMStructType(value.c_type);
-  return GetElementPtrImpl(struct_type, value.address, field);
+  return GetElementPtrImpl(struct_type, value.c_type, value.address, field);
 }
 
 LValue IRBuilder::GetElementPtr(const LValue &value,
@@ -94,7 +99,9 @@ LValue IRBuilder::GetPtrElementPtr(const RValue &ptr,
   ASSERT(field.has_value(), "Sema accepted an unknown struct field");
   (void)location;
   auto *struct_type = _context.LLVMStructType(pointee_type);
-  return GetElementPtrImpl(struct_type, ptr.ir_value, field.value());
+  return GetElementPtrImpl(struct_type,
+                           ptr.c_type->As<PointerType>()->pointee_type,
+                           ptr.ir_value, field.value());
 }
 
 RValue IRBuilder::CreateExtractValue(const RValue &value,
@@ -404,8 +411,14 @@ RValue IRBuilder::CreateVaArg(const LValue &va_list, TypeRef type) {
 
 void IRBuilder::CreateMemcpy(const LValue &dst, const RValue &src, size_t size,
                              size_t align) {
+  bool is_volatile = HasTypeTag(dst.c_type, TypeTag::Volatile);
+  TypeRef element_type = dst.c_type;
+  while (auto *array = element_type->DynCast<ArrayType>()) {
+    element_type = array->element_type;
+    is_volatile |= HasTypeTag(element_type, TypeTag::Volatile);
+  }
   _builder.CreateMemCpy(dst.address, llvm::Align(align), src.ir_value,
-                        llvm::Align(align), size);
+                        llvm::Align(align), size, is_volatile);
 }
 
 void IRBuilder::CreateSwitch(

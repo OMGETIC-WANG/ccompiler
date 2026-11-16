@@ -320,6 +320,9 @@ TokenType TryGetKeywordTokenType(std::string_view s) {
       {"unsigned", TokenType::KwUnsigned},
       {"long", TokenType::KwLong},
       {"volatile", TokenType::KwVolatile},
+      {"restrict", TokenType::KwRestrict},
+      {"__restrict", TokenType::KwRestrict},
+      {"__restrict__", TokenType::KwRestrict},
       {"extern", TokenType::KwExtern},
       {"register", TokenType::KwRegister},
   };

@@ -7,7 +7,7 @@
 #include "Type.h"
 #include <vector>
 
-enum class StorageClass { None, Static };
+enum class StorageClass { None, Static, Extern };
 
 struct DeclarationSpecifier {
   TypeSpecifier type_spec;
@@ -104,6 +104,8 @@ public:
 
   struct PointerQualifier {
     bool is_const = false;
+    bool is_volatile = false;
+    bool is_restrict = false;
   };
 
   std::vector<PointerQualifier> pointers;

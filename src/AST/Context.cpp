@@ -237,8 +237,5 @@ TypeRef CompileContext::GetType(const TypeSpecifier &spec) const {
   if (spec.is_unsigned) {
     result = ApplyTypeTag(result, TypeTag::Unsigned);
   }
-  if (spec.is_const) {
-    result = ApplyTypeTag(result, TypeTag::Const);
-  }
-  return result;
+  return ApplyTypeSpecifierQualifiers(result, spec, _types, _diagnostics);
 }

@@ -71,11 +71,14 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
       lexer.ConsumeToken(tok);
       break;
     case TokenType::KwStatic:
+    case TokenType::KwExtern:
       if (decl_spec.storage_class != StorageClass::None) {
         context.Diagnostics().Fail(
             tok.location, "Multiple storage classes are not supported");
       }
-      decl_spec.storage_class = StorageClass::Static;
+      decl_spec.storage_class = tok.type == TokenType::KwStatic
+                                    ? StorageClass::Static
+                                    : StorageClass::Extern;
       lexer.ConsumeToken(tok);
       break;
     case TokenType::KwConst:
@@ -83,8 +86,13 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
       lexer.ConsumeToken(tok);
       break;
     case TokenType::KwVolatile:
-      context.Diagnostics().Fail(tok.location,
-                                 "volatile types are not supported yet");
+      spec.is_volatile = true;
+      lexer.ConsumeToken(tok);
+      break;
+    case TokenType::KwRestrict:
+      spec.is_restrict = true;
+      lexer.ConsumeToken(tok);
+      break;
     case TokenType::KwSigned:
     case TokenType::KwUnsigned: {
       const bool is_unsigned = tok.type == TokenType::KwUnsigned;
@@ -200,7 +208,6 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
         }
       }
       break;
-    case TokenType::KwExtern:
     case TokenType::KwRegister:
       context.Diagnostics().Fail(tok.location, "Unsupported storage class ",
                                  context.Sources().GetText(tok));
@@ -465,15 +472,21 @@ static std::unique_ptr<Declarator> ParseDeclarator(Lexer &lexer,
     if (tok.type == TokenType::Star) {
       lexer.ConsumeToken(tok);
       Declarator::PointerQualifier qualifier;
-      while (lexer.PeekNextToken().type == TokenType::KwConst) {
-        lexer.ConsumeNextToken();
-        qualifier.is_const = true;
-      }
-      if (lexer.PeekNextToken().type == TokenType::KwVolatile) {
-        Token volatile_token = lexer.PeekNextToken();
-        context.Diagnostics().Fail(
-            volatile_token.location,
-            "volatile pointer qualifiers are not supported yet");
+      while (IsTypeQualifierKeyword(lexer.PeekNextToken().type)) {
+        Token qualifier_token = lexer.ConsumeNextToken();
+        switch (qualifier_token.type) {
+        case TokenType::KwConst:
+          qualifier.is_const = true;
+          break;
+        case TokenType::KwVolatile:
+          qualifier.is_volatile = true;
+          break;
+        case TokenType::KwRestrict:
+          qualifier.is_restrict = true;
+          break;
+        default:
+          RAISE_ERROR("Unexpected pointer qualifier");
+        }
       }
       declarator->pointers.push_back(qualifier);
     } else {

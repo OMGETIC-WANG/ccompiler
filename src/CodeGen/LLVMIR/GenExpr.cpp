@@ -149,6 +149,9 @@ struct ExprEmitter::detail {
   }
 
   static LValue GenVarDecl(VarDecl *decl, ExprEmitter &self) {
+    if (decl->storage_class == StorageClass::Extern) {
+      return GenExternVarDecl(decl, self.context);
+    }
     ASSERT(decl->storage_class == StorageClass::None,
            "Sema accepted unsupported local static storage");
     TypeRef type = decl->type;
@@ -281,7 +284,9 @@ struct ExprEmitter::detail {
     auto field_ = union_type->GetField(field_name);
     ASSERT(field_.has_value(), "Sema accepted an unknown union field");
     auto &field = field_.value();
-    return LValue{field.type, value.address};
+    return LValue{ApplyAggregateMemberQualifiers(field.type, value.c_type,
+                                                 self.context.Types()),
+                  value.address};
   }
 
   static RValue GetUnionFieldRValue(const RValue &value,
@@ -693,6 +698,10 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
   }
   if (auto *var_decl = node->DynCast<VarDecl>()) {
     detail::GenVarDecl(var_decl, *this);
+    return;
+  }
+  if (auto *function_decl = node->DynCast<FunctionDecl>()) {
+    GenFunction(function_decl, builder, context);
     return;
   }
   if (auto *label_stmt = node->DynCast<LabelStmt>()) {

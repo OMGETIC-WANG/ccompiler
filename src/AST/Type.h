@@ -20,6 +20,7 @@ using ScopeId = uint64_t;
 
 class TypeBase;
 class TypeContext;
+class DiagnosticContext;
 
 struct TypeSpecifier {
   SourceLocation location;
@@ -32,6 +33,8 @@ struct TypeSpecifier {
   bool is_enum = false;
   bool is_named_type = false;
   bool is_const = false;
+  bool is_volatile = false;
+  bool is_restrict = false;
   bool is_unsigned = false;
 };
 
@@ -135,6 +138,8 @@ enum class TypeTag : TypeRef::TagType {
   None = 0,
   Const = 1 << 0,
   Unsigned = 1 << 1,
+  Volatile = 1 << 2,
+  Restrict = 1 << 3,
 };
 
 constexpr TypeRef::TagType TypeTagValue(TypeTag tag) {
@@ -142,7 +147,12 @@ constexpr TypeRef::TagType TypeTagValue(TypeTag tag) {
 }
 
 constexpr TypeRef::TagType SupportedTypeTags =
-    TypeTagValue(TypeTag::Const) | TypeTagValue(TypeTag::Unsigned);
+    TypeTagValue(TypeTag::Const) | TypeTagValue(TypeTag::Unsigned) |
+    TypeTagValue(TypeTag::Volatile) | TypeTagValue(TypeTag::Restrict);
+
+constexpr TypeRef::TagType TypeQualifierTags = TypeTagValue(TypeTag::Const) |
+                                               TypeTagValue(TypeTag::Volatile) |
+                                               TypeTagValue(TypeTag::Restrict);
 
 static_assert(SupportedTypeTags <= TypeRef::tag_mask,
               "TypeTag does not fit in TypeRef");
@@ -167,6 +177,12 @@ inline TypeRef StripTypeTag(TypeRef type, TypeTag tag) {
 inline bool HasTypeTag(TypeRef type, TypeTag tag) {
   const TypeRef::TagType value = TypeTagValue(tag);
   return (type.get_tag() & value) == value;
+}
+
+inline TypeRef StripTypeQualifiers(TypeRef type) {
+  type.set_tag(
+      static_cast<TypeRef::TagType>(type.get_tag() & ~TypeQualifierTags));
+  return type;
 }
 
 #define TypeNodeImpl(type_enum)                                                \
@@ -531,6 +547,19 @@ struct ParsedType {
 };
 
 class CompileContext;
+
+TypeRef ApplyTypeQualifier(TypeRef type, TypeTag qualifier, TypeContext &types,
+                           DiagnosticContext &diagnostics,
+                           SourceLocation location);
+
+TypeRef ApplyTypeSpecifierQualifiers(TypeRef type,
+                                     const TypeSpecifier &specifier,
+                                     TypeContext &types,
+                                     DiagnosticContext &diagnostics);
+
+TypeRef ApplyAggregateMemberQualifiers(TypeRef member_type,
+                                       TypeRef aggregate_type,
+                                       TypeContext &types);
 
 TypeRef ResolveTypeSpecifier(const TypeSpecifier &specifier,
                              CompileContext &context);

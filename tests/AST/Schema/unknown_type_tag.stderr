@@ -1,2 +1,2 @@
 FAIL "@SOURCE_FILE@"
-AST.decls.0.function_type.return_type.tags.0: unknown type tag 'packed'; allowed tags: const, unsigned
+AST.decls.0.function_type.return_type.tags.0: unknown type tag 'packed'; allowed tags: const, unsigned, volatile, restrict

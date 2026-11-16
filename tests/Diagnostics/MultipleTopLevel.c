@@ -1,3 +1,3 @@
 int a = ;
 int b = ;
-volatile int c;
+register int c;

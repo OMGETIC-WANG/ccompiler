@@ -1,0 +1,1 @@
+@SOURCE_FILE@:3:17: error: Cannot assign a pointer after discarding const or volatile qualifiers

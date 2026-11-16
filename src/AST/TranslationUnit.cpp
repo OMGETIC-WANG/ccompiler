@@ -760,7 +760,7 @@ std::unique_ptr<EnumDecl> ParseEnumDecl(Lexer &lexer, std::string_view name,
   if (lexer.PeekNextToken().type == TokenType::Colon) {
     Token colon = lexer.ConsumeNextToken();
     TypeRef parsed_type = ParseType(lexer, context);
-    if ((parsed_type.get_tag() & (TypeRef::TagType)(TypeTag::Const)) != 0) {
+    if ((parsed_type.get_tag() & TypeQualifierTags) != 0) {
       context.Diagnostics().Fail(
           colon.location, "Unexpected specifier for enum underlying type");
     }

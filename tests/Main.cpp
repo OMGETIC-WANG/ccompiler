@@ -10,6 +10,7 @@
 #include "Support/ASTPrintTest.h"
 #include "Support/ASTVerifier.h"
 #include "Support/DeclBindingTest.h"
+#include "Support/QualifierCodeGenTest.h"
 #include "Util/Diagnostic.h"
 
 #include <array>
@@ -213,6 +214,10 @@ int main(int argc, char **argv) {
     return RunASTPrintSelfTest();
   }
 
+  if (argc == 2 && std::string_view(argv[1]) == "--qualified-ir-self-test") {
+    return RunQualifierCodeGenSelfTest();
+  }
+
   if (argc < 2 || argc > 3) {
     std::cerr << "Usage: " << argv[0]
               << " <source.c> [expected.ast.yaml]\n"
@@ -229,7 +234,10 @@ int main(int argc, char **argv) {
               << argv[0]
               << " --decl-binding-self-test\n"
                  "       "
-              << argv[0] << " --ast-print-self-test\n";
+              << argv[0]
+              << " --ast-print-self-test\n"
+                 "       "
+              << argv[0] << " --qualified-ir-self-test\n";
     return 2;
   }
 

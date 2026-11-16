@@ -47,6 +47,12 @@ std::vector<std::string_view> TypeTagNames(TypeRef::TagType tags) {
   if ((tags & static_cast<TypeRef::TagType>(TypeTag::Unsigned)) != 0) {
     names.emplace_back("unsigned");
   }
+  if ((tags & static_cast<TypeRef::TagType>(TypeTag::Volatile)) != 0) {
+    names.emplace_back("volatile");
+  }
+  if ((tags & static_cast<TypeRef::TagType>(TypeTag::Restrict)) != 0) {
+    names.emplace_back("restrict");
+  }
   return names;
 }
 
@@ -74,13 +80,24 @@ void VerifyTypeTags(TypeRef value, const YAML::Node &tags,
 
     const std::string name = tag.Scalar();
     TypeTag expected_tag;
+    std::string_view expected_name;
     if (name == "const") {
       expected_tag = TypeTag::Const;
+      expected_name = "const";
     } else if (name == "unsigned") {
       expected_tag = TypeTag::Unsigned;
+      expected_name = "unsigned";
+    } else if (name == "volatile") {
+      expected_tag = TypeTag::Volatile;
+      expected_name = "volatile";
+    } else if (name == "restrict") {
+      expected_tag = TypeTag::Restrict;
+      expected_name = "restrict";
     } else {
       context.AddMessage(std::format(
-          "unknown type tag '{}'; allowed tags: const, unsigned", name));
+          "unknown type tag '{}'; allowed tags: const, unsigned, volatile, "
+          "restrict",
+          name));
       continue;
     }
 
@@ -90,7 +107,7 @@ void VerifyTypeTags(TypeRef value, const YAML::Node &tags,
       continue;
     }
     expected_tags |= bit;
-    expected_names.push_back(name == "const" ? "const" : "unsigned");
+    expected_names.push_back(expected_name);
   }
 
   const TypeRef::TagType actual_tags = value.get_tag() & SupportedTypeTags;
@@ -193,8 +210,18 @@ void VerifyStorageClass(const VarDecl &decl, const YAML::Node &expected,
     return;
   }
 
-  std::string_view actual =
-      decl.storage_class == StorageClass::Static ? "Static" : "None";
+  std::string_view actual;
+  switch (decl.storage_class) {
+  case StorageClass::None:
+    actual = "None";
+    break;
+  case StorageClass::Static:
+    actual = "Static";
+    break;
+  case StorageClass::Extern:
+    actual = "Extern";
+    break;
+  }
   if (storage_class.Scalar() != actual) {
     context.AddMessage(
         std::format("expected '{}', got '{}'", actual, storage_class.Scalar()));
@@ -228,8 +255,18 @@ void VerifyFunctionStorageClass(const FunctionDecl &decl,
     return;
   }
 
-  std::string_view actual =
-      decl.storage_class == StorageClass::Static ? "Static" : "None";
+  std::string_view actual;
+  switch (decl.storage_class) {
+  case StorageClass::None:
+    actual = "None";
+    break;
+  case StorageClass::Static:
+    actual = "Static";
+    break;
+  case StorageClass::Extern:
+    actual = "Extern";
+    break;
+  }
   if (storage_class.Scalar() != actual) {
     context.AddMessage(
         std::format("expected '{}', got '{}'", actual, storage_class.Scalar()));

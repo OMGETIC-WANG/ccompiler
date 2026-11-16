@@ -43,8 +43,8 @@ public:
 
   LValue CreateAlloca(TypeRef type);
 
-  LValue GetElementPtrImpl(llvm::StructType *type, llvm::Value *address,
-                           const StructField &field);
+  LValue GetElementPtrImpl(llvm::StructType *type, TypeRef aggregate_type,
+                           llvm::Value *address, const StructField &field);
 
   LValue GetElementPtr(const LValue &value, const StructField &field,
                        SourceLocation location = {});

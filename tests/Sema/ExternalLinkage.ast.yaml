@@ -1,0 +1,37 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: shared
+        storage_class: Extern
+    - VarDecl:
+        name: shared
+        storage_class: None
+    - VarDecl:
+        name: internal_value
+        storage_class: Static
+    - VarDecl:
+        name: internal_value
+        storage_class: Extern
+    - FunctionDecl:
+        name: internal_function
+        storage_class: Static
+        body:
+          CompoundStmt:
+            statements:
+              - ReturnStmt:
+                  ret_value: {LiteralNum: {value: 1}}
+    - FunctionDecl:
+        name: internal_function
+        storage_class: Extern
+    - FunctionDecl:
+        name: main
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: shared
+                  storage_class: Extern
+              - ReturnStmt:
+                  ret_value:
+                    BinaryExpr:
+                      op_type: Add
