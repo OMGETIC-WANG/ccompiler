@@ -29,3 +29,38 @@ TranslationUnit:
             parameters:
               - {BuiltinType: {type_name: double}}
         parameter_names: [value]
+    - FunctionDecl:
+        name: f
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}
+            parameters:
+              - ArrayType:
+                  size: 10
+                  element_type: {BuiltinType: {type_name: int}}
+        parameter_names: [<anonymous>]
+    - FunctionDecl:
+        name: g
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}
+            parameters:
+              - ArrayType:
+                  size: null
+                  element_type: {BuiltinType: {type_name: int}}
+              - ArrayType:
+                  size: 2
+                  element_type:
+                    ArrayType:
+                      size: 3
+                      element_type: {BuiltinType: {type_name: int}}
+              - ArrayType:
+                  size: 4
+                  element_type:
+                    PointerType:
+                      pointee_type: {BuiltinType: {type_name: int}}
+              - ArrayType:
+                  size: 5
+                  element_type: {BuiltinType: {type_name: int}}
+        parameter_names:
+          [<anonymous>, <anonymous>, <anonymous>, <anonymous>]

@@ -296,9 +296,9 @@ end:;
     } else if (saw_unsigned) {
       type_mask |= MInt;
     } else {
-    context.Diagnostics().Fail(spec.location,
-                               errs::InvalidTypeSpecifierCombination{});
-  }
+      context.Diagnostics().Fail(spec.location,
+                                 errs::InvalidTypeSpecifierCombination{});
+    }
   }
 
   constexpr unsigned int integer_mask =
@@ -445,7 +445,7 @@ ParseDirectDeclarator(Lexer &lexer, CompileContext &context) {
       RaiseParserError(context, rparen.location, errs::ExpectedClosingParen{});
     }
     lexer.ConsumeToken(rparen);
-  } else {
+  } else if (tok.type != TokenType::LBracket) {
     return nullptr;
   }
 

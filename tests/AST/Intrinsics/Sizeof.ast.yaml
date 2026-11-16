@@ -19,3 +19,15 @@ TranslationUnit:
                 name: sizeof
                 args:
                   - Expr: {VarRef: {name: target}}
+    - VarDecl:
+        name: array_type_size
+        initializer:
+          ValueInitializer:
+            value:
+              IntrinsicCall:
+                name: sizeof
+                args:
+                  - Type:
+                      ArrayType:
+                        size: 10
+                        element_type: {BuiltinType: {type_name: int}}

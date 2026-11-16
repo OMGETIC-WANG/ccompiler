@@ -168,6 +168,13 @@ static std::unique_ptr<ASTNode> ParseStmtOnly(Lexer &lexer,
   if (IsDeclarationSpecifier(tok, context)) {
     auto decl = ParseDeclaration(lexer, context);
     auto decl_types = ParseType(decl.get(), context);
+    for (size_t i = 0; i < decl->init_declarators.size(); ++i) {
+      if (decl_types[i].declarator_name.empty()) {
+        context.Diagnostics().Fail(
+            decl->init_declarators[i]->declarator->location,
+            errs::ExpectedDeclaratorIdentifier{});
+      }
+    }
     auto type_spec = std::move(decl->declaration_specifier.type_spec);
     const StorageClass storage_class =
         decl->declaration_specifier.storage_class;
