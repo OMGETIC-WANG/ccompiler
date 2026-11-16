@@ -828,7 +828,10 @@ static void AddVaList(CompileContext &context) {
       {"", context.Types().Pointer(context.Types().getVoid()), 2},
       {"", context.Types().getInt(), 3}};
   context.Types().CompleteStruct(va_list_type, fields);
-  context.AddSyntheticTypedef("va_list", va_list_type);
+
+  // musl suspects that __builtin_va_list is a typedef
+  context.AddSyntheticTypedef("__builtin_va_list",
+                              context.Types().Array(va_list_type, 1));
 }
 
 std::unique_ptr<TranslationUnit>
