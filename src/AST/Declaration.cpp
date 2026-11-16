@@ -101,39 +101,38 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
       lexer.ConsumeToken(tok);
       break;
     }
-    case TokenType::KwStruct:
+    case TokenType::KwStruct: {
       if (has_nominal_type() || has_builtin_type()) {
         context.Diagnostics().Fail(
             tok.location, "Multiple base types in declaration specifier");
       }
       spec.is_struct = true;
       lexer.ConsumeToken(tok);
-      {
-        Token struct_token = tok;
-        tok = lexer.PeekNextToken();
-        if (tok.type == TokenType::Identifier) {
-          spec.type_name = context.Sources().GetText(tok);
-          lexer.ConsumeToken(tok);
-          if (lexer.PeekNextToken().type == TokenType::LBrace ||
-              lexer.PeekNextToken().type == TokenType::Semicolon) {
-            auto struct_decl =
-                ParseStructDecl(lexer, context.Sources().GetText(tok), context);
-            struct_decl->location = CombineLocation(
-                struct_token.location, lexer.GetLastConsumedLocation());
-            decl_spec.decl = std::move(struct_decl);
-          }
-        } else if (tok.type == TokenType::LBrace) {
-          std::string_view name = GenerateAnoymousSymbol("struct");
-          decl_spec.decl = ParseStructDecl(lexer, name, context);
-          decl_spec.decl->location = CombineLocation(
+      Token struct_token = tok;
+      tok = lexer.PeekNextToken();
+      if (tok.type == TokenType::Identifier) {
+        spec.type_name = context.Sources().GetText(tok);
+        lexer.ConsumeToken(tok);
+        if (lexer.PeekNextToken().type == TokenType::LBrace ||
+            lexer.PeekNextToken().type == TokenType::Semicolon) {
+          auto struct_decl =
+              ParseStructDecl(lexer, context.Sources().GetText(tok), context);
+          struct_decl->location = CombineLocation(
               struct_token.location, lexer.GetLastConsumedLocation());
-          spec.type_name = name;
-        } else {
-          RaiseParserError(context, tok.location,
-                           "Expected struct name or definition");
+          decl_spec.decl = std::move(struct_decl);
         }
+      } else if (tok.type == TokenType::LBrace) {
+        std::string_view name = GenerateAnoymousSymbol("struct");
+        decl_spec.decl = ParseStructDecl(lexer, name, context);
+        decl_spec.decl->location = CombineLocation(
+            struct_token.location, lexer.GetLastConsumedLocation());
+        spec.type_name = name;
+      } else {
+        RaiseParserError(context, tok.location,
+                         "Expected struct name or definition");
       }
       break;
+    }
     case TokenType::KwUnion: {
       if (has_nominal_type() || has_builtin_type()) {
         context.Diagnostics().Fail(

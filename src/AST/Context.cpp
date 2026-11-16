@@ -208,14 +208,20 @@ TypeRef CompileContext::GetType(const TypeSpecifier &spec) const {
   } else if (spec.is_struct) {
     if (auto *decl = FindStruct(spec.type_name)) {
       result = decl->type;
+    } else if (spec.is_typedef) {
+      result = _types.GetOrCreateStruct(spec.scope_id, spec.type_name);
     }
   } else if (spec.is_union) {
     if (auto *decl = FindUnion(spec.type_name)) {
       result = decl->type;
+    } else if (spec.is_typedef) {
+      result = _types.GetOrCreateUnion(spec.scope_id, spec.type_name);
     }
   } else if (spec.is_enum) {
     if (auto *decl = FindEnum(spec.type_name)) {
       result = decl->type;
+    } else if (spec.is_typedef) {
+      result = _types.GetOrCreateEnum(spec.scope_id, spec.type_name);
     }
   } else if (spec.is_named_type) {
     if (auto *decl = FindTypedef(spec.type_name)) {
