@@ -35,20 +35,18 @@ static bool IsMacroArgConcatable(Token t, SourceManager &source_manager) {
   return true;
 }
 
-static bool IsIdentifierLike(Token t) {
-  return t.type == TokenType::Identifier || IsKeyword(t.type);
-}
-
 std::optional<std::pair<size_t, size_t>>
 MacroScanner::IsArgConcatPrefix() const {
-  if (_idx + 2 < _def.body.size()) {
-    Token tok0 = _def.body[_idx];
-    Token tok1 = _def.body[_idx + 1];
-    Token tok2 = _def.body[_idx + 2];
+  if (_idx + 2 < _desc.macro->body.size()) {
+    Token tok0 = _desc.macro->body[_idx];
+    Token tok1 = _desc.macro->body[_idx + 1];
+    Token tok2 = _desc.macro->body[_idx + 2];
     if (IsIdentifierLike(tok0) && tok1.type == TokenType::SharpSharp &&
         IsIdentifierLike(tok2)) {
-      size_t param0_idx = _def.GetParamIndex(_source_manager.GetText(tok0));
-      size_t param1_idx = _def.GetParamIndex(_source_manager.GetText(tok2));
+      size_t param0_idx =
+          _desc.macro->GetParamIndex(_source_manager.GetText(tok0));
+      size_t param1_idx =
+          _desc.macro->GetParamIndex(_source_manager.GetText(tok2));
       return std::make_pair(param0_idx, param1_idx);
     }
   }
@@ -64,24 +62,25 @@ Token MacroScanner::PeekNextToken() {
   }
 
   Token curr_body_tok;
-  if (_idx < _def.body.size()) {
-    curr_body_tok = _def.body[_idx];
+  if (_idx < _desc.macro->body.size()) {
+    curr_body_tok = _desc.macro->body[_idx];
   } else {
     return Token{TokenType::EndOfFile};
   }
 
-  if (!_def.has_arg) {
+  if (!_desc.macro->has_arg) {
     return curr_body_tok;
   }
 
   if (curr_body_tok.type == TokenType::Sharp) {
-    if (_idx + 1 >= _def.body.size()) {
+    if (_idx + 1 >= _desc.macro->body.size()) {
       _diagnostics.Fail(curr_body_tok.location,
                         "Expected macro parameter after '#'");
     }
-    Token next_tok = _def.body[_idx + 1];
+    Token next_tok = _desc.macro->body[_idx + 1];
 
-    size_t param_idx = _def.GetParamIndex(_source_manager.GetText(next_tok));
+    size_t param_idx =
+        _desc.macro->GetParamIndex(_source_manager.GetText(next_tok));
     if (param_idx == (size_t)-1) {
       _diagnostics.Fail(next_tok.location, "Unknown macro parameter: ",
                         _source_manager.GetText(next_tok));
@@ -103,19 +102,19 @@ Token MacroScanner::PeekNextToken() {
   if (auto pp = IsArgConcatPrefix(); pp.has_value()) {
     auto [param0_idx, param1_idx] = pp.value();
     if (!(param0_idx == (size_t)-1 || _args[param0_idx].size() == 1)) {
-      _diagnostics.Fail(_def.body[_idx + 0].location,
+      _diagnostics.Fail(_desc.macro->body[_idx + 0].location,
                         "Macro argument concatenation only supports single "
                         "token arguments");
     }
     if (!(param1_idx == (size_t)-1 || _args[param1_idx].size() == 1)) {
-      _diagnostics.Fail(_def.body[_idx + 2].location,
+      _diagnostics.Fail(_desc.macro->body[_idx + 2].location,
                         "Macro argument concatenation only supports single "
                         "token arguments");
     }
-    Token arg0 =
-        param0_idx == (size_t)-1 ? _def.body[_idx + 0] : _args[param0_idx][0];
-    Token arg1 =
-        param1_idx == (size_t)-1 ? _def.body[_idx + 2] : _args[param1_idx][0];
+    Token arg0 = param0_idx == (size_t)-1 ? _desc.macro->body[_idx + 0]
+                                          : _args[param0_idx][0];
+    Token arg1 = param1_idx == (size_t)-1 ? _desc.macro->body[_idx + 2]
+                                          : _args[param1_idx][0];
 
     if (!IsMacroArgConcatable(arg0, _source_manager) ||
         !IsMacroArgConcatable(arg1, _source_manager)) {
@@ -144,7 +143,7 @@ Token MacroScanner::PeekNextToken() {
   }
   if (curr_body_tok.type == TokenType::Identifier) {
     if (auto param_idx =
-            _def.GetParamIndex(_source_manager.GetText(curr_body_tok));
+            _desc.macro->GetParamIndex(_source_manager.GetText(curr_body_tok));
         param_idx != (size_t)-1) {
       auto &arg = _args[param_idx];
       if (arg.empty()) {

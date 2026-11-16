@@ -154,6 +154,10 @@ inline bool IsKeyword(TokenType type) {
 }
 #undef MAKE_KEYWORD_CASE
 
+inline bool IsIdentifierLike(TokenType type) {
+  return type == TokenType::Identifier || IsKeyword(type);
+}
+
 struct Token {
   Token(TokenType type_ = TokenType::Unknown, SourceLocation location_ = {},
         bool has_leading_space_ = false)
@@ -166,3 +170,5 @@ struct Token {
 
   bool operator==(const Token &) const = default;
 };
+
+inline bool IsIdentifierLike(Token tok) { return IsIdentifierLike(tok.type); }

@@ -25,13 +25,26 @@ public:
   }
 };
 
+struct MacroDesc {
+  std::unique_ptr<MacroDef> macro;
+  bool is_expanding = false;
+};
+
 class MacroContext {
 public:
-  MacroDef *FindMacro(std::string_view name) {
+  MacroDesc *FindMacroDesc(std::string_view name) {
     for (auto it = _macros.rbegin(); it != _macros.rend(); ++it) {
-      if ((*it)->name == name) {
-        return (*it).get();
+      if ((*it).macro->name == name) {
+        return &(*it);
       }
+    }
+    return nullptr;
+  }
+
+  MacroDef *FindMacro(std::string_view name) {
+    MacroDesc *desc = FindMacroDesc(name);
+    if (desc) {
+      return desc->macro.get();
     }
     return nullptr;
   }
@@ -40,13 +53,14 @@ public:
     if (auto *m = FindMacro(macro.name)) {
       *m = macro;
     } else {
-      _macros.push_back(std::make_unique<MacroDef>(std::move(macro)));
+      _macros.push_back(
+          MacroDesc{std::make_unique<MacroDef>(std::move(macro))});
     }
   }
 
   void RemoveMacro(std::string_view name) {
     for (auto it = _macros.rbegin(); it != _macros.rend(); ++it) {
-      if ((*it)->name == name) {
+      if ((*it).macro->name == name) {
         _macros.erase(std::next(it).base());
         return;
       }
@@ -54,17 +68,21 @@ public:
   }
 
 public:
-  std::vector<std::unique_ptr<MacroDef>> _macros;
+  std::vector<MacroDesc> _macros;
 };
 
 class MacroScanner : public IScanner {
   IScannerImpl(MacroScanner);
 
 public:
-  MacroScanner(MacroDef &def, std::vector<std::vector<Token>> args,
+  MacroScanner(MacroDesc &desc, std::vector<std::vector<Token>> args,
                SourceManager &source_manager, DiagnosticContext &diagnostics)
-      : _def(def), _source_manager(source_manager), _diagnostics(diagnostics),
-        _args(args) {}
+      : _desc(desc), _source_manager(source_manager), _diagnostics(diagnostics),
+        _args(args) {
+    desc.is_expanding = true;
+  }
+
+  ~MacroScanner() { _desc.is_expanding = false; }
 
   Token PeekNextToken() override;
 
@@ -74,7 +92,7 @@ private:
   // Return indices of parameters, -1 if is a normal token
   std::optional<std::pair<size_t, size_t>> IsArgConcatPrefix() const;
 
-  MacroDef &_def;
+  MacroDesc &_desc;
   SourceManager &_source_manager;
   DiagnosticContext &_diagnostics;
   size_t _idx = 0;

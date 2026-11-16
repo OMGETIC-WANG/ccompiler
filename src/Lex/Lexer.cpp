@@ -78,7 +78,7 @@ static std::string_view ScanIncludeFile(Scanner &scanner,
 static MacroDef ScanMacro(Scanner &scanner, SourceManager &source_manager,
                           DiagnosticContext &diagnostics) {
   Token tok = scanner.PeekNextTokenH();
-  if (tok.type != TokenType::Identifier) {
+  if (!IsIdentifierLike(tok)) {
     diagnostics.Fail(tok.location,
                      "Unexpected token while scanning "
                      "macro: ",
@@ -232,13 +232,17 @@ public:
           _source_manager, TokenType::LiteralNum,
           _macro_context.FindMacro(target_macro_name) ? "1" : "0");
     }
-    if (tok.type == TokenType::Identifier) {
-      if (auto *macro =
-              _macro_context.FindMacro(_source_manager.GetText(tok))) {
+    if (IsIdentifierLike(tok)) {
+      if (auto *macro_desc =
+              _macro_context.FindMacroDesc(_source_manager.GetText(tok))) {
+        if (macro_desc->is_expanding) {
+          return tok;
+        }
+        MacroDef *macro = macro_desc->macro.get();
         CurrScanner()->ConsumeToken(tok);
         if (macro->has_arg) {
           _scanners.emplace_back(
-              new MacroScanner(*macro,
+              new MacroScanner(*macro_desc,
                                ScanMacroArgs(*CurrScanner(),
                                              macro->params.size(),
                                              macro->has_va_arg, _diagnostics),
@@ -246,7 +250,7 @@ public:
               true);
         } else {
           _scanners.emplace_back(
-              new MacroScanner(*macro, std::vector<std::vector<Token>>(),
+              new MacroScanner(*macro_desc, std::vector<std::vector<Token>>(),
                                _source_manager, _diagnostics),
               true);
         }
@@ -393,17 +397,22 @@ std::optional<Token> RawLexer::EmitTokenImpl() {
       }
       return tok;
     }
-    if (auto *macro = _macro_context.FindMacro(_source_manager.GetText(tok))) {
+    if (auto *macro_desc =
+            _macro_context.FindMacroDesc(_source_manager.GetText(tok))) {
       CurrScanner()->ConsumeToken(tok);
+      if (macro_desc->is_expanding) {
+        return tok;
+      }
+      MacroDef *macro = macro_desc->macro.get();
       if (macro->has_arg) {
         _scanners.push_back(std::make_unique<MacroScanner>(
-            *macro,
+            *macro_desc,
             ScanMacroArgs(*CurrScanner(), macro->params.size(),
                           macro->has_va_arg, _compile_context.Diagnostics()),
             _source_manager, _compile_context.Diagnostics()));
       } else {
         _scanners.push_back(std::make_unique<MacroScanner>(
-            *macro, std::vector<std::vector<Token>>(), _source_manager,
+            *macro_desc, std::vector<std::vector<Token>>(), _source_manager,
             _compile_context.Diagnostics()));
       }
       return std::nullopt;
