@@ -1,0 +1,5 @@
+diagnostics:
+  - error: AssignmentToConst
+    file: "@SOURCE_FILE@"
+    location: "value = 2"
+    fields: {}

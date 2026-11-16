@@ -1,0 +1,6 @@
+diagnostics:
+  - error: UnknownVar
+    file: "@SOURCE_FILE@"
+    location: "index"
+    fields:
+      var_name: "index"

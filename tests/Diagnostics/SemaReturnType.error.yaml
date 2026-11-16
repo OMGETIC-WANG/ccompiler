@@ -1,0 +1,9 @@
+diagnostics:
+  - error: TypeMismatch
+    file: "@SOURCE_FILE@"
+    location: "return \"text\""
+    fields:
+      expected_type: "int"
+      actual_type:
+        PointerType:
+          pointee_type: {BuiltinType: {type_name: char}}

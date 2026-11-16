@@ -1,0 +1,5 @@
+diagnostics:
+  - error: MultipleStorageClasses
+    file: "@SOURCE_FILE@"
+    location: "static"
+    fields: {}

@@ -1,0 +1,6 @@
+diagnostics:
+  - error: UnknownCharacter
+    file: "@SOURCE_FILE@"
+    location: "@"
+    fields:
+      character: "@"

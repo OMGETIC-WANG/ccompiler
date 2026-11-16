@@ -1,0 +1,5 @@
+diagnostics:
+  - error: ExpectedDecimalExponentE
+    file: "@SOURCE_FILE@"
+    location: "1:2-1:3"
+    fields: {}

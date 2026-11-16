@@ -7,6 +7,7 @@
 #include "../AST/TypeContext.h"
 #include "../Exception.h"
 #include "../Util/Diagnostic.h"
+#include "Diagnostics/Errors.generated.h"
 
 #include <cstdint>
 #include <optional>
@@ -317,11 +318,10 @@ private:
       return AnalyzeConditional(conditional);
     }
     if (auto *sequence = node->DynCast<SequenceEval>()) {
-      diagnostics.Fail(sequence->location,
-                       "Unsupported AST node type: SequenceEval");
+      diagnostics.Fail(sequence->location, errs::UnsupportedSequenceEval{});
     }
     diagnostics.Fail(node->location,
-                     "Unsupported expression AST node: ", node->GetType());
+                     errs::UnsupportedExpressionASTNode{node->GetType()});
   }
 
   ExprInfo AnalyzeVarRef(VarRef *var_ref) {
@@ -341,7 +341,7 @@ private:
       return {enumerator->type, ValueCategory::RValue};
     }
     diagnostics.Fail(var_ref->location,
-                     "Declaration has no generated value: ", decl->name);
+                     errs::DeclarationHasNoGeneratedValue{decl->name});
   }
 
   ExprInfo Decay(std::unique_ptr<ASTNode> &node, ExprInfo info) {
@@ -380,17 +380,14 @@ private:
     }
     if (IsBooleanType(target_type)) {
       if (!IsScalar(info.type)) {
-        diagnostics.Fail(location,
-                         "Boolean conversion requires a scalar expression");
+        diagnostics.Fail(location, errs::BooleanConversionRequiresScalar{});
       }
       InsertImplicitCast(node, target_type);
       return {target_type, ValueCategory::RValue};
     }
     if (info.type->Is<PointerType>() && target_type->Is<PointerType>()) {
       if (LosesPointerQualifiers(info.type, target_type)) {
-        diagnostics.Fail(location,
-                         "Cannot assign a pointer after discarding const or "
-                         "volatile qualifiers");
+        diagnostics.Fail(location, errs::PointerAssignmentDiscardsQualifiers{});
       }
       InsertImplicitCast(node, target_type);
       return {target_type, ValueCategory::RValue};
@@ -403,15 +400,18 @@ private:
       InsertImplicitCast(node, target_type);
       return {target_type, ValueCategory::RValue};
     }
-    diagnostics.Fail(location, "Failed to cast between incompatible types");
+    diagnostics.Fail(location, errs::TypeMismatch{
+                                   target_type,
+                                   info.type,
+                               });
   }
 
+  template <typename Error>
   ExprInfo ConvertToBool(std::unique_ptr<ASTNode> &node, ExprInfo info,
-                         SourceLocation location,
-                         std::string_view invalid_message) {
+                         SourceLocation location, Error error) {
     info = Decay(node, info);
     if (!IsScalar(info.type)) {
-      diagnostics.Fail(location, invalid_message);
+      diagnostics.Fail(location, std::move(error));
     }
     TypeRef bool_type = BooleanType();
     if (info.type != bool_type) {
@@ -427,11 +427,10 @@ private:
     if (op == BinaryOpType::Assignment && !binary->compound_op) {
       ExprInfo left_info = AnalyzeExpr(binary->left);
       if (left_info.value_category != ValueCategory::LValue) {
-        diagnostics.Fail(binary->location, "Assignment requires an lvalue");
+        diagnostics.Fail(binary->location, errs::AssignmentRequiresLValue{});
       }
       if (HasTypeTag(left_info.type, TypeTag::Const)) {
-        diagnostics.Fail(binary->location,
-                         "Cannot assign to a const-qualified object");
+        diagnostics.Fail(binary->location, errs::AssignmentToConst{});
       }
       ExprInfo right_info = AnalyzeExpr(binary->right);
       ConvertExpr(binary->right, right_info, left_info.type, binary->location);
@@ -445,22 +444,22 @@ private:
       right_info = Decay(binary->right, right_info);
       if (!IsIntegerType(right_info.type)) {
         diagnostics.Fail(binary->location,
-                         "Subscript requires an integer index");
+                         errs::SubscriptRequiresIntegerIndex{});
       }
       if (auto *pointer = left_info.type->DynCast<PointerType>()) {
         return {pointer->pointee_type, ValueCategory::LValue};
       }
       diagnostics.Fail(binary->location,
-                       "Subscript requires an array or pointer operand");
+                       errs::SubscriptRequiresArrayOrPointer{});
     }
 
     if (op == BinaryOpType::And || op == BinaryOpType::Or) {
       ExprInfo left_info = AnalyzeExpr(binary->left);
       ExprInfo right_info = AnalyzeExpr(binary->right);
       left_info = ConvertToBool(binary->left, left_info, binary->location,
-                                "Logical operators require scalar operands");
+                                errs::LogicalOperationsRequireScalars{});
       right_info = ConvertToBool(binary->right, right_info, binary->location,
-                                 "Logical operators require scalar operands");
+                                 errs::LogicalOperationsRequireScalars{});
       binary->operation_type = BooleanType();
       return {BooleanType(), ValueCategory::RValue};
     }
@@ -470,11 +469,10 @@ private:
     ExprInfo left_info = AnalyzeExpr(binary->left);
     if (is_compound) {
       if (left_info.value_category != ValueCategory::LValue) {
-        diagnostics.Fail(binary->location, "Assignment requires an lvalue");
+        diagnostics.Fail(binary->location, errs::AssignmentRequiresLValue{});
       }
       if (HasTypeTag(left_info.type, TypeTag::Const)) {
-        diagnostics.Fail(binary->location,
-                         "Cannot modify a const-qualified object");
+        diagnostics.Fail(binary->location, errs::ModifyConst{});
       }
       left_info.type = Unqualified(left_info.type);
       compound_left_type = left_info.type;
@@ -492,12 +490,10 @@ private:
         (base_op == BinaryOpType::BitAnd || base_op == BinaryOpType::BitOr ||
          base_op == BinaryOpType::BitXor)) {
       if (!IsIntegerType(left_info.type)) {
-        diagnostics.Fail(binary->location,
-                         "Bitwise operators require an integer left operand");
+        diagnostics.Fail(binary->location, errs::BitwiseRequiresIntegerLeft{});
       }
       if (!IsIntegerType(right_info.type)) {
-        diagnostics.Fail(binary->location,
-                         "Bitwise operators require an integer right operand");
+        diagnostics.Fail(binary->location, errs::BitwiseRequiresIntegerRight{});
       }
       TypeRef common =
           UsualArithmeticType(left_info.type, right_info.type, types);
@@ -510,12 +506,10 @@ private:
     if (!is_compound &&
         (base_op == BinaryOpType::LShift || base_op == BinaryOpType::RShift)) {
       if (!IsIntegerType(left_info.type)) {
-        diagnostics.Fail(binary->location,
-                         "Shift operators require an integer left operand");
+        diagnostics.Fail(binary->location, errs::ShiftRequiresIntegerLeft{});
       }
       if (!IsIntegerType(right_info.type)) {
-        diagnostics.Fail(binary->location,
-                         "Shift operators require an integer right operand");
+        diagnostics.Fail(binary->location, errs::ShiftRequiresIntegerRight{});
       }
       TypeRef promoted = PromoteInteger(left_info.type, types);
       ConvertExpr(binary->left, left_info, promoted, binary->location);
@@ -527,12 +521,11 @@ private:
     if (!is_compound && left_info.type->Is<PointerType>()) {
       if (!IsIntegerType(right_info.type)) {
         diagnostics.Fail(binary->location,
-                         "Pointer arithmetic only supports integer offsets");
+                         errs::PointerArithmeticRequiresIntegerOffset{});
       }
       if (base_op != BinaryOpType::Add && base_op != BinaryOpType::Sub) {
-        diagnostics.Fail(
-            binary->location,
-            "Pointer arithmetic only supports addition and subtraction");
+        diagnostics.Fail(binary->location,
+                         errs::PointerArithmeticRequiresAddSub{});
       }
       binary->operation_type = left_info.type;
       return {left_info.type, ValueCategory::RValue};
@@ -540,7 +533,7 @@ private:
 
     if (!IsNumericType(left_info.type) || !IsNumericType(right_info.type)) {
       diagnostics.Fail(binary->location,
-                       "Arithmetic operators require numeric operands");
+                       errs::ArithmeticRequiresNumericOperands{});
     }
     TypeRef common =
         UsualArithmeticType(left_info.type, right_info.type, types);
@@ -574,7 +567,7 @@ private:
     case UnaryOpType::GetAddress: {
       if (operand.value_category != ValueCategory::LValue &&
           operand.value_category != ValueCategory::FunctionDesignator) {
-        diagnostics.Fail(unary->location, "Address-of requires an lvalue");
+        diagnostics.Fail(unary->location, errs::AddressOfRequiresLValue{});
       }
       return {types.Pointer(operand.type), ValueCategory::RValue};
     }
@@ -583,24 +576,20 @@ private:
       if (auto *pointer = operand.type->DynCast<PointerType>()) {
         return {pointer->pointee_type, ValueCategory::LValue};
       }
-      diagnostics.Fail(unary->location,
-                       "Dereference requires a pointer operand");
+      diagnostics.Fail(unary->location, errs::DereferenceRequiresPointer{});
     }
     case UnaryOpType::IncBeforeUse:
     case UnaryOpType::IncAfterUse:
     case UnaryOpType::DecBeforeUse:
     case UnaryOpType::DecAfterUse: {
       if (operand.value_category != ValueCategory::LValue) {
-        diagnostics.Fail(unary->location,
-                         "Increment/decrement requires an lvalue");
+        diagnostics.Fail(unary->location, errs::IncrementRequiresLValue{});
       }
       if (HasTypeTag(operand.type, TypeTag::Const)) {
-        diagnostics.Fail(unary->location,
-                         "Cannot modify a const-qualified object");
+        diagnostics.Fail(unary->location, errs::ModifyConst{});
       }
       if (!IsNumericType(operand.type) && !operand.type->Is<PointerType>()) {
-        diagnostics.Fail(unary->location,
-                         "Increment/decrement requires a scalar operand");
+        diagnostics.Fail(unary->location, errs::IncrementRequiresScalar{});
       }
       return {Unqualified(operand.type), ValueCategory::RValue};
     }
@@ -610,12 +599,11 @@ private:
       operand = Decay(unary->operand, operand);
       if (unary->op_type == UnaryOpType::BitNot) {
         if (!IsIntegerType(operand.type)) {
-          diagnostics.Fail(unary->location,
-                           "Bitwise NOT requires an integer operand");
+          diagnostics.Fail(unary->location, errs::BitNotRequiresInteger{});
         }
       } else if (!IsNumericType(operand.type)) {
         diagnostics.Fail(unary->location,
-                         "Unary plus/minus requires a numeric operand");
+                         errs::UnaryArithmeticRequiresNumeric{});
       }
       TypeRef result_type = operand.type;
       if (IsIntegerType(operand.type)) {
@@ -626,12 +614,12 @@ private:
     }
     case UnaryOpType::Not: {
       ConvertToBool(unary->operand, operand, unary->location,
-                    "Logical NOT requires a scalar operand");
+                    errs::LogicalNotRequiresScalar{});
       return {BooleanType(), ValueCategory::RValue};
     }
     default:
       diagnostics.Fail(unary->location,
-                       "Unsupported unary operation: ", unary->op_type);
+                       errs::UnsupportedUnaryOperation{unary->op_type});
     }
   }
 
@@ -643,12 +631,11 @@ private:
       if (operand.type->Is<PointerType>() && target->Is<PointerType>()) {
         if (LosesPointerQualifiers(operand.type, target)) {
           diagnostics.Fail(type_cast->location,
-                           "Cannot cast a pointer after discarding const or "
-                           "volatile qualifiers");
+                           errs::PointerCastDiscardsQualifiers{});
         }
       } else if (!IsNumericType(operand.type) || !IsNumericType(target)) {
-        diagnostics.Fail(type_cast->location, "Unsupported type cast from ",
-                         operand.type->ToString(), " to ", target->ToString());
+        diagnostics.Fail(type_cast->location,
+                         errs::UnsupportedTypeCast{operand.type, target});
       }
     }
     return {target, ValueCategory::RValue};
@@ -659,19 +646,18 @@ private:
     if (auto *struct_type = type->DynCast<StructType>()) {
       auto field = struct_type->GetField(field_name);
       if (!field) {
-        diagnostics.Fail(location, "Unknown struct field: ", field_name);
+        diagnostics.Fail(location, errs::UnknownStructField{field_name});
       }
       return ApplyAggregateMemberQualifiers(field->type, type, types);
     }
     if (auto *union_type = type->DynCast<UnionType>()) {
       auto field = union_type->GetField(field_name);
       if (!field) {
-        diagnostics.Fail(location, "Unknown union field: ", field_name);
+        diagnostics.Fail(location, errs::UnknownUnionField{field_name});
       }
       return ApplyAggregateMemberQualifiers(field->type, type, types);
     }
-    diagnostics.Fail(location,
-                     "Field access requires a struct or union operand");
+    diagnostics.Fail(location, errs::FieldAccessRequiresAggregate{});
   }
 
   ExprInfo AnalyzeGetField(GetField *get_field) {
@@ -693,7 +679,7 @@ private:
               ValueCategory::LValue};
     }
     diagnostics.Fail(ptr_get_field->location,
-                     "Pointer field access requires a pointer operand");
+                     errs::PointerFieldAccessRequiresPointer{});
   }
 
   ExprInfo AnalyzeFunctionInvocation(FunctionInvocation *call) {
@@ -704,22 +690,18 @@ private:
       function_type = pointer->pointee_type;
     }
     if (!function_type->Is<FunctionType>()) {
-      diagnostics.Fail(
-          call->location,
-          "Function invocation requires a function or function pointer");
+      diagnostics.Fail(call->location, errs::InvocationRequiresFunction{});
     }
 
     const auto *signature = function_type->As<FunctionType>();
     if (signature->has_va_args) {
       if (call->arguments.size() < signature->parameters.size()) {
-        diagnostics.Fail(call->location,
-                         "Function argument count mismatch, expected at least ",
-                         signature->parameters.size(), " arguments");
+        diagnostics.Fail(call->location, errs::VariadicArgumentCountMismatch{
+                                             signature->parameters.size()});
       }
     } else if (call->arguments.size() != signature->parameters.size()) {
-      diagnostics.Fail(call->location,
-                       "Function argument count mismatch, expected ",
-                       signature->parameters.size(), " arguments");
+      diagnostics.Fail(call->location, errs::ArgumentCountMismatch{
+                                           signature->parameters.size()});
     }
 
     for (size_t i = 0; i < call->arguments.size(); ++i) {
@@ -777,8 +759,7 @@ private:
         complete = false;
       }
       if (!complete) {
-        diagnostics.Fail(call->location,
-                         "sizeof requires a complete object type");
+        diagnostics.Fail(call->location, errs::SizeofRequiresCompleteObject{});
       }
     }
     return {result, ValueCategory::RValue};
@@ -787,16 +768,15 @@ private:
   ExprInfo AnalyzeConditional(ConditionalExpr *conditional) {
     ExprInfo condition = AnalyzeExpr(conditional->condition);
     ConvertToBool(conditional->condition, condition, conditional->location,
-                  "Conditional expression requires a scalar condition");
+                  errs::ConditionalRequiresScalarCondition{});
 
     ExprInfo true_info = AnalyzeExpr(conditional->true_expr);
     ExprInfo false_info = AnalyzeExpr(conditional->false_expr);
     true_info = Decay(conditional->true_expr, true_info);
     false_info = Decay(conditional->false_expr, false_info);
     if (!IsNumericType(true_info.type) || !IsNumericType(false_info.type)) {
-      diagnostics.Fail(
-          conditional->location,
-          "Conditional expression requires compatible numeric operands");
+      diagnostics.Fail(conditional->location,
+                       errs::ConditionalRequiresNumericOperands{});
     }
     TypeRef common =
         UsualArithmeticType(true_info.type, false_info.type, types);
@@ -835,7 +815,7 @@ private:
       return;
     }
     diagnostics.Fail(node->location,
-                     "Unsupported declaration AST node: ", node->GetType());
+                     errs::UnsupportedDeclarationASTNode{node->GetType()});
   }
 
   void AnalyzeTopLevelDecl(ASTNode *node) {
@@ -851,7 +831,7 @@ private:
       return;
     default:
       diagnostics.Fail(node->location,
-                       "Unsupported top-level AST node: ", node->GetType());
+                       errs::UnsupportedTopLevelASTNode{node->GetType()});
     }
   }
 
@@ -859,20 +839,19 @@ private:
                               SourceLocation location) {
     auto [found, inserted] = linkage_kinds.try_emplace(name, kind);
     if (!inserted && found->second != kind) {
-      diagnostics.Fail(
-          location, "Conflicting declaration for ", name,
-          ": object and function declarations cannot share a name");
+      diagnostics.Fail(location,
+                       errs::ConflictingObjectAndFunctionDeclaration{name});
     }
   }
 
   void AnalyzeFunctionDecl(FunctionDecl *function, bool global) {
     if (!global && function->storage_class == StorageClass::Static) {
       diagnostics.Fail(function->location,
-                       "Block-scope function declarations cannot be static");
+                       errs::StaticBlockFunctionForbidden{});
     }
     if (!global && function->body) {
       diagnostics.Fail(function->location,
-                       "Function definitions are only valid at file scope");
+                       errs::FunctionDefinitionRequiresFileScope{});
     }
     ASSERT(function->function_type != nullptr,
            "Function declaration is missing its type");
@@ -890,20 +869,18 @@ private:
       if (!CompatibleFunctionTypes(function->function_type, previous.type,
                                    types)) {
         diagnostics.Fail(function->location,
-                         "Conflicting declaration for function ",
-                         function->name);
+                         errs::ConflictingFunctionDeclaration{function->name});
       }
       if (function->storage_class == StorageClass::Static &&
           previous.linkage == Linkage::External) {
-        diagnostics.Fail(function->location, "Static declaration of function ",
-                         function->name,
-                         " follows a declaration with external linkage");
+        diagnostics.Fail(function->location,
+                         errs::StaticFunctionFollowsExternal{function->name});
       }
       if (previous.linkage == Linkage::Internal &&
           function->storage_class != StorageClass::Extern) {
-        diagnostics.Fail(function->location, "Declaration of function ",
-                         function->name,
-                         " follows a static declaration without extern");
+        diagnostics.Fail(
+            function->location,
+            errs::FunctionFollowsStaticWithoutExtern{function->name});
       }
     } else {
       functions.emplace(function->name, FunctionInfo{
@@ -918,8 +895,8 @@ private:
     }
     FunctionInfo &info = functions.at(function->name);
     if (info.has_definition) {
-      diagnostics.Fail(function->location, "Multiple definitions of function ",
-                       function->name);
+      diagnostics.Fail(function->location,
+                       errs::MultipleFunctionDefinitions{function->name});
     }
     info.has_definition = true;
 
@@ -951,13 +928,12 @@ private:
         Expr *expression = AsExpr(element->value.get());
         if (!expression->constant_value) {
           diagnostics.Fail(element->location,
-                           "Enum value must be a constant expression");
+                           errs::EnumValueRequiresConstant{});
         }
         value =
             ConvertConstant(*expression->constant_value, decl->underlying_type);
         if (std::holds_alternative<long double>(value)) {
-          diagnostics.Fail(element->location,
-                           "Enum value cannot be a floating point number");
+          diagnostics.Fail(element->location, errs::EnumValueCannotBeFloat{});
         }
       } else if (i == 0) {
         value = int64_t{0};
@@ -990,19 +966,18 @@ private:
     if (found != objects.end()) {
       ObjectInfo &previous = found->second;
       if (previous.type != type) {
-        diagnostics.Fail(var->location, "Conflicting declaration for variable ",
-                         var->name);
+        diagnostics.Fail(var->location,
+                         errs::ConflictingVariableDeclaration{var->name});
       }
       if (var->storage_class == StorageClass::Static &&
           previous.linkage == Linkage::External) {
-        diagnostics.Fail(var->location, "Static declaration of variable ",
-                         var->name,
-                         " follows a declaration with external linkage");
+        diagnostics.Fail(var->location,
+                         errs::StaticVariableFollowsExternal{var->name});
       }
       if (previous.linkage == Linkage::Internal &&
           var->storage_class != StorageClass::Extern) {
-        diagnostics.Fail(var->location, "Declaration of variable ", var->name,
-                         " follows a static declaration without extern");
+        diagnostics.Fail(var->location,
+                         errs::VariableFollowsStaticWithoutExtern{var->name});
       }
     } else {
       const Linkage linkage = var->storage_class == StorageClass::Static
@@ -1025,22 +1000,18 @@ private:
     const bool has_initialized_definition = var->initializer != nullptr;
     if (has_initialized_definition && info.has_initialized_definition) {
       diagnostics.Fail(var->location,
-                       "Multiple initialized definitions of variable ",
-                       var->name);
+                       errs::MultipleVariableDefinitions{var->name});
     }
     info.has_initialized_definition |= has_initialized_definition;
   }
 
   void AnalyzeVarDecl(VarDecl *var, bool global) {
     if (!global && var->storage_class == StorageClass::Static) {
-      diagnostics.Fail(var->location,
-                       "Local static storage is not supported yet");
+      diagnostics.Fail(var->location, errs::LocalStaticUnsupported{});
     }
     if (!global && var->storage_class == StorageClass::Extern &&
         var->initializer) {
-      diagnostics.Fail(var->location,
-                       "Block-scope extern declarations cannot have an "
-                       "initializer");
+      diagnostics.Fail(var->location, errs::BlockExternCannotHaveInitializer{});
     }
     TypeRef type = var->type;
     if (auto *array = type->DynCast<ArrayType>();
@@ -1048,13 +1019,10 @@ private:
       std::optional<size_t> inferred_size;
       if (!var->initializer) {
         if (global) {
-          diagnostics.Fail(
-              var->location,
-              "Can't infer array size from initializer for global variable: ",
-              var->name);
+          diagnostics.Fail(var->location,
+                           errs::GlobalArraySizeNeedsInitializer{var->name});
         }
-        diagnostics.Fail(var->location,
-                         "Array with unspecified size requires an initializer");
+        diagnostics.Fail(var->location, errs::ArraySizeNeedsInitializer{});
       }
       if (auto *array_init = var->initializer->DynCast<ArrayInitializer>()) {
         inferred_size = array_init->initializers.size();
@@ -1064,24 +1032,18 @@ private:
           if (!array->element_type->Is<BuiltinType>() ||
               array->element_type->As<BuiltinType>()->Kind() !=
                   BuiltinKind::Char) {
-            diagnostics.Fail(
-                var->location,
-                "Array type must be a char array for string literal "
-                "initializer");
+            diagnostics.Fail(var->location, errs::StringArrayRequiresChar{});
           }
           inferred_size = literal->value.view().size() + 1;
         }
       }
       if (!inferred_size) {
         if (global) {
-          diagnostics.Fail(
-              var->location,
-              "Can't infer array size from initializer for global variable: ",
-              var->name);
+          diagnostics.Fail(var->location,
+                           errs::GlobalArraySizeNeedsInitializer{var->name});
         }
-        diagnostics.Fail(
-            var->initializer->location,
-            "Array initializer must be a brace list or string literal");
+        diagnostics.Fail(var->initializer->location,
+                         errs::ArrayInitializerRequiresListOrString{});
       }
       TypeRef completed = types.Array(array->element_type, *inferred_size);
       completed.set_tag(type.get_tag());
@@ -1095,9 +1057,8 @@ private:
     if (var->initializer) {
       AnalyzeInitializer(var->initializer.get(), type, var->location, global);
       if (global && !IsConstantFoldable(var->initializer.get())) {
-        diagnostics.Fail(
-            var->location,
-            "Global variable initializer must be constant foldable");
+        diagnostics.Fail(var->location,
+                         errs::GlobalInitializerRequiresConstant{});
       }
     }
   }
@@ -1109,9 +1070,8 @@ private:
         size_t size =
             array_type->size.value_or(array_init->initializers.size());
         if (array_init->initializers.size() > size) {
-          diagnostics.Fail(
-              array_init->location,
-              "Array initializer has more elements than the array size");
+          diagnostics.Fail(array_init->location,
+                           errs::TooManyArrayInitializers{});
         }
         for (const auto &element : array_init->initializers) {
           AnalyzeInitializer(element.get(), array_type->element_type,
@@ -1125,15 +1085,14 @@ private:
             array_type->element_type->As<BuiltinType>()->Kind() ==
                 BuiltinKind::Char) {
           if (array_type->size.value() < literal->value.view().size() + 1) {
-            diagnostics.Fail(
-                literal->location,
-                "Array size is smaller than the literal string size");
+            diagnostics.Fail(literal->location,
+                             errs::StringLiteralExceedsArraySize{});
           }
           AnalyzeExpr(value_init->value);
           return;
         }
       }
-      diagnostics.Fail(initializer->location, "Unexpected initializer");
+      diagnostics.Fail(initializer->location, errs::UnexpectedInitializer{});
     }
 
     if (auto *struct_type = type->DynCast<StructType>()) {
@@ -1142,7 +1101,7 @@ private:
           auto field = struct_type->GetField(name);
           if (!field) {
             diagnostics.Fail(field_init->location,
-                             "Unknown field name: ", name);
+                             errs::UnknownInitializerField{name});
           }
           AnalyzeInitializer(field_initializer.get(), field->type,
                              declaration_location, global);
@@ -1151,9 +1110,8 @@ private:
       }
       if (auto *array_init = initializer->DynCast<ArrayInitializer>()) {
         if (array_init->initializers.size() > struct_type->fields.size()) {
-          diagnostics.Fail(
-              array_init->location,
-              "Struct initializer has more elements than the struct fields");
+          diagnostics.Fail(array_init->location,
+                           errs::TooManyStructInitializers{});
         }
         for (size_t i = 0; i < array_init->initializers.size(); ++i) {
           AnalyzeInitializer(array_init->initializers[i].get(),
@@ -1173,7 +1131,7 @@ private:
       auto *value_init = initializer->DynCast<ValueInitializer>();
       if (!value_init) {
         diagnostics.Fail(initializer->location,
-                         "Builtin type requires a value initializer");
+                         errs::BuiltinInitializerRequiresValue{});
       }
       ExprInfo value = AnalyzeExpr(value_init->value);
       ConvertExpr(value_init->value, value, type, value_init->location);
@@ -1184,20 +1142,21 @@ private:
       auto *value_init = initializer->DynCast<ValueInitializer>();
       if (!value_init) {
         diagnostics.Fail(initializer->location,
-                         "Pointer type requires a value initializer");
+                         errs::PointerInitializerRequiresValue{});
       }
       ExprInfo value = AnalyzeExpr(value_init->value);
       value = Decay(value_init->value, value);
       if (global) {
         if (!AsExpr(value_init->value.get())->constant_value) {
-          diagnostics.Fail(
-              value_init->location,
-              "Global pointer initializer must be a constant expression");
+          diagnostics.Fail(value_init->location,
+                           errs::GlobalPointerRequiresConstant{});
         }
         if (!value.type->Is<PointerType>()) {
           if (!IsIntegerType(value.type) && !value.type->Is<EnumType>()) {
-            diagnostics.Fail(value_init->location,
-                             "Failed to cast between incompatible types");
+            diagnostics.Fail(value_init->location, errs::TypeMismatch{
+                                                       pointer,
+                                                       value.type,
+                                                   });
           }
           InsertImplicitCast(value_init->value, pointer);
         }
@@ -1210,14 +1169,14 @@ private:
     if (!global && (type->Is<EnumType>() || type->Is<UnionType>())) {
       auto *value_init = initializer->DynCast<ValueInitializer>();
       if (!value_init) {
-        diagnostics.Fail(initializer->location, "Unexpected initializer");
+        diagnostics.Fail(initializer->location, errs::UnexpectedInitializer{});
       }
       ExprInfo value = AnalyzeExpr(value_init->value);
       ConvertExpr(value_init->value, value, type, value_init->location);
       return;
     }
 
-    diagnostics.Fail(initializer->location, "Unexpected initializer");
+    diagnostics.Fail(initializer->location, errs::UnexpectedInitializer{});
   }
 
   void AnalyzeStatement(std::unique_ptr<ASTNode> &node) {
@@ -1294,15 +1253,13 @@ private:
     }
     if (current->Is<BreakStmt>()) {
       if (flow_contexts.empty() || !flow_contexts.back().allows_break) {
-        diagnostics.Fail(current->location,
-                         "break statement is not inside a loop or switch");
+        diagnostics.Fail(current->location, errs::BreakOutsideLoopOrSwitch{});
       }
       return;
     }
     if (current->Is<ContinueStmt>()) {
       if (flow_contexts.empty() || !flow_contexts.back().allows_continue) {
-        diagnostics.Fail(current->location,
-                         "continue statement is not inside a loop");
+        diagnostics.Fail(current->location, errs::ContinueOutsideLoop{});
       }
       return;
     }
@@ -1315,7 +1272,7 @@ private:
       return;
     }
     diagnostics.Fail(current->location,
-                     "Unsupported statement AST node: ", current->GetType());
+                     errs::UnsupportedStatementASTNode{current->GetType()});
   }
 
   void AnalyzeCondition(std::unique_ptr<ASTNode> &condition) {
@@ -1324,7 +1281,7 @@ private:
     }
     ExprInfo info = AnalyzeExpr(condition);
     ConvertToBool(condition, info, condition->location,
-                  "Condition requires a scalar expression");
+                  errs::ConditionRequiresScalar{});
   }
 
   void AnalyzeSwitch(SwitchStmt *switch_stmt) {
@@ -1332,9 +1289,8 @@ private:
     switch_info = Decay(switch_stmt->value, switch_info);
     TypeRef switch_type = switch_info.type;
     if (!IsIntegerOrEnum(switch_type)) {
-      diagnostics.Fail(
-          switch_stmt->value->location,
-          "switch requires an integer or enum controlling expression");
+      diagnostics.Fail(switch_stmt->value->location,
+                       errs::SwitchRequiresIntegerOrEnum{});
     }
 
     flow_contexts.push_back({.allows_break = true, .allows_continue = false});
@@ -1344,11 +1300,11 @@ private:
           ExprInfo value_info = AnalyzeExpr(value);
           if (!AsExpr(value.get())->constant_value) {
             diagnostics.Fail(value->location,
-                             "Case value must be a constant expression");
+                             errs::CaseValueRequiresConstant{});
           }
           if (!IsIntegerOrEnum(AsExpr(value.get())->type)) {
             diagnostics.Fail(value->location,
-                             "Integer initializer type mismatch");
+                             errs::IntegerInitializerTypeMismatch{});
           }
           ConvertExpr(value, value_info, switch_type, value->location);
         }
@@ -1366,8 +1322,7 @@ private:
 
   void AnalyzeReturn(ReturnStmt *return_stmt) {
     if (!current_function) {
-      diagnostics.Fail(return_stmt->location,
-                       "return statement is not inside a function");
+      diagnostics.Fail(return_stmt->location, errs::ReturnOutsideFunction{});
     }
     TypeRef return_type =
         current_function->function_type->As<FunctionType>()->return_type;

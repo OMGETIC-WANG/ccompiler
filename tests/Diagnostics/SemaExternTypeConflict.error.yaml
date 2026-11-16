@@ -1,0 +1,6 @@
+diagnostics:
+  - error: ConflictingVariableDeclaration
+    file: "@SOURCE_FILE@"
+    location: "2:1-2:17"
+    fields:
+      variable_name: "value"

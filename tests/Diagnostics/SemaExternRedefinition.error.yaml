@@ -1,0 +1,6 @@
+diagnostics:
+  - error: MultipleVariableDefinitions
+    file: "@SOURCE_FILE@"
+    location: "2:1-2:14"
+    fields:
+      variable_name: "value"

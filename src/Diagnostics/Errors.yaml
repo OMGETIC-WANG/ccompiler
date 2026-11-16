@@ -1,0 +1,787 @@
+# Source diagnostics generated into build/generated/Diagnostics/Errors.generated.*
+#
+# Field types:
+#   string, string_view, char, size_t, TypeRef, TokenType, ASTNodeType,
+#   BinaryOpType, UnaryOpType
+
+UnsupportedSequenceEval:
+  format: "Unsupported AST node type: SequenceEval"
+  fields: []
+
+UnsupportedExpressionASTNode:
+  format: "Unsupported expression AST node: %node_type%"
+  fields:
+    - node_type: ASTNodeType
+
+DeclarationHasNoGeneratedValue:
+  format: "Declaration has no generated value: %name%"
+  fields:
+    - name: string_view
+
+BooleanConversionRequiresScalar:
+  format: "Boolean conversion requires a scalar expression"
+  fields: []
+
+PointerAssignmentDiscardsQualifiers:
+  format: "Cannot assign a pointer after discarding const or volatile qualifiers"
+  fields: []
+
+TypeMismatch:
+  format: "Type mismatch: expected %expected_type%, got %actual_type%"
+  fields:
+    - expected_type: TypeRef
+    - actual_type: TypeRef
+
+AssignmentRequiresLValue:
+  format: "Assignment requires an lvalue"
+  fields: []
+
+AssignmentToConst:
+  format: "Cannot assign to a const-qualified object"
+  fields: []
+
+SubscriptRequiresIntegerIndex:
+  format: "Subscript requires an integer index"
+  fields: []
+
+SubscriptRequiresArrayOrPointer:
+  format: "Subscript requires an array or pointer operand"
+  fields: []
+
+ModifyConst:
+  format: "Cannot modify a const-qualified object"
+  fields: []
+
+BitwiseRequiresIntegerLeft:
+  format: "Bitwise operators require an integer left operand"
+  fields: []
+
+BitwiseRequiresIntegerRight:
+  format: "Bitwise operators require an integer right operand"
+  fields: []
+
+ShiftRequiresIntegerLeft:
+  format: "Shift operators require an integer left operand"
+  fields: []
+
+ShiftRequiresIntegerRight:
+  format: "Shift operators require an integer right operand"
+  fields: []
+
+PointerArithmeticRequiresIntegerOffset:
+  format: "Pointer arithmetic only supports integer offsets"
+  fields: []
+
+PointerArithmeticRequiresAddSub:
+  format: "Pointer arithmetic only supports addition and subtraction"
+  fields: []
+
+ArithmeticRequiresNumericOperands:
+  format: "Arithmetic operators require numeric operands"
+  fields: []
+
+AddressOfRequiresLValue:
+  format: "Address-of requires an lvalue"
+  fields: []
+
+DereferenceRequiresPointer:
+  format: "Dereference requires a pointer operand"
+  fields: []
+
+IncrementRequiresLValue:
+  format: "Increment/decrement requires an lvalue"
+  fields: []
+
+IncrementRequiresScalar:
+  format: "Increment/decrement requires a scalar operand"
+  fields: []
+
+BitNotRequiresInteger:
+  format: "Bitwise NOT requires an integer operand"
+  fields: []
+
+UnaryArithmeticRequiresNumeric:
+  format: "Unary plus/minus requires a numeric operand"
+  fields: []
+
+UnsupportedUnaryOperation:
+  format: "Unsupported unary operation: %operation%"
+  fields:
+    - operation: UnaryOpType
+
+PointerCastDiscardsQualifiers:
+  format: "Cannot cast a pointer after discarding const or volatile qualifiers"
+  fields: []
+
+UnsupportedTypeCast:
+  format: "Unsupported type cast from %from_type% to %to_type%"
+  fields:
+    - from_type: TypeRef
+    - to_type: TypeRef
+
+UnknownStructField:
+  format: "Unknown struct field: %field_name%"
+  fields:
+    - field_name: string_view
+
+UnknownUnionField:
+  format: "Unknown union field: %field_name%"
+  fields:
+    - field_name: string_view
+
+FieldAccessRequiresAggregate:
+  format: "Field access requires a struct or union operand"
+  fields: []
+
+PointerFieldAccessRequiresPointer:
+  format: "Pointer field access requires a pointer operand"
+  fields: []
+
+InvocationRequiresFunction:
+  format: "Function invocation requires a function or function pointer"
+  fields: []
+
+VariadicArgumentCountMismatch:
+  format: "Function argument count mismatch, expected at least %minimum_arguments% arguments"
+  fields:
+    - minimum_arguments: size_t
+
+ArgumentCountMismatch:
+  format: "Function argument count mismatch, expected %expected_arguments% arguments"
+  fields:
+    - expected_arguments: size_t
+
+SizeofRequiresCompleteObject:
+  format: "sizeof requires a complete object type"
+  fields: []
+
+ConditionalRequiresNumericOperands:
+  format: "Conditional expression requires compatible numeric operands"
+  fields: []
+
+UnsupportedDeclarationASTNode:
+  format: "Unsupported declaration AST node: %node_type%"
+  fields:
+    - node_type: ASTNodeType
+
+UnsupportedTopLevelASTNode:
+  format: "Unsupported top-level AST node: %node_type%"
+  fields:
+    - node_type: ASTNodeType
+
+ConflictingObjectAndFunctionDeclaration:
+  format: "Conflicting declaration for %name%: object and function declarations cannot share a name"
+  fields:
+    - name: string_view
+
+StaticBlockFunctionForbidden:
+  format: "Block-scope function declarations cannot be static"
+  fields: []
+
+FunctionDefinitionRequiresFileScope:
+  format: "Function definitions are only valid at file scope"
+  fields: []
+
+ConflictingFunctionDeclaration:
+  format: "Conflicting declaration for function %function_name%"
+  fields:
+    - function_name: string_view
+
+StaticFunctionFollowsExternal:
+  format: "Static declaration of function %function_name% follows a declaration with external linkage"
+  fields:
+    - function_name: string_view
+
+FunctionFollowsStaticWithoutExtern:
+  format: "Declaration of function %function_name% follows a static declaration without extern"
+  fields:
+    - function_name: string_view
+
+MultipleFunctionDefinitions:
+  format: "Multiple definitions of function %function_name%"
+  fields:
+    - function_name: string_view
+
+EnumValueRequiresConstant:
+  format: "Enum value must be a constant expression"
+  fields: []
+
+EnumValueCannotBeFloat:
+  format: "Enum value cannot be a floating point number"
+  fields: []
+
+ConflictingVariableDeclaration:
+  format: "Conflicting declaration for variable %variable_name%"
+  fields:
+    - variable_name: string_view
+
+StaticVariableFollowsExternal:
+  format: "Static declaration of variable %variable_name% follows a declaration with external linkage"
+  fields:
+    - variable_name: string_view
+
+VariableFollowsStaticWithoutExtern:
+  format: "Declaration of variable %variable_name% follows a static declaration without extern"
+  fields:
+    - variable_name: string_view
+
+MultipleVariableDefinitions:
+  format: "Multiple initialized definitions of variable %variable_name%"
+  fields:
+    - variable_name: string_view
+
+LocalStaticUnsupported:
+  format: "Local static storage is not supported yet"
+  fields: []
+
+BlockExternCannotHaveInitializer:
+  format: "Block-scope extern declarations cannot have an initializer"
+  fields: []
+
+GlobalArraySizeNeedsInitializer:
+  format: "Can't infer array size from initializer for global variable: %variable_name%"
+  fields:
+    - variable_name: string_view
+
+ArraySizeNeedsInitializer:
+  format: "Array with unspecified size requires an initializer"
+  fields: []
+
+StringArrayRequiresChar:
+  format: "Array type must be a char array for string literal initializer"
+  fields: []
+
+ArrayInitializerRequiresListOrString:
+  format: "Array initializer must be a brace list or string literal"
+  fields: []
+
+GlobalInitializerRequiresConstant:
+  format: "Global variable initializer must be constant foldable"
+  fields: []
+
+TooManyArrayInitializers:
+  format: "Array initializer has more elements than the array size"
+  fields: []
+
+StringLiteralExceedsArraySize:
+  format: "Array size is smaller than the literal string size"
+  fields: []
+
+UnexpectedInitializer:
+  format: "Unexpected initializer"
+  fields: []
+
+UnknownInitializerField:
+  format: "Unknown field name: %field_name%"
+  fields:
+    - field_name: string_view
+
+TooManyStructInitializers:
+  format: "Struct initializer has more elements than the struct fields"
+  fields: []
+
+BuiltinInitializerRequiresValue:
+  format: "Builtin type requires a value initializer"
+  fields: []
+
+PointerInitializerRequiresValue:
+  format: "Pointer type requires a value initializer"
+  fields: []
+
+GlobalPointerRequiresConstant:
+  format: "Global pointer initializer must be a constant expression"
+  fields: []
+
+BreakOutsideLoopOrSwitch:
+  format: "break statement is not inside a loop or switch"
+  fields: []
+
+ContinueOutsideLoop:
+  format: "continue statement is not inside a loop"
+  fields: []
+
+UnsupportedStatementASTNode:
+  format: "Unsupported statement AST node: %node_type%"
+  fields:
+    - node_type: ASTNodeType
+
+SwitchRequiresIntegerOrEnum:
+  format: "switch requires an integer or enum controlling expression"
+  fields: []
+
+CaseValueRequiresConstant:
+  format: "Case value must be a constant expression"
+  fields: []
+
+IntegerInitializerTypeMismatch:
+  format: "Integer initializer type mismatch"
+  fields: []
+
+ReturnOutsideFunction:
+  format: "return statement is not inside a function"
+  fields: []
+
+LogicalOperationsRequireScalars:
+  format: "Logical operators require scalar operands"
+  fields: []
+
+LogicalNotRequiresScalar:
+  format: "Logical NOT requires a scalar operand"
+  fields: []
+
+ConditionalRequiresScalarCondition:
+  format: "Conditional expression requires a scalar condition"
+  fields: []
+
+ConditionRequiresScalar:
+  format: "Condition requires a scalar expression"
+  fields: []
+
+OctalFloatUnsupported:
+  format: "Octal floating-point literals are not supported"
+  fields: []
+
+UnexpectedClosingBrace:
+  format: "Unexpected '}'"
+  fields: []
+
+TypedefCannotHaveStorageClass:
+  format: "A typedef cannot have a storage class"
+  fields: []
+
+StorageClassRequiresDeclarator:
+  format: "A storage class requires a declared object or function"
+  fields: []
+
+ExpectedSemicolonAfterStatement:
+  format: "Expected ';' after statement"
+  fields: []
+
+ExpectedClosingBrace:
+  format: "Expected '}'"
+  fields: []
+
+StructFieldsRequireVariables:
+  format: "Struct fields must be variable declarations"
+  fields: []
+
+StructFieldCannotHaveStorageClass:
+  format: "A struct field cannot have a storage class"
+  fields: []
+
+UnionFieldsRequireVariables:
+  format: "Union fields must be variable declarations"
+  fields: []
+
+UnionFieldCannotHaveStorageClass:
+  format: "A union field cannot have a storage class"
+  fields: []
+
+ExpectedClosingBraceAfterEnum:
+  format: "Expected '}' after enum"
+  fields: []
+
+UnexpectedEnumUnderlyingSpecifier:
+  format: "Unexpected specifier for enum underlying type"
+  fields: []
+
+ExpectedIntegerEnumUnderlyingType:
+  format: "Expected integer type for enum underlying type"
+  fields: []
+
+UnsignedRequiresIntegerType:
+  format: "unsigned is only valid for integer types"
+  fields: []
+
+UnsignedCannotQualifyStruct:
+  format: "unsigned cannot qualify a struct type"
+  fields: []
+
+UnsignedCannotQualifyUnion:
+  format: "unsigned cannot qualify a union type"
+  fields: []
+
+UnsignedCannotQualifyEnum:
+  format: "unsigned cannot qualify an enum type"
+  fields: []
+
+UnsignedCannotQualifyTypedef:
+  format: "unsigned cannot qualify a typedef in a type specifier"
+  fields: []
+
+UnknownTypeName:
+  format: "Unknown type name %type_name%"
+  fields:
+    - type_name: string_view
+
+UnableToResolveTypeName:
+  format: "Unable to resolve type name %type_name%"
+  fields:
+    - type_name: string_view
+
+UnknownTagName:
+  format: "Unknown struct/union/enum: %tag_name%"
+  fields:
+    - tag_name: string_view
+
+RestrictRequiresObjectPointer:
+  format: "restrict qualifier requires a pointer to an object type"
+  fields: []
+
+MultipleStorageClasses:
+  format: "Multiple storage classes are not supported"
+  fields: []
+
+SignedAndUnsignedTogether:
+  format: "signed and unsigned cannot be used together"
+  fields: []
+
+DuplicateSignednessSpecifier:
+  format: "Duplicate signedness specifier"
+  fields: []
+
+MultipleBaseTypes:
+  format: "Multiple base types in declaration specifier"
+  fields: []
+
+UnsupportedStorageClass:
+  format: "Unsupported storage class %storage_class%"
+  fields:
+    - storage_class: string_view
+
+TooManyLongSpecifiers:
+  format: "integer type with more than two 'long' specifiers is not supported"
+  fields: []
+
+DuplicateTypeSpecifier:
+  format: "Duplicate type specifier"
+  fields: []
+
+SignednessCannotQualifyTag:
+  format: "signedness cannot qualify a struct, enum, or typedef type"
+  fields: []
+
+LongDoubleUnsupported:
+  format: "long double is not supported yet"
+  fields: []
+
+InvalidTypeSpecifierCombination:
+  format: "Invalid combination of type specifiers"
+  fields: []
+
+SignednessRequiresIntegerType:
+  format: "signedness can only qualify integer types"
+  fields: []
+
+ParameterCannotHaveStorageClass:
+  format: "A parameter cannot have a storage class"
+  fields: []
+
+ParameterCannotBeTypedef:
+  format: "A parameter cannot be a typedef declaration"
+  fields: []
+
+ExpectedComma:
+  format: "Expected a comma"
+  fields: []
+
+HexFloatRequiresExponentMarker:
+  format: "Hex literal must have 'p' or 'P'"
+  fields: []
+
+InvalidNumericLiteral:
+  format: "Invalid numeric literal '%literal%'"
+  fields:
+    - literal: string
+
+UnknownEscapeSequence:
+  format: "Unknown escape sequence: \\%escape%"
+  fields:
+    - escape: char
+
+InvalidHexDigit:
+  format: "Invalid hex digit: %digit%"
+  fields:
+    - digit: char
+
+InvalidOctalEscape:
+  format: "Invalid octal escape sequence"
+  fields: []
+
+UnknownVar:
+  format: "Unknown var: %var_name%"
+  fields:
+    - var_name: string_view
+
+ExpectedClosingParen:
+  format: "Expected closing paren"
+  fields: []
+
+UnexpectedToken:
+  format: "Unexpected token"
+  fields: []
+
+ExpectedClosingBracket:
+  format: "Expected closing bracket"
+  fields: []
+
+ExpectedFieldName:
+  format: "Expected field name"
+  fields: []
+
+ExpectedSingleCastType:
+  format: "Expected a single type in cast"
+  fields: []
+
+ExpectedConditionalColon:
+  format: "Expected ':' in conditional expression"
+  fields: []
+
+ExpectedLParen:
+  format: "Expected '('"
+  fields: []
+
+ExpectedRParen:
+  format: "Expected ')'"
+  fields: []
+
+ExpectedSemicolonAfterDeclaration:
+  format: "Expected semicolon after declaration"
+  fields: []
+
+ExpectedLabelColon:
+  format: "Expected ':' after label"
+  fields: []
+
+ExpectedLBrace:
+  format: "Expected '{'"
+  fields: []
+
+ExpectedWhileAfterDo:
+  format: "Expected 'while' after 'do' statement"
+  fields: []
+
+ExpectedSemicolon:
+  format: "Expected ';'"
+  fields: []
+
+ExpectedColon:
+  format: "Expected ':'"
+  fields: []
+
+UnexpectedSwitchToken:
+  format: "Unexpected token in switch statement: %token%"
+  fields:
+    - token: TokenType
+
+ExpectedGotoIdentifier:
+  format: "Expected identifier after goto"
+  fields: []
+
+ExpectedEnumIdentifier:
+  format: "Expected identifier in enum declaration"
+  fields: []
+
+ExpectedFunctionBodyOrSemicolon:
+  format: "Expected function body or ';'"
+  fields: []
+
+ExpectedStructNameOrDefinition:
+  format: "Expected struct name or definition"
+  fields: []
+
+ExpectedUnionNameOrDefinition:
+  format: "Expected union name or definition"
+  fields: []
+
+ExpectedEnumNameOrDefinition:
+  format: "Expected enum name or definition"
+  fields: []
+
+UnexpectedTokenAfterEllipsis:
+  format: "Unexpected token after '...'"
+  fields: []
+
+ExpectedParameterComma:
+  format: "Expected comma in parameter list"
+  fields: []
+
+ExpectedArraySizeNumber:
+  format: "Expected number in array size"
+  fields: []
+
+ExpectedClosingBracePhrase:
+  format: "Expected closing brace"
+  fields: []
+
+ExpectedFieldInitializerDot:
+  format: "Expected dot in field initializer"
+  fields: []
+
+ExpectedFieldInitializerIdentifier:
+  format: "Expected identifier in field initializer"
+  fields: []
+
+ExpectedFieldInitializerEqual:
+  format: "Expected equal in field initializer"
+  fields: []
+
+ExpectedArrayInitializerComma:
+  format: "Expected comma in array initializer"
+  fields: []
+
+ExpectedSemicolonAfterDeclarationPunctuated:
+  format: "Expected ';' after declaration"
+  fields: []
+
+ExpectedDeclarationComma:
+  format: "Expected comma in declaration"
+  fields: []
+
+ExpectedIntrinsicLParen:
+  format: "Expected '(' after intrinsic name"
+  fields: []
+
+ExpectedIntrinsicComma:
+  format: "Expected ',' between intrinsic arguments"
+  fields: []
+
+ExpectedIntrinsicRParen:
+  format: "Expected ')' after intrinsic arguments"
+  fields: []
+
+ExpectedMacroParameter:
+  format: "Expected macro parameter after '#'"
+  fields: []
+
+UnknownMacroParameter:
+  format: "Unknown macro parameter: %parameter%"
+  fields:
+    - parameter: string_view
+
+MacroConcatRequiresSingleToken:
+  format: "Macro argument concatenation only supports single token arguments"
+  fields: []
+
+MacroConcatRequiresIdentifierOrKeyword:
+  format: "Macro argument concatenation only supports identifiers and keywords"
+  fields: []
+
+EmptyIncludeFileName:
+  format: "Unexpected empty include file name"
+  fields: []
+
+UnexpectedIncludeEol:
+  format: "Unexpected end of line while scanning include file"
+  fields: []
+
+UnexpectedIncludeEof:
+  format: "Unexpected end of file while scanning include file"
+  fields: []
+
+UnexpectedIncludeToken:
+  format: "Unexpected token while scanning include file: %token%"
+  fields:
+    - token: string_view
+
+UnexpectedMacroToken:
+  format: "Unexpected token while scanning macro: %token%"
+  fields:
+    - token: string_view
+
+ExpectedMacroLParen:
+  format: "Expected '(' after macro name"
+  fields: []
+
+UnexpectedEnd:
+  format: "Unexpected end"
+  fields: []
+
+UnexpectedHash:
+  format: "Unexpected '#'"
+  fields: []
+
+UnexpectedTokenAfterDefined:
+  format: "Unexpected token after defined: %token%"
+  fields:
+    - token: string_view
+
+ExpectedRParenAfterDefined:
+  format: "Expected ')' after defined"
+  fields: []
+
+UnexpectedTokenInMacroCondition:
+  format: "Unexpected preprocessor token in macro condition: %token%"
+  fields:
+    - token: string_view
+
+UnexpectedPreprocessorName:
+  format: "Unexpected preprocessor name: %name%"
+  fields:
+    - name: string_view
+
+ExpectedIdentifierAfterUndef:
+  format: "Expected identifier after #undef"
+  fields: []
+
+ExpectedIdentifierAfterDirective:
+  format: "Expected identifier after #%directive%"
+  fields:
+    - directive: string_view
+
+UnexpectedElse:
+  format: "Unexpected #else"
+  fields: []
+
+UnexpectedElif:
+  format: "Unexpected #elif"
+  fields: []
+
+UnexpectedEndif:
+  format: "Unexpected #endif"
+  fields: []
+
+PreprocessorError:
+  format: "Preprocessor error: %message%"
+  fields:
+    - message: string
+
+ExpectedDecimalExponentP:
+  format: "Expected decimal exponent after 'p' or 'P'"
+  fields: []
+
+ExpectedDecimalExponentE:
+  format: "Expected decimal exponent after 'e' or 'E'"
+  fields: []
+
+UnknownCharacter:
+  format: "Unknown character: '%character%'"
+  fields:
+    - character: char
+
+FloatInPreprocessorCondition:
+  format: "Floating-point literal is not allowed in preprocessor condition"
+  fields: []
+
+CannotEvaluateBinaryInPreprocessor:
+  format: "Cannot evaluate binary operation in preprocessor condition: %operation%"
+  fields:
+    - operation: BinaryOpType
+
+UnsupportedBinaryPreprocessorOperation:
+  format: "Unsupported binary operation for preprocessor evaluation"
+  fields: []
+
+CannotEvaluateUnaryInPreprocessor:
+  format: "Cannot evaluate unary operation in preprocessor condition: %operation%"
+  fields:
+    - operation: UnaryOpType
+
+UnsupportedUnaryPreprocessorOperation:
+  format: "Unsupported unary operation for preprocessor evaluation"
+  fields: []
+
+UnexpectedASTNodeInPreprocessor:
+  format: "Unexpected ASTNode type in preprocessor condition: %node_type%"
+  fields:
+    - node_type: ASTNodeType

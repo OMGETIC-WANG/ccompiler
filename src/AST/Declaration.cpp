@@ -1,5 +1,6 @@
 #include "Declaration.h"
 #include "../Util/Util.h"
+#include "Diagnostics/Errors.generated.h"
 #include "Expr.h"
 #include "ParserError.h"
 #include "TranslationUnit.h"
@@ -73,8 +74,8 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
     case TokenType::KwStatic:
     case TokenType::KwExtern:
       if (decl_spec.storage_class != StorageClass::None) {
-        context.Diagnostics().Fail(
-            tok.location, "Multiple storage classes are not supported");
+        context.Diagnostics().Fail(tok.location,
+                                   errs::MultipleStorageClasses{});
       }
       decl_spec.storage_class = tok.type == TokenType::KwStatic
                                     ? StorageClass::Static
@@ -97,12 +98,12 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
     case TokenType::KwUnsigned: {
       const bool is_unsigned = tok.type == TokenType::KwUnsigned;
       if (saw_signed && saw_unsigned) {
-        context.Diagnostics().Fail(
-            tok.location, "signed and unsigned cannot be used together");
+        context.Diagnostics().Fail(tok.location,
+                                   errs::SignedAndUnsignedTogether{});
       }
       if (is_unsigned ? saw_unsigned : saw_signed) {
         context.Diagnostics().Fail(tok.location,
-                                   "Duplicate signedness specifier");
+                                   errs::DuplicateSignednessSpecifier{});
       }
       saw_signed |= !is_unsigned;
       saw_unsigned |= is_unsigned;
@@ -111,8 +112,7 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
     }
     case TokenType::KwStruct: {
       if (has_nominal_type() || has_builtin_type()) {
-        context.Diagnostics().Fail(
-            tok.location, "Multiple base types in declaration specifier");
+        context.Diagnostics().Fail(tok.location, errs::MultipleBaseTypes{});
       }
       spec.is_struct = true;
       lexer.ConsumeToken(tok);
@@ -137,14 +137,13 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
         spec.type_name = name;
       } else {
         RaiseParserError(context, tok.location,
-                         "Expected struct name or definition");
+                         errs::ExpectedStructNameOrDefinition{});
       }
       break;
     }
     case TokenType::KwUnion: {
       if (has_nominal_type() || has_builtin_type()) {
-        context.Diagnostics().Fail(
-            tok.location, "Multiple base types in declaration specifier");
+        context.Diagnostics().Fail(tok.location, errs::MultipleBaseTypes{});
       }
       spec.is_union = true;
       lexer.ConsumeToken(tok);
@@ -169,14 +168,13 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
         spec.type_name = name;
       } else {
         RaiseParserError(context, tok.location,
-                         "Expected union name or definition");
+                         errs::ExpectedUnionNameOrDefinition{});
       }
       break;
     }
     case TokenType::KwEnum:
       if (has_nominal_type() || has_builtin_type()) {
-        context.Diagnostics().Fail(
-            tok.location, "Multiple base types in declaration specifier");
+        context.Diagnostics().Fail(tok.location, errs::MultipleBaseTypes{});
       }
       spec.is_enum = true;
       lexer.ConsumeToken(tok);
@@ -204,13 +202,14 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
           spec.type_name = name;
         } else {
           RaiseParserError(context, tok.location,
-                           "Expected enum name or definition");
+                           errs::ExpectedEnumNameOrDefinition{});
         }
       }
       break;
     case TokenType::KwRegister:
-      context.Diagnostics().Fail(tok.location, "Unsupported storage class ",
-                                 context.Sources().GetText(tok));
+      context.Diagnostics().Fail(
+          tok.location,
+          errs::UnsupportedStorageClass{context.Sources().GetText(tok)});
     default:
       static const std::unordered_map<TokenType, TypeMask> tok_type_to_mask = {
           {TokenType::KwInt, MInt},       {TokenType::KwChar, MChar},
@@ -225,8 +224,7 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
         } else {
           if (type_mask & MLongLong) {
             context.Diagnostics().Fail(tok.location,
-                                       "integer type with more than two 'long' "
-                                       "specifiers is not supported");
+                                       errs::TooManyLongSpecifiers{});
           } else {
             type_mask |= MLong;
           }
@@ -235,12 +233,12 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
         break;
       } else if (it != tok_type_to_mask.end()) {
         if (has_nominal_type()) {
-          context.Diagnostics().Fail(
-              tok.location, "Multiple base types in declaration specifier");
+          context.Diagnostics().Fail(tok.location, errs::MultipleBaseTypes{});
         }
         int mask = it->second;
         if ((type_mask & mask) != 0) {
-          context.Diagnostics().Fail(tok.location, "Duplicate type specifier");
+          context.Diagnostics().Fail(tok.location,
+                                     errs::DuplicateTypeSpecifier{});
         }
         type_mask |= mask;
         lexer.ConsumeToken(tok);
@@ -254,25 +252,22 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
 end:;
   if (saw_signed && saw_unsigned) {
     context.Diagnostics().Fail(spec.location,
-                               "signed and unsigned cannot be used together");
+                               errs::SignedAndUnsignedTogether{});
   }
   if (has_nominal_type() && (saw_signed || saw_unsigned)) {
-    context.Diagnostics().Fail(
-        spec.location,
-        "signedness cannot qualify a struct, enum, or typedef type");
+    context.Diagnostics().Fail(spec.location,
+                               errs::SignednessCannotQualifyTag{});
   }
 
   if (has_nominal_type()) {
     if (has_builtin_type()) {
-      context.Diagnostics().Fail(
-          spec.location, "Multiple base types in declaration specifier");
+      context.Diagnostics().Fail(spec.location, errs::MultipleBaseTypes{});
     }
     return;
   }
 
   if ((type_mask & MDouble) && (type_mask & MLong)) {
-    context.Diagnostics().Fail(spec.location,
-                               "long double is not supported yet");
+    context.Diagnostics().Fail(spec.location, errs::LongDoubleUnsupported{});
   }
 
   if ((type_mask & (MShort | MLong | MLongLong)) && (type_mask & MInt)) {
@@ -281,14 +276,14 @@ end:;
 
   if (!std::has_single_bit(type_mask)) {
     context.Diagnostics().Fail(spec.location,
-                               "Invalid combination of type specifiers");
+                               errs::InvalidTypeSpecifierCombination{});
   }
 
   constexpr unsigned int integer_mask =
       MChar | MShort | MInt | MLong | MLongLong;
   if (!(type_mask & integer_mask) && (saw_unsigned || saw_signed)) {
     context.Diagnostics().Fail(spec.location,
-                               "signedness can only qualify integer types");
+                               errs::SignednessRequiresIntegerType{});
   }
 
   spec.is_builtin = true;
@@ -339,11 +334,11 @@ static ParamListItem ParseParamListItem(Lexer &lexer, CompileContext &context) {
   item.specifier = ParseDeclarationSpecifier(lexer, context);
   if (item.specifier.storage_class != StorageClass::None) {
     context.Diagnostics().Fail(item.specifier.type_spec.location,
-                               "A parameter cannot have a storage class");
+                               errs::ParameterCannotHaveStorageClass{});
   }
   if (item.specifier.type_spec.is_typedef) {
     context.Diagnostics().Fail(item.specifier.type_spec.location,
-                               "A parameter cannot be a typedef declaration");
+                               errs::ParameterCannotBeTypedef{});
   }
   Token tok = lexer.PeekNextToken();
   if (tok.type != TokenType::RParen && tok.type != TokenType::Comma) {
@@ -367,7 +362,7 @@ static std::unique_ptr<ParamList> ParseParamList(Lexer &lexer,
       Token next = lexer.PeekNextToken();
       if (next.type != TokenType::RParen) {
         RaiseParserError(context, next.location,
-                         "Unexpected token after '...'");
+                         errs::UnexpectedTokenAfterEllipsis{});
       }
       break;
     }
@@ -377,8 +372,7 @@ static std::unique_ptr<ParamList> ParseParamList(Lexer &lexer,
       break;
     }
     if (tok.type != TokenType::Comma) {
-      RaiseParserError(context, tok.location,
-                       "Expected comma in parameter list");
+      RaiseParserError(context, tok.location, errs::ExpectedParameterComma{});
     }
     lexer.ConsumeToken(tok);
   }
@@ -400,7 +394,7 @@ static std::unique_ptr<ArraySuffix> ParseArraySuffix(Lexer &lexer,
   }
   Token tok = lexer.PeekNextToken();
   if (tok.type != TokenType::LiteralNum) {
-    RaiseParserError(context, tok.location, "Expected number in array size");
+    RaiseParserError(context, tok.location, errs::ExpectedArraySizeNumber{});
   }
   lexer.ConsumeToken(tok);
   array_suffix->size = std::stoul(std::string(context.Sources().GetText(tok)));
@@ -423,7 +417,7 @@ ParseDirectDeclarator(Lexer &lexer, CompileContext &context) {
     direct_declarator->declarator = ParseDeclarator(lexer, context);
     Token rparen = lexer.PeekNextToken();
     if (rparen.type != TokenType::RParen) {
-      RaiseParserError(context, rparen.location, "Expected closing paren");
+      RaiseParserError(context, rparen.location, errs::ExpectedClosingParen{});
     }
     lexer.ConsumeToken(rparen);
   } else {
@@ -437,7 +431,8 @@ ParseDirectDeclarator(Lexer &lexer, CompileContext &context) {
       direct_declarator->suffixes.push_back(ParseParamList(lexer, context));
       Token rparen = lexer.PeekNextToken();
       if (rparen.type != TokenType::RParen) {
-        RaiseParserError(context, rparen.location, "Expected closing paren");
+        RaiseParserError(context, rparen.location,
+                         errs::ExpectedClosingParen{});
       }
       lexer.ConsumeToken(rparen);
       direct_declarator->suffixes.back()->location =
@@ -448,7 +443,7 @@ ParseDirectDeclarator(Lexer &lexer, CompileContext &context) {
       Token rbracket = lexer.PeekNextToken();
       if (rbracket.type != TokenType::RBracket) {
         RaiseParserError(context, rbracket.location,
-                         "Expected closing bracket");
+                         errs::ExpectedClosingBracket{});
       }
       lexer.ConsumeToken(rbracket);
       direct_declarator->suffixes.back()->location =
@@ -524,14 +519,14 @@ ParseFieldInitializer(Lexer &lexer, CompileContext &context) {
     }
     if (tok.type != TokenType::Dot) {
       RaiseParserError(context, tok.location,
-                       "Expected dot in field initializer");
+                       errs::ExpectedFieldInitializerDot{});
     }
     lexer.ConsumeToken(tok);
 
     tok = lexer.PeekNextToken();
     if (tok.type != TokenType::Identifier) {
       RaiseParserError(context, tok.location,
-                       "Expected identifier in field initializer");
+                       errs::ExpectedFieldInitializerIdentifier{});
     }
     lexer.ConsumeToken(tok);
     std::string_view field_name = context.Sources().GetText(tok);
@@ -539,7 +534,7 @@ ParseFieldInitializer(Lexer &lexer, CompileContext &context) {
     Token equal = lexer.PeekNextToken();
     if (equal.type != TokenType::Equal) {
       RaiseParserError(context, equal.location,
-                       "Expected equal in field initializer");
+                       errs::ExpectedFieldInitializerEqual{});
     }
     lexer.ConsumeToken(equal);
 
@@ -564,7 +559,7 @@ ParseArrayInitializer(Lexer &lexer, CompileContext &context) {
       Token comma = lexer.PeekNextToken();
       if (comma.type != TokenType::Comma) {
         RaiseParserError(context, comma.location,
-                         "Expected comma in array initializer");
+                         errs::ExpectedArrayInitializerComma{});
       }
       lexer.ConsumeToken(comma);
     }
@@ -584,7 +579,7 @@ static std::unique_ptr<Initializer> ParseInitializer(Lexer &lexer,
   Token tok = lexer.PeekNextToken();
   if (tok.type == TokenType::EndOfFile || tok.type == TokenType::Semicolon ||
       tok.type == TokenType::Comma) {
-    RaiseParserError(context, tok.location, "Unexpected token");
+    RaiseParserError(context, tok.location, errs::UnexpectedToken{});
   }
   if (tok.type == TokenType::LBrace) {
     lexer.ConsumeToken(tok);
@@ -593,7 +588,8 @@ static std::unique_ptr<Initializer> ParseInitializer(Lexer &lexer,
       auto res = ParseFieldInitializer(lexer, context);
       Token rbrace = lexer.PeekNextToken();
       if (rbrace.type != TokenType::RBrace) {
-        RaiseParserError(context, rbrace.location, "Expected closing brace");
+        RaiseParserError(context, rbrace.location,
+                         errs::ExpectedClosingBracePhrase{});
       }
       lexer.ConsumeToken(rbrace);
       res->location = CombineLocation(lbrace.location, rbrace.location);
@@ -602,7 +598,8 @@ static std::unique_ptr<Initializer> ParseInitializer(Lexer &lexer,
       auto res = ParseArrayInitializer(lexer, context);
       Token rbrace = lexer.PeekNextToken();
       if (rbrace.type != TokenType::RBrace) {
-        RaiseParserError(context, rbrace.location, "Expected closing brace");
+        RaiseParserError(context, rbrace.location,
+                         errs::ExpectedClosingBracePhrase{});
       }
       lexer.ConsumeToken(rbrace);
       res->location = CombineLocation(lbrace.location, rbrace.location);
@@ -667,9 +664,9 @@ std::unique_ptr<Declaration> ParseDeclaration(Lexer &lexer,
     if (tok.type != TokenType::Comma) {
       if (IsDeclarationSpecifier(tok, context)) {
         RaiseParserError(context, tok.location,
-                         "Expected ';' after declaration");
+                         errs::ExpectedSemicolonAfterDeclarationPunctuated{});
       }
-      RaiseParserError(context, tok.location, "Expected comma in declaration");
+      RaiseParserError(context, tok.location, errs::ExpectedDeclarationComma{});
     }
     lexer.ConsumeToken(tok);
   }

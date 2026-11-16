@@ -11,18 +11,16 @@ public:
 
 // Record a recoverable syntax error, then leave the current malformed
 // construct so the enclosing statement list can synchronize.
-template <typename... MessageChunks>
+template <typename Error>
 [[noreturn]] void RaiseParserError(CompileContext &context,
-                                   SourceLocation location,
-                                   const MessageChunks &...chunks) {
-  context.Diagnostics().Error(location, chunks...);
+                                   SourceLocation location, Error &&error) {
+  context.Diagnostics().Error(location, std::forward<Error>(error));
   throw ParserRecovery();
 }
 
-template <typename... MessageChunks>
+template <typename Error>
 [[noreturn]] void RaiseParserError(DiagnosticContext &diagnostics,
-                                   SourceLocation location,
-                                   const MessageChunks &...chunks) {
-  diagnostics.Error(location, chunks...);
+                                   SourceLocation location, Error &&error) {
+  diagnostics.Error(location, std::forward<Error>(error));
   throw ParserRecovery();
 }

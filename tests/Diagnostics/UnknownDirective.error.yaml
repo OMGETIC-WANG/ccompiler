@@ -1,0 +1,6 @@
+diagnostics:
+  - error: UnexpectedPreprocessorName
+    file: "@SOURCE_FILE@"
+    location: "unknown"
+    fields:
+      name: "unknown"

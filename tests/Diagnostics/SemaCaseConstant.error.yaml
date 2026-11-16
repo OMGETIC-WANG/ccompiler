@@ -1,0 +1,5 @@
+diagnostics:
+  - error: CaseValueRequiresConstant
+    file: "@SOURCE_FILE@"
+    location: "value"
+    fields: {}

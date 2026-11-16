@@ -1,0 +1,14 @@
+diagnostics:
+  - error: ExpectedSemicolonAfterDeclarationPunctuated
+    file: "@SOURCE_FILE@"
+    location: "int"
+    fields: {}
+  - error: ExpectedSemicolonAfterStatement
+    file: "@SOURCE_FILE@"
+    location: "y"
+    fields: {}
+  - error: UnsupportedStorageClass
+    file: "@SOURCE_FILE@"
+    location: "register"
+    fields:
+      storage_class: "register"

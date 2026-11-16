@@ -35,10 +35,10 @@ fixtures belong in the corresponding `tests/<suite>/CMakeLists.txt`.
 ## Build, Test, and Development Commands
 
 Requirements are CMake 3.28+, a C++23 compiler, LLVM 23.1.3 exactly, and
-`yaml-cpp` for the default test-enabled build. Set the `LLVM_DIR` CMake cache
-variable or environment variable if LLVM is not discoverable through
-`llvm-config`. The Brainfuck integration workflow also requires Python 3,
-`llvm-as`, `llc`, and a host C compiler.
+Python 3 with PyYAML for generated diagnostics. The default test-enabled build
+also requires `yaml-cpp`. Set the `LLVM_DIR` CMake cache variable or environment
+variable if LLVM is not discoverable through `llvm-config`. The Brainfuck
+integration workflow also requires `llvm-as`, `llc`, and a host C compiler.
 
 ```bash
 cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
@@ -99,8 +99,9 @@ table and comparison runner; follow it when adding cases. In general:
 - CodeGen and Include cases are JIT-run end-to-end cases with a source file and
   an exact `.stdout` expectation. An optional `.args` file supplies one raw
   command-line argument per line.
-- Diagnostics cases use an exact `.stderr` sidecar. Source cases also have a
-  `.c` fixture and may have `.args`; driver-only cases may contain only `.args`.
+- Structured source diagnostics pair a `.c` fixture with `.error.yaml`.
+  Driver-only cases continue to use an exact `.stderr` sidecar and may contain
+  only `.args`.
 
 Present YAML fields are checked while omitted fields are ignored. Mapping keys
 are validated, and node sequences have exact length and order. Keep assertions

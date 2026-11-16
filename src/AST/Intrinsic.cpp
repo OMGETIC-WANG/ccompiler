@@ -1,5 +1,6 @@
 #include "Intrinsic.h"
 #include "Declaration.h"
+#include "Diagnostics/Errors.generated.h"
 #include "Expr.h"
 #include "ParserError.h"
 
@@ -48,8 +49,7 @@ std::unique_ptr<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,
   call->desc = desc;
   Token lparen = lexer.PeekNextToken();
   if (lparen.type != TokenType::LParen) {
-    RaiseParserError(context, lparen.location,
-                     "Expected '(' after intrinsic name");
+    RaiseParserError(context, lparen.location, errs::ExpectedIntrinsicLParen{});
   }
   lexer.ConsumeToken(lparen);
   for (size_t i = 0; i < desc->arg_kinds.size(); i++) {
@@ -73,15 +73,14 @@ std::unique_ptr<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,
       Token comma = lexer.PeekNextToken();
       if (comma.type != TokenType::Comma) {
         RaiseParserError(context, comma.location,
-                         "Expected ',' between intrinsic arguments");
+                         errs::ExpectedIntrinsicComma{});
       }
       lexer.ConsumeToken(comma);
     }
   }
   Token rparen = lexer.PeekNextToken();
   if (rparen.type != TokenType::RParen) {
-    RaiseParserError(context, rparen.location,
-                     "Expected ')' after intrinsic arguments");
+    RaiseParserError(context, rparen.location, errs::ExpectedIntrinsicRParen{});
   }
   lexer.ConsumeToken(rparen);
   call->location = CombineLocation(name_token.location, rparen.location);

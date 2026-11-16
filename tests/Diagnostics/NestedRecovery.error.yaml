@@ -1,0 +1,14 @@
+diagnostics:
+  - error: ExpectedRParen
+    file: "@SOURCE_FILE@"
+    location: "{"
+    fields: {}
+  - error: UnexpectedToken
+    file: "@SOURCE_FILE@"
+    location: ";"
+    fields: {}
+  - error: UnsupportedStorageClass
+    file: "@SOURCE_FILE@"
+    location: "register"
+    fields:
+      storage_class: "register"

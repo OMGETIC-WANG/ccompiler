@@ -1,0 +1,6 @@
+diagnostics:
+  - error: PreprocessorError
+    file: "@SOURCE_FILE@"
+    location: "build_failed"
+    fields:
+      message: "build_failed due to invalid configuration"

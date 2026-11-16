@@ -1,0 +1,5 @@
+diagnostics:
+  - error: PointerAssignmentDiscardsQualifiers
+    file: "@SOURCE_FILE@"
+    location: "source"
+    fields: {}

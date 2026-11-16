@@ -1,3 +1,0 @@
-@SOURCE_FILE@:3:3: error: Expected ';' after declaration
-@SOURCE_FILE@:5:9: error: Expected ';' after statement
-@SOURCE_FILE@:6:3: error: Unsupported storage class register

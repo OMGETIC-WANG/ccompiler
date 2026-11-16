@@ -1,0 +1,5 @@
+diagnostics:
+  - error: ParameterCannotHaveStorageClass
+    file: "@SOURCE_FILE@"
+    location: "extern"
+    fields: {}

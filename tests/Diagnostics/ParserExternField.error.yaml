@@ -1,0 +1,5 @@
+diagnostics:
+  - error: StructFieldCannotHaveStorageClass
+    file: "@SOURCE_FILE@"
+    location: "2:3-2:19"
+    fields: {}

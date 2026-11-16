@@ -9,6 +9,9 @@ Expected values live beside their fixtures. A `CMakeLists.txt` may name a
 fixture, test, label, or expected file, but must not contain diagnostic text,
 runtime return values, or other per-case expectations.
 
+Configuring requires Python 3 with PyYAML because generated diagnostics are
+produced at build time. The default test-enabled build also requires `yaml-cpp`.
+
 ## Running
 
 ```bash
@@ -42,7 +45,7 @@ build/tests/ccompiler_tests tests/AST/Declarations/FunctionSignatures.c
 | Sema | `<case>.c`, `<case>.ast.yaml` | none |
 | CodeGen | `<source>.c`, `<source>.stdout` | `<source>.args` |
 | Include | source, `<source>.stdout` | `<source>.args` |
-| Diagnostics source | `<case>.c`, `<case>.stderr` | `<case>.args` |
+| Diagnostics source | `<case>.c`, `<case>.error.yaml` | none |
 | Diagnostics driver | `<case>.args`, `<case>.stderr` | `<case>.c` |
 
 The exact comparison runner is `tests/cmake/ExpectProcess.cmake`. It checks
@@ -56,9 +59,39 @@ these placeholders:
 - `@SOURCE_ROOT@`: the repository source root.
 - `@BINARY_ROOT@`: the suite's CMake binary directory.
 
-For source diagnostics, arguments are followed by the source file. For driver
-diagnostics without a `.c` fixture, the `.args` file is the complete argument
-list.
+Structured source diagnostics run through `ccompiler_tests` and compare the
+recorded error type, location, and selected fields. Driver diagnostics keep the
+exact stderr runner; for driver cases without a `.c` fixture, the `.args` file
+is the complete argument list.
+
+## Structured diagnostics
+
+Error types and their formatting are generated from
+`src/Diagnostics/Errors.yaml` during the build. Add or update the definition,
+then use the generated `errs::<ErrorName>` value at the diagnostic call site.
+All Lex, AST, and Sema diagnostics must use a generated error instead of raw
+message chunks. The generated header only forward-declares YAML nodes; `Verify`
+implementations are compiled into the test target, so the compiler does not
+depend on `yaml-cpp`.
+
+Source diagnostic fixtures use this format:
+
+```yaml
+diagnostics:
+  - error: UnknownVar
+    file: "@SOURCE_FILE@"
+    location: "1:25-1:32"
+    fields:
+      var_name: missing
+```
+
+`diagnostics` is an ordered sequence with exact length. Each item requires
+`error`, `location`, and `fields`; `file` is optional. `location` may be a
+half-open line/column range such as `1:25-1:32`, or the exact source text at the
+location. Only fields present in the fixture are checked, but unknown field
+names fail. A generated field uses an exact scalar comparison. `TypeRef` fields
+instead accept either the `ToString()` result or the structured type descriptor
+used by AST tests.
 
 ## AST assertions
 
@@ -105,16 +138,18 @@ the same partial YAML verifier runs. They may assert expression `type`,
 compound-assignment `compound_op`, `left_value_cast_type`, and
 `result_cast_type` annotations.
 
-`AST.Declarations.BindingIdentity`, `AST.Schema.VerifierRegistry`, and
-`Diagnostics.Formatting` are C++ self-tests. Their expected values remain in the
-self-test implementation because they are not CMake registration data.
+`AST.Declarations.BindingIdentity`, `AST.Schema.VerifierRegistry`,
+`Diagnostics.Formatting`, and `Diagnostics.ErrorGenerator` are self-tests. Their
+expected values remain in the test implementation because they are not CMake
+registration data.
 
 ## Adding compiler cases
 
 - CodeGen and Include cases call `ccompiler_add_jit_case` in their suite CMake
   file; the expected `.stdout` is derived from the source filename.
-- Diagnostics cases call the suite-local `add_diagnostic_case` with the public
-  test name and fixture stem. A source file is appended after any `.args`.
+- Source diagnostics call `add_frontend_diagnostic_case` with the public test
+  name and fixture stem. Driver diagnostics continue to call
+  `add_diagnostic_case` with an exact `.stderr` sidecar.
 - AST schema failures call the suite-local `add_ast_schema_failure` in
   `tests/AST/Schema/CMakeLists.txt`.
 - Sema fixtures call `ccompiler_add_sema_cases` from

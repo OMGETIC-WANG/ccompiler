@@ -1,0 +1,6 @@
+diagnostics:
+  - error: UnknownVar
+    file: "@SOURCE_FILE@"
+    location: "hidden"
+    fields:
+      var_name: "hidden"

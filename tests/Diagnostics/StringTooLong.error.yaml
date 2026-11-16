@@ -1,0 +1,5 @@
+diagnostics:
+  - error: StringLiteralExceedsArraySize
+    file: "@SOURCE_FILE@"
+    location: "\"abc\""
+    fields: {}

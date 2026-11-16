@@ -1,0 +1,5 @@
+diagnostics:
+  - error: ExpectedConditionalColon
+    file: "@SOURCE_FILE@"
+    location: ";"
+    fields: {}

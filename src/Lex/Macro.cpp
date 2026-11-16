@@ -1,5 +1,6 @@
 #include "Macro.h"
 #include "../Util/Diagnostic.h"
+#include "Diagnostics/Errors.generated.h"
 
 static SourceLocation CreateArgLiteralString(std::vector<Token> &tokens,
                                              SourceManager &source_manager) {
@@ -74,16 +75,16 @@ Token MacroScanner::PeekNextToken() {
 
   if (curr_body_tok.type == TokenType::Sharp) {
     if (_idx + 1 >= _desc.macro->body.size()) {
-      _diagnostics.Fail(curr_body_tok.location,
-                        "Expected macro parameter after '#'");
+      _diagnostics.Fail(curr_body_tok.location, errs::ExpectedMacroParameter{});
     }
     Token next_tok = _desc.macro->body[_idx + 1];
 
     size_t param_idx =
         _desc.macro->GetParamIndex(_source_manager.GetText(next_tok));
     if (param_idx == (size_t)-1) {
-      _diagnostics.Fail(next_tok.location, "Unknown macro parameter: ",
-                        _source_manager.GetText(next_tok));
+      _diagnostics.Fail(
+          next_tok.location,
+          errs::UnknownMacroParameter{_source_manager.GetText(next_tok)});
     }
 
     Token res{
@@ -103,13 +104,11 @@ Token MacroScanner::PeekNextToken() {
     auto [param0_idx, param1_idx] = pp.value();
     if (!(param0_idx == (size_t)-1 || _args[param0_idx].size() == 1)) {
       _diagnostics.Fail(_desc.macro->body[_idx + 0].location,
-                        "Macro argument concatenation only supports single "
-                        "token arguments");
+                        errs::MacroConcatRequiresSingleToken{});
     }
     if (!(param1_idx == (size_t)-1 || _args[param1_idx].size() == 1)) {
       _diagnostics.Fail(_desc.macro->body[_idx + 2].location,
-                        "Macro argument concatenation only supports single "
-                        "token arguments");
+                        errs::MacroConcatRequiresSingleToken{});
     }
     Token arg0 = param0_idx == (size_t)-1 ? _desc.macro->body[_idx + 0]
                                           : _args[param0_idx][0];
@@ -118,10 +117,8 @@ Token MacroScanner::PeekNextToken() {
 
     if (!IsMacroArgConcatable(arg0, _source_manager) ||
         !IsMacroArgConcatable(arg1, _source_manager)) {
-      _diagnostics.Fail(
-          curr_body_tok.location,
-          "Macro argument concatenation only supports identifiers and "
-          "keywords");
+      _diagnostics.Fail(curr_body_tok.location,
+                        errs::MacroConcatRequiresIdentifierOrKeyword{});
     }
 
     SourceLocation connected = _source_manager.AddSynthetic(std::format(

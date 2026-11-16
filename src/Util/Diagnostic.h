@@ -3,21 +3,28 @@
 #include "../Exception.h"
 #include "../Lex/SourceLocation.h"
 #include "../SourceManager.h"
+#include "Error.h"
 
+#include <concepts>
+#include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 struct DiagnosticMessage {
   std::vector<SourceLocation> locations;
-  std::string message;
+  std::shared_ptr<const IError> error;
+  std::string formatted_message;
+
+  std::string ToString() const;
 };
 
 class DiagnosticError : public Exception {
 public:
   explicit DiagnosticError(std::vector<DiagnosticMessage> messages)
       : Exception(messages.empty() ? "diagnostic error"
-                                   : messages.back().message),
+                                   : messages.back().ToString()),
         _messages(std::move(messages)) {}
 
   const std::vector<DiagnosticMessage> &Messages() const { return _messages; }
@@ -47,17 +54,25 @@ public:
   }
 
   // Record an error that a caller can recover from without unwinding.
-  template <typename... MessageChunks>
-  void Error(SourceLocation location, const MessageChunks &...chunks) {
-    _messages.push_back(
-        {.locations = {location}, .message = _BuildMessage(chunks...)});
+  template <typename ErrorType>
+    requires std::derived_from<std::remove_cvref_t<ErrorType>, IError>
+  void Error(SourceLocation location, ErrorType &&error) {
+    using StoredError = std::remove_cvref_t<ErrorType>;
+    auto stored_error =
+        std::make_shared<StoredError>(std::forward<ErrorType>(error));
+    std::string formatted_message = stored_error->ToString();
+    _messages.push_back({
+        .locations = {location},
+        .error = std::move(stored_error),
+        .formatted_message = std::move(formatted_message),
+    });
   }
 
   // Record a fatal error and unwind with all diagnostics collected so far.
-  template <typename... MessageChunks>
-  [[noreturn]] void Fail(SourceLocation location,
-                         const MessageChunks &...chunks) {
-    Error(location, chunks...);
+  template <typename ErrorType>
+    requires std::derived_from<std::remove_cvref_t<ErrorType>, IError>
+  [[noreturn]] void Fail(SourceLocation location, ErrorType &&error) {
+    Error(location, std::forward<ErrorType>(error));
     throw DiagnosticError(_messages);
   }
 

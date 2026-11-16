@@ -2,6 +2,7 @@
 
 #include "../AST/AST.h"
 #include "../AST/Operations.h"
+#include "Diagnostics/Errors.generated.h"
 
 #include <functional>
 #include <type_traits>
@@ -113,9 +114,7 @@ static MacroValue EvalLiteral(LiteralNum *literal,
   if (auto *value = std::get_if<int64_t>(&literal->value)) {
     return *value;
   }
-  diagnostics.Fail(literal->location,
-                   "Floating-point literal is not allowed in "
-                   "preprocessor condition");
+  diagnostics.Fail(literal->location, errs::FloatInPreprocessorCondition{});
 }
 
 static MacroValue EvalBinary(BinaryOp *bin_expr,
@@ -123,8 +122,7 @@ static MacroValue EvalBinary(BinaryOp *bin_expr,
   if (!IsEvalable(bin_expr->op_type)) {
     diagnostics.Fail(
         bin_expr->location,
-        "Cannot evaluate binary operation in preprocessor condition: ",
-        bin_expr->op_type);
+        errs::CannotEvaluateBinaryInPreprocessor{bin_expr->op_type});
   }
 
   MacroValue left = EvalNode(bin_expr->left.get(), diagnostics);
@@ -184,9 +182,8 @@ static MacroValue EvalBinary(BinaryOp *bin_expr,
   case BinaryOpType::RShift:
     return Calc<shift_right>(left, right);
   default:
-    diagnostics.Fail(
-        bin_expr->location,
-        "Unsupported binary operation for preprocessor evaluation");
+    diagnostics.Fail(bin_expr->location,
+                     errs::UnsupportedBinaryPreprocessorOperation{});
   }
 }
 
@@ -195,8 +192,7 @@ static MacroValue EvalUnary(UnaryOp *unary_expr,
   if (!IsEvalable(unary_expr->op_type)) {
     diagnostics.Fail(
         unary_expr->location,
-        "Cannot evaluate unary operation in preprocessor condition: ",
-        unary_expr->op_type);
+        errs::CannotEvaluateUnaryInPreprocessor{unary_expr->op_type});
   }
   MacroValue operand = EvalNode(unary_expr->operand.get(), diagnostics);
   switch (unary_expr->op_type) {
@@ -218,7 +214,7 @@ static MacroValue EvalUnary(UnaryOp *unary_expr,
         operand);
   default:
     diagnostics.Fail(unary_expr->location,
-                     "Unsupported unary operation for preprocessor evaluation");
+                     errs::UnsupportedUnaryPreprocessorOperation{});
   }
 }
 
@@ -244,9 +240,8 @@ static MacroValue EvalNode(ASTNode *node, DiagnosticContext &diagnostics) {
   if (auto *cond_expr = node->DynCast<ConditionalExpr>()) {
     return EvalConditional(cond_expr, diagnostics);
   }
-  diagnostics.Fail(
-      node->location,
-      "Unexpected ASTNode type in preprocessor condition: ", node->GetType());
+  diagnostics.Fail(node->location,
+                   errs::UnexpectedASTNodeInPreprocessor{node->GetType()});
 }
 
 uint64_t EvalMacroCond(ASTNode *node, DiagnosticContext &diagnostics) {

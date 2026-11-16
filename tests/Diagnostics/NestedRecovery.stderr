@@ -1,3 +1,0 @@
-@SOURCE_FILE@:2:9: error: Expected ')'
-@SOURCE_FILE@:2:19: error: Unexpected token
-@SOURCE_FILE@:3:3: error: Unsupported storage class register

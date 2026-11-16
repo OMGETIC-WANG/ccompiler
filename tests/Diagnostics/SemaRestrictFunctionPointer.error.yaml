@@ -1,0 +1,5 @@
+diagnostics:
+  - error: RestrictRequiresObjectPointer
+    file: "@SOURCE_FILE@"
+    location: "1:6-1:24"
+    fields: {}

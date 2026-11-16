@@ -1,0 +1,5 @@
+diagnostics:
+  - error: GlobalInitializerRequiresConstant
+    file: "@SOURCE_FILE@"
+    location: "5:1-5:21"
+    fields: {}

@@ -1,0 +1,6 @@
+diagnostics:
+  - error: ExpectedIdentifierAfterDirective
+    file: "@SOURCE_FILE@"
+    location: "1:7-2:1"
+    fields:
+      directive: "ifdef"

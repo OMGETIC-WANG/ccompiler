@@ -1,0 +1,9 @@
+diagnostics:
+  - error: UnexpectedToken
+    file: "@SOURCE_FILE@"
+    location: ";"
+    fields: {}
+  - error: UnexpectedToken
+    file: "@SOURCE_FILE@"
+    location: ";"
+    fields: {}

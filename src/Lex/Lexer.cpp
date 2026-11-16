@@ -3,6 +3,7 @@
 #include "../AST/Context.h"
 #include "../AST/Expr.h"
 #include "../Util/Util.h"
+#include "Diagnostics/Errors.generated.h"
 #include "PPEval.h"
 
 #include <string>
@@ -34,7 +35,7 @@ static std::string_view ScanIncludeFile(Scanner &scanner,
     scanner.ConsumeToken(tok);
     std::string_view text = source_manager.GetText(tok);
     if (text.size() <= 2) {
-      diagnostics.Fail(tok.location, "Unexpected empty include file name");
+      diagnostics.Fail(tok.location, errs::EmptyIncludeFileName{});
     }
     return text.substr(1, text.size() - 2);
   } else if (tok.type == TokenType::Lt) {
@@ -48,13 +49,9 @@ static std::string_view ScanIncludeFile(Scanner &scanner,
       }
       if (tok.type == TokenType::NextLine) {
         scanner.ConsumeToken(tok);
-        diagnostics.Fail(tok.location,
-                         "Unexpected end of line while scanning include "
-                         "file");
+        diagnostics.Fail(tok.location, errs::UnexpectedIncludeEol{});
       } else if (tok.type == TokenType::EndOfFile) {
-        diagnostics.Fail(tok.location,
-                         "Unexpected end of file while scanning include "
-                         "file");
+        diagnostics.Fail(tok.location, errs::UnexpectedIncludeEof{});
       } else {
         if (!filename_location.IsValid()) {
           filename_location = tok.location;
@@ -69,9 +66,7 @@ static std::string_view ScanIncludeFile(Scanner &scanner,
     return source_manager.GetText(filename_location);
   } else {
     diagnostics.Fail(tok.location,
-                     "Unexpected token while scanning "
-                     "include file: ",
-                     source_manager.GetText(tok));
+                     errs::UnexpectedIncludeToken{source_manager.GetText(tok)});
   }
 }
 
@@ -80,9 +75,7 @@ static MacroDef ScanMacro(Scanner &scanner, SourceManager &source_manager,
   Token tok = scanner.PeekNextTokenH();
   if (!IsIdentifierLike(tok)) {
     diagnostics.Fail(tok.location,
-                     "Unexpected token while scanning "
-                     "macro: ",
-                     source_manager.GetText(tok));
+                     errs::UnexpectedMacroToken{source_manager.GetText(tok)});
   }
   MacroDef macro;
   macro.name = source_manager.GetText(tok);
@@ -106,10 +99,8 @@ static MacroDef ScanMacro(Scanner &scanner, SourceManager &source_manager,
           continue;
         }
         if (tok.type != TokenType::Identifier) {
-          diagnostics.Fail(tok.location,
-                           "Unexpected token while "
-                           "scanning macro: ",
-                           source_manager.GetText(tok));
+          diagnostics.Fail(tok.location, errs::UnexpectedMacroToken{
+                                             source_manager.GetText(tok)});
         }
         std::string_view param_name = source_manager.GetText(tok);
         scanner.ConsumeToken(tok);
@@ -148,7 +139,7 @@ ScanMacroArgs(IScanner &scanner, size_t arg_count, bool has_va_arg,
               DiagnosticContext &diagnostics) {
   Token lparen = scanner.PeekNextToken();
   if (lparen.type != TokenType::LParen) {
-    diagnostics.Fail(lparen.location, "Expected '(' after macro name");
+    diagnostics.Fail(lparen.location, errs::ExpectedMacroLParen{});
   }
   scanner.ConsumeToken(lparen);
 
@@ -178,7 +169,7 @@ ScanMacroArgs(IScanner &scanner, size_t arg_count, bool has_va_arg,
         args[real_arg_idx].push_back(tok);
       }
     } else if (tok.type == TokenType::EndOfFile) {
-      diagnostics.Fail(tok.location, "Unexpected end");
+      diagnostics.Fail(tok.location, errs::UnexpectedEnd{});
     } else {
       args[real_arg_idx].push_back(tok);
     }
@@ -199,7 +190,7 @@ public:
   Token EmitToken() override {
     Token tok = PeekScannerNextToken();
     if (tok.type == TokenType::Sharp) {
-      _diagnostics.Fail(tok.location, "Unexpected '#'");
+      _diagnostics.Fail(tok.location, errs::UnexpectedHash{});
     }
 
     if (_scanners.size() == 1 && _source_manager.GetText(tok) == "defined") {
@@ -211,22 +202,22 @@ public:
         scanner.ConsumeToken(tok);
         tok = scanner.PeekNextTokenH();
         if (tok.type != TokenType::Identifier) {
-          _diagnostics.Fail(tok.location, "Unexpected token after defined: ",
-                            _source_manager.GetText(tok));
+          _diagnostics.Fail(tok.location, errs::UnexpectedTokenAfterDefined{
+                                              _source_manager.GetText(tok)});
         }
         scanner.ConsumeToken(tok);
         target_macro_name = _source_manager.GetText(tok);
         tok = scanner.PeekNextTokenH();
         if (tok.type != TokenType::RParen) {
-          _diagnostics.Fail(tok.location, "Expected ')' after defined");
+          _diagnostics.Fail(tok.location, errs::ExpectedRParenAfterDefined{});
         }
         scanner.ConsumeToken(tok);
       } else if (tok.type == TokenType::Identifier) {
         scanner.ConsumeToken(tok);
         target_macro_name = _source_manager.GetText(tok);
       } else {
-        _diagnostics.Fail(tok.location, "Unexpected token after defined: ",
-                          _source_manager.GetText(tok));
+        _diagnostics.Fail(tok.location, errs::UnexpectedTokenAfterDefined{
+                                            _source_manager.GetText(tok)});
       }
       return MakeSyntheticToken(
           _source_manager, TokenType::LiteralNum,
@@ -261,9 +252,8 @@ public:
       }
     }
     if (tok.type == TokenType::Sharp || tok.type == TokenType::SharpSharp) {
-      _diagnostics.Fail(tok.location,
-                        "Unexpected preprocessor token in macro condition: ",
-                        _source_manager.GetText(tok));
+      _diagnostics.Fail(tok.location, errs::UnexpectedTokenInMacroCondition{
+                                          _source_manager.GetText(tok)});
     }
     if (tok.type != TokenType::EndOfFile) {
       CurrScanner()->ConsumeToken(tok);
@@ -433,7 +423,7 @@ std::optional<Token> RawLexer::EmitTokenImpl() {
   std::string_view preproc_name = _source_manager.GetText(preproc_tok);
   if (!IsPreprocessor(preproc_name)) {
     _compile_context.Diagnostics().Fail(
-        preproc_tok.location, "Unexpected preprocessor name: ", preproc_name);
+        preproc_tok.location, errs::UnexpectedPreprocessorName{preproc_name});
   }
 
   if (preproc_name == "include") {
@@ -462,7 +452,7 @@ std::optional<Token> RawLexer::EmitTokenImpl() {
     Token macro_tok = curr_scanner.PeekNextTokenH();
     if (macro_tok.type != TokenType::Identifier) {
       _compile_context.Diagnostics().Fail(macro_tok.location,
-                                          "Expected identifier after #undef");
+                                          errs::ExpectedIdentifierAfterUndef{});
     }
     curr_scanner.ConsumeToken(macro_tok);
     if (is_active_group) {
@@ -487,7 +477,8 @@ std::optional<Token> RawLexer::EmitTokenImpl() {
     Token macro_tok = curr_scanner.PeekNextTokenH();
     if (macro_tok.type != TokenType::Identifier) {
       _compile_context.Diagnostics().Fail(
-          macro_tok.location, "Expected identifier after #", preproc_name);
+          macro_tok.location,
+          errs::ExpectedIdentifierAfterDirective{preproc_name});
     }
     curr_scanner.ConsumeToken(macro_tok);
     bool is_defined =
@@ -501,7 +492,7 @@ std::optional<Token> RawLexer::EmitTokenImpl() {
     curr_scanner.ConsumeToken(preproc_tok);
     if (_pp_cond_stack.empty()) {
       _compile_context.Diagnostics().Fail(preproc_tok.location,
-                                          "Unexpected #else");
+                                          errs::UnexpectedElse{});
     }
     PPCond &cond = _pp_cond_stack.back();
     cond.branch = PPCondBranch::Else;
@@ -513,7 +504,7 @@ std::optional<Token> RawLexer::EmitTokenImpl() {
         EvalMacroCond(cond.get(), _compile_context.Diagnostics());
     if (_pp_cond_stack.empty()) {
       _compile_context.Diagnostics().Fail(preproc_tok.location,
-                                          "Unexpected #elif");
+                                          errs::UnexpectedElif{});
     }
     _pp_cond_stack.back().is_active = cond_value != 0;
     _pp_cond_stack.back().branch = PPCondBranch::Then;
@@ -522,7 +513,7 @@ std::optional<Token> RawLexer::EmitTokenImpl() {
     curr_scanner.ConsumeToken(preproc_tok);
     if (_pp_cond_stack.empty()) {
       _compile_context.Diagnostics().Fail(preproc_tok.location,
-                                          "Unexpected #endif");
+                                          errs::UnexpectedEndif{});
     }
     _pp_cond_stack.pop_back();
   } else if (preproc_name == "error") {
@@ -532,7 +523,7 @@ std::optional<Token> RawLexer::EmitTokenImpl() {
     if (is_active_group) {
       _compile_context.Diagnostics().Fail(
           location.IsValid() ? location : preproc_tok.location,
-          "Preprocessor error: ", message);
+          errs::PreprocessorError{message});
     }
   } else if (preproc_name == "warning") {
     curr_scanner.ConsumeToken(preproc_tok);

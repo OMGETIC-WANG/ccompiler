@@ -9,6 +9,7 @@ option(AST_PRINT_FIELD_NAMES "Print AST field name prefixes" ON)
 
 add_library(ccompiler_frontend STATIC src/SourceManager.cpp)
 target_include_directories(ccompiler_frontend PUBLIC ${PROJECT_SOURCE_DIR}/src)
+add_subdirectory(src/Diagnostics)
 
 if(AST_PRINT_FIELD_NAMES)
   set(AST_PRINT_FIELD_NAMES_DEFINE 1)
