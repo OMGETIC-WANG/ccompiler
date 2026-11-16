@@ -33,6 +33,7 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
     MFloat = 1 << 5,
     MDouble = 1 << 6,
     MLongLong = 1 << 7,
+    MLongDouble = 1 << 8,
   };
 
   unsigned int type_mask = 0;
@@ -46,7 +47,7 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
   };
   auto has_builtin_type = [&] {
     return type_mask & (MVoid | MChar | MShort | MInt | MFloat | MDouble |
-                        MLong | MLongLong);
+                        MLong | MLongLong | MLongDouble);
   };
 
   while (true) {
@@ -221,6 +222,9 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
         if (type_mask & MLong) {
           type_mask &= ~MLong;
           type_mask |= MLongLong;
+        } else if (type_mask & MDouble) {
+          type_mask &= ~MDouble;
+          type_mask |= MLongDouble;
         } else {
           if (type_mask & MLongLong) {
             context.Diagnostics().Fail(tok.location,
@@ -228,6 +232,18 @@ static void ParseTypeSpecifier(DeclarationSpecifier &decl_spec, Lexer &lexer,
           } else {
             type_mask |= MLong;
           }
+        }
+        lexer.ConsumeToken(tok);
+        break;
+      } else if (tok.type == TokenType::KwDouble) {
+        if (type_mask & MLong) {
+          type_mask &= ~MLong;
+          type_mask |= MLongDouble;
+        } else if ((type_mask & MDouble) || (type_mask & MLongDouble)) {
+          context.Diagnostics().Fail(tok.location,
+                                     errs::DuplicateTypeSpecifier{});
+        } else {
+          type_mask |= MDouble;
         }
         lexer.ConsumeToken(tok);
         break;
@@ -275,8 +291,14 @@ end:;
   }
 
   if (!std::has_single_bit(type_mask)) {
+    if (saw_signed) {
+      type_mask |= MInt;
+    } else if (saw_unsigned) {
+      type_mask |= MInt;
+    } else {
     context.Diagnostics().Fail(spec.location,
                                errs::InvalidTypeSpecifierCombination{});
+  }
   }
 
   constexpr unsigned int integer_mask =
@@ -312,6 +334,9 @@ end:;
     break;
   case MDouble:
     spec.type_name = "double";
+    break;
+  case MLongDouble:
+    spec.type_name = "long double";
     break;
   default:
     RAISE_ERROR("Unknown type mask: ", type_mask);
