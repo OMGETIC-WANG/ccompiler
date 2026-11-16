@@ -35,20 +35,21 @@ static bool IsMacroArgConcatable(Token t, SourceManager &source_manager) {
   return true;
 }
 
+static bool IsIdentifierLike(Token t) {
+  return t.type == TokenType::Identifier || IsKeyword(t.type);
+}
+
 std::optional<std::pair<size_t, size_t>>
 MacroScanner::IsArgConcatPrefix() const {
   if (_idx + 2 < _def.body.size()) {
     Token tok0 = _def.body[_idx];
     Token tok1 = _def.body[_idx + 1];
     Token tok2 = _def.body[_idx + 2];
-    if (tok0.type == TokenType::Identifier &&
-        tok1.type == TokenType::SharpSharp &&
-        tok2.type == TokenType::Identifier) {
+    if (IsIdentifierLike(tok0) && tok1.type == TokenType::SharpSharp &&
+        IsIdentifierLike(tok2)) {
       size_t param0_idx = _def.GetParamIndex(_source_manager.GetText(tok0));
       size_t param1_idx = _def.GetParamIndex(_source_manager.GetText(tok2));
-      if (param0_idx != (size_t)-1 && param1_idx != (size_t)-1) {
-        return std::make_pair(param0_idx, param1_idx);
-      }
+      return std::make_pair(param0_idx, param1_idx);
     }
   }
   return std::nullopt;
@@ -101,15 +102,21 @@ Token MacroScanner::PeekNextToken() {
   }
   if (auto pp = IsArgConcatPrefix(); pp.has_value()) {
     auto [param0_idx, param1_idx] = pp.value();
-    std::vector<Token> &arg0s = _args[param0_idx];
-    std::vector<Token> &arg1s = _args[param1_idx];
-    if (arg0s.size() != 1 || arg1s.size() != 1) {
-      _diagnostics.Fail(
-          curr_body_tok.location,
-          "Macro argument concatenation only supports single-token arguments");
+    if (!(param0_idx == (size_t)-1 || _args[param0_idx].size() == 1)) {
+      _diagnostics.Fail(_def.body[_idx + 0].location,
+                        "Macro argument concatenation only supports single "
+                        "token arguments");
     }
-    Token arg0 = arg0s[0];
-    Token arg1 = arg1s[0];
+    if (!(param1_idx == (size_t)-1 || _args[param1_idx].size() == 1)) {
+      _diagnostics.Fail(_def.body[_idx + 2].location,
+                        "Macro argument concatenation only supports single "
+                        "token arguments");
+    }
+    Token arg0 =
+        param0_idx == (size_t)-1 ? _def.body[_idx + 0] : _args[param0_idx][0];
+    Token arg1 =
+        param1_idx == (size_t)-1 ? _def.body[_idx + 2] : _args[param1_idx][0];
+
     if (!IsMacroArgConcatable(arg0, _source_manager) ||
         !IsMacroArgConcatable(arg1, _source_manager)) {
       _diagnostics.Fail(

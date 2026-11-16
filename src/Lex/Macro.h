@@ -13,6 +13,8 @@ public:
   std::vector<std::string_view> params;
   std::vector<Token> body;
 
+  bool has_va_arg = false;
+
   size_t GetParamIndex(std::string_view param) const {
     for (size_t i = 0; i < params.size(); ++i) {
       if (params[i] == param) {
@@ -69,6 +71,7 @@ public:
   void ConsumeToken(Token token) override;
 
 private:
+  // Return indices of parameters, -1 if is a normal token
   std::optional<std::pair<size_t, size_t>> IsArgConcatPrefix() const;
 
   MacroDef &_def;

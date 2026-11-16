@@ -98,15 +98,30 @@ static MacroDef ScanMacro(Scanner &scanner, SourceManager &source_manager,
         scanner.ConsumeToken(tok);
         break;
       } else {
+        if (tok.type == TokenType::DotDotDot) {
+          scanner.ConsumeToken(tok);
+          macro.has_va_arg = true;
+          macro.params.push_back("__VA_ARGS__");
+          tok = scanner.PeekNextTokenH();
+          continue;
+        }
         if (tok.type != TokenType::Identifier) {
           diagnostics.Fail(tok.location,
                            "Unexpected token while "
                            "scanning macro: ",
                            source_manager.GetText(tok));
         }
-        macro.params.push_back(source_manager.GetText(tok));
+        std::string_view param_name = source_manager.GetText(tok);
         scanner.ConsumeToken(tok);
         tok = scanner.PeekNextTokenH();
+        if (tok.type == TokenType::DotDotDot) {
+          macro.has_va_arg = true;
+          macro.params.push_back(param_name);
+          scanner.ConsumeToken(tok);
+          tok = scanner.PeekNextTokenH();
+        } else {
+          macro.params.push_back(param_name);
+        }
         if (tok.type == TokenType::Comma) {
           scanner.ConsumeToken(tok);
         }
@@ -129,36 +144,45 @@ static MacroDef ScanMacro(Scanner &scanner, SourceManager &source_manager,
 }
 
 static std::vector<std::vector<Token>>
-ScanMacroArgs(IRawLexer &lexer, size_t arg_count,
+ScanMacroArgs(IScanner &scanner, size_t arg_count, bool has_va_arg,
               DiagnosticContext &diagnostics) {
-  Token lparen = lexer.EmitToken();
+  Token lparen = scanner.PeekNextToken();
   if (lparen.type != TokenType::LParen) {
     diagnostics.Fail(lparen.location, "Expected '(' after macro name");
   }
+  scanner.ConsumeToken(lparen);
 
   std::vector<std::vector<Token>> args(arg_count);
+  size_t real_arg_idx = 0;
   size_t arg_idx = 0;
+
   int depth = 0;
   while (true) {
-    Token tok = lexer.EmitToken();
+    Token tok = scanner.PeekNextToken();
     if (tok.type == TokenType::RParen) {
       if (depth == 0) {
+        scanner.ConsumeToken(tok);
         break;
       } else {
         depth--;
-        args[arg_idx].push_back(tok);
+        args[real_arg_idx].push_back(tok);
       }
     } else if (tok.type == TokenType::LParen) {
       depth++;
-      args[arg_idx].push_back(tok);
+      args[real_arg_idx].push_back(tok);
     } else if (tok.type == TokenType::Comma && depth == 0) {
       arg_idx++;
-      args.emplace_back();
+      real_arg_idx = std::min(arg_idx, arg_count - 1);
+
+      if (arg_idx >= arg_count && has_va_arg) {
+        args[real_arg_idx].push_back(tok);
+      }
     } else if (tok.type == TokenType::EndOfFile) {
-      diagnostics.Fail(tok.location, "Unexpected end of file");
+      diagnostics.Fail(tok.location, "Unexpected end");
     } else {
-      args[arg_idx].push_back(tok);
+      args[real_arg_idx].push_back(tok);
     }
+    scanner.ConsumeToken(tok);
   }
   return args;
 }
@@ -214,10 +238,11 @@ public:
         CurrScanner()->ConsumeToken(tok);
         if (macro->has_arg) {
           _scanners.emplace_back(
-              new MacroScanner(
-                  *macro,
-                  ScanMacroArgs(*this, macro->params.size(), _diagnostics),
-                  _source_manager, _diagnostics),
+              new MacroScanner(*macro,
+                               ScanMacroArgs(*CurrScanner(),
+                                             macro->params.size(),
+                                             macro->has_va_arg, _diagnostics),
+                               _source_manager, _diagnostics),
               true);
         } else {
           _scanners.emplace_back(
@@ -317,9 +342,9 @@ Token RawLexer::EmitToken() {
 
 static bool IsPreprocessor(std::string_view name) {
   return name == "include" || name == "define" || name == "undef" ||
-         name == "if" || name == "ifdef" || name == "ifndef" ||
-         name == "else" || name == "endif" || name == "error" ||
-         name == "warning";
+         name == "if" || name == "elif" || name == "ifdef" ||
+         name == "ifndef" || name == "else" || name == "endif" ||
+         name == "error" || name == "warning";
 }
 
 static void SkipPreprocessorLine(Scanner &scanner) {
@@ -373,8 +398,8 @@ std::optional<Token> RawLexer::EmitTokenImpl() {
       if (macro->has_arg) {
         _scanners.push_back(std::make_unique<MacroScanner>(
             *macro,
-            ScanMacroArgs(*this, macro->params.size(),
-                          _compile_context.Diagnostics()),
+            ScanMacroArgs(*CurrScanner(), macro->params.size(),
+                          macro->has_va_arg, _compile_context.Diagnostics()),
             _source_manager, _compile_context.Diagnostics()));
       } else {
         _scanners.push_back(std::make_unique<MacroScanner>(
@@ -471,6 +496,19 @@ std::optional<Token> RawLexer::EmitTokenImpl() {
     }
     PPCond &cond = _pp_cond_stack.back();
     cond.branch = PPCondBranch::Else;
+  } else if (preproc_name == "elif") {
+    curr_scanner.ConsumeToken(preproc_tok);
+    std::unique_ptr<ASTNode> cond = ScanMacroCond(
+        &curr_scanner, _macro_context, _source_manager, _compile_context);
+    uint64_t cond_value =
+        EvalMacroCond(cond.get(), _compile_context.Diagnostics());
+    if (_pp_cond_stack.empty()) {
+      _compile_context.Diagnostics().Fail(preproc_tok.location,
+                                          "Unexpected #elif");
+    }
+    _pp_cond_stack.back().is_active = cond_value != 0;
+    _pp_cond_stack.back().branch = PPCondBranch::Then;
+
   } else if (preproc_name == "endif") {
     curr_scanner.ConsumeToken(preproc_tok);
     if (_pp_cond_stack.empty()) {
