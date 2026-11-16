@@ -62,18 +62,20 @@ static int Run(int argc, char **argv, SourceManager &source_manager,
 
   SourceHandle source;
   if (rest.size() > 0) {
-    source = source_manager.LoadSourceFrom(std::string(rest[0]));
-  } else {
-    std::string s;
-    std::string line;
-    while (std::getline(std::cin, line)) {
-      if (line == ";;;") {
-        break;
+    if (rest[0] == "-") {
+      std::string s;
+      std::string line;
+      while (std::getline(std::cin, line)) {
+        s += line;
+        s += '\n';
       }
-      s += line;
-      s += '\n';
+      source = source_manager.LoadSource(std::move(s));
+    } else {
+      source = source_manager.LoadSourceFrom(std::string(rest[0]));
     }
-    source = source_manager.LoadSource(std::move(s));
+  } else {
+    std::cerr << "Usage: ccompiler [options] <source_file>\n";
+    return 1;
   }
 
   if (show_tokens || lex_only) {
@@ -135,7 +137,7 @@ static int Run(int argc, char **argv, SourceManager &source_manager,
     throw Exception("Invalid LLVM module:\n" + verification_error);
   }
 
-  if (output_file.size()) {
+  if (output_file != "-") {
     auto out_path = std::filesystem::path(output_file);
     if (!out_path.parent_path().empty() &&
         !std::filesystem::exists(out_path.parent_path())) {

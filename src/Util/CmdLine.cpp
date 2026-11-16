@@ -33,6 +33,11 @@ std::vector<std::string_view> CmdLine::Parse(int argc, char **argv) {
       }
       return rest;
     }
+    if (arg == "-") {
+      rest.push_back(arg);
+      i++;
+      continue;
+    }
     if (arg.starts_with("-") || arg.starts_with("--")) {
       std::string_view name_val =
           arg.starts_with("--") ? arg.substr(2) : arg.substr(1);
