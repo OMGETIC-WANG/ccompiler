@@ -1,0 +1,5 @@
+diagnostics:
+  - error: ArithmeticRequiresNumericOperands
+    file: "@SOURCE_FILE@"
+    location: "object + 1"
+    fields: {}

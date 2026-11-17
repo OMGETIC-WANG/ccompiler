@@ -57,3 +57,22 @@ TranslationUnit:
                     CompoundStmt:
                       statements:
                         - BreakStmt: {}
+              - ForStmt:
+                  init:
+                    VarDecl:
+                      name: index
+                      initializer:
+                        ValueInitializer:
+                          value: {LiteralNum: {value: 0}}
+                  condition:
+                    BinaryExpr:
+                      op_type: Lt
+                      left: {VarRef: {name: index}}
+                      right: {LiteralNum: {value: 2}}
+                  increment:
+                    UnaryExpr:
+                      op_type: IncAfterUse
+                      operand: {VarRef: {name: index}}
+                  body:
+                    CompoundStmt:
+                      statements: []

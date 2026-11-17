@@ -1,0 +1,6 @@
+diagnostics:
+  - error: InvalidHexDigit
+    file: "@SOURCE_FILE@"
+    location: '"\xG1"'
+    fields:
+      digit: G

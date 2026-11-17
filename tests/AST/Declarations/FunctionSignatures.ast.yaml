@@ -64,3 +64,12 @@ TranslationUnit:
                   element_type: {BuiltinType: {type_name: int}}
         parameter_names:
           [<anonymous>, <anonymous>, <anonymous>, <anonymous>]
+    - FunctionDecl:
+        name: variadic
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}
+            parameters:
+              - {BuiltinType: {type_name: int}}
+            has_va_args: true
+        parameter_names: [count]

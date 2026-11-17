@@ -1,0 +1,5 @@
+diagnostics:
+  - error: DereferenceRequiresPointer
+    file: "@SOURCE_FILE@"
+    location: "*value"
+    fields: {}

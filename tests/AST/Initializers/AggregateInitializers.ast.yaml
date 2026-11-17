@@ -31,3 +31,13 @@ TranslationUnit:
                 value:
                   ValueInitializer:
                     value: {LiteralNum: {value: 2}}
+    - VarDecl:
+        name: by_position
+        type: {StructType: {type_name: Point}}
+        initializer:
+          ArrayInitializer:
+            initializers:
+              - ValueInitializer:
+                  value: {LiteralNum: {value: 3}}
+              - ValueInitializer:
+                  value: {LiteralNum: {value: 4}}

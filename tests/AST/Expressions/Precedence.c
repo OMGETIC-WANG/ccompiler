@@ -4,3 +4,8 @@ int result = 1 + 2 * 3;
 int chain = 1 - 2 - 3;
 int grouped = (1 + 2) * 3;
 int assignment_chain = lhs = rhs = 1;
+int shift_mix = 1 + 2 << 3;
+int equality_mix = 1 < 2 == 3;
+int bitwise_mix = 1 & 2 == 2;
+int logical_mix = lhs || rhs && 1;
+int conditional_mix = lhs ? rhs : 1 + 2;

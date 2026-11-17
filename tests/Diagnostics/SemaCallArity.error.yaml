@@ -1,0 +1,6 @@
+diagnostics:
+  - error: ArgumentCountMismatch
+    file: "@SOURCE_FILE@"
+    location: "add(1)"
+    fields:
+      expected_arguments: 2

@@ -1,0 +1,6 @@
+diagnostics:
+  - error: VariadicArgumentCountMismatch
+    file: "@SOURCE_FILE@"
+    location: "sum(1)"
+    fields:
+      minimum_arguments: 2

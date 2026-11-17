@@ -7,7 +7,11 @@ TranslationUnit:
         name: assign_expr
         initializer:
           ValueInitializer:
-            value: {BinaryExpr: {op_type: Assignment}}
+            value:
+              BinaryExpr:
+                op_type: Assignment
+                left: {VarRef: {name: lhs}}
+                right: {VarRef: {name: rhs}}
     - VarDecl:
         name: add_expr
         initializer:
@@ -22,7 +26,11 @@ TranslationUnit:
         name: mul_expr
         initializer:
           ValueInitializer:
-            value: {BinaryExpr: {op_type: Mul}}
+            value:
+              BinaryExpr:
+                op_type: Mul
+                left: {VarRef: {name: lhs}}
+                right: {VarRef: {name: rhs}}
     - VarDecl:
         name: div_expr
         initializer:
@@ -142,7 +150,11 @@ TranslationUnit:
         name: subscript_expr
         initializer:
           ValueInitializer:
-            value: {BinaryExpr: {op_type: Subscript}}
+            value:
+              BinaryExpr:
+                op_type: Subscript
+                left: {VarRef: {name: values}}
+                right: {LiteralNum: {value: 0}}
     - VarDecl:
         name: and_expr
         initializer:

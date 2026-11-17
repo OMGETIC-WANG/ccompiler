@@ -50,3 +50,68 @@ TranslationUnit:
                     op_type: Assignment
                     left: {VarRef: {name: rhs}}
                     right: {LiteralNum: {value: 1}}
+    - VarDecl:
+        name: shift_mix
+        initializer:
+          ValueInitializer:
+            value:
+              BinaryExpr:
+                op_type: LShift
+                left:
+                  BinaryExpr:
+                    op_type: Add
+                    left: {LiteralNum: {value: 1}}
+                    right: {LiteralNum: {value: 2}}
+                right: {LiteralNum: {value: 3}}
+    - VarDecl:
+        name: equality_mix
+        initializer:
+          ValueInitializer:
+            value:
+              BinaryExpr:
+                op_type: Eq
+                left:
+                  BinaryExpr:
+                    op_type: Lt
+                    left: {LiteralNum: {value: 1}}
+                    right: {LiteralNum: {value: 2}}
+                right: {LiteralNum: {value: 3}}
+    - VarDecl:
+        name: bitwise_mix
+        initializer:
+          ValueInitializer:
+            value:
+              BinaryExpr:
+                op_type: BitAnd
+                left: {LiteralNum: {value: 1}}
+                right:
+                  BinaryExpr:
+                    op_type: Eq
+                    left: {LiteralNum: {value: 2}}
+                    right: {LiteralNum: {value: 2}}
+    - VarDecl:
+        name: logical_mix
+        initializer:
+          ValueInitializer:
+            value:
+              BinaryExpr:
+                op_type: Or
+                left: {VarRef: {name: lhs}}
+                right:
+                  BinaryExpr:
+                    op_type: And
+                    left: {VarRef: {name: rhs}}
+                    right: {LiteralNum: {value: 1}}
+    - VarDecl:
+        name: conditional_mix
+        initializer:
+          ValueInitializer:
+            value:
+              ConditionalExpr:
+                condition: {VarRef: {name: lhs}}
+                true_expr: {VarRef: {name: rhs}}
+                false_expr:
+                  BinaryExpr:
+                    op_type: Add
+                    left: {LiteralNum: {value: 1}}
+                    right: {LiteralNum: {value: 2}}

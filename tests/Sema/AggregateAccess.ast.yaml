@@ -1,0 +1,144 @@
+TranslationUnit:
+  decls:
+    - StructDecl:
+        name: Pair
+    - UnionDecl:
+        name: Value
+    - FunctionDecl:
+        name: main
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: positional
+                  type: {StructType: {type_name: Pair}}
+                  initializer:
+                    ArrayInitializer:
+                      initializers:
+                        - ValueInitializer:
+                            value:
+                              ImplicitCast:
+                                type: {BuiltinType: {type_name: char}}
+                                constant_value: 1
+                                target_type: {BuiltinType: {type_name: char}}
+                                operand:
+                                  LiteralNum:
+                                    type: {BuiltinType: {type_name: int}}
+                                    value: 1
+                        - ValueInitializer:
+                            value:
+                              ImplicitCast:
+                                type: {BuiltinType: {type_name: long}}
+                                constant_value: 2
+                                target_type: {BuiltinType: {type_name: long}}
+                                operand:
+                                  LiteralNum:
+                                    type: {BuiltinType: {type_name: int}}
+                                    value: 2
+              - VarDecl:
+                  name: designated
+                  type: {StructType: {type_name: Pair}}
+                  initializer:
+                    FieldInitializer:
+                      field_initializers:
+                        - name: first
+                          value:
+                            ValueInitializer:
+                              value:
+                                ImplicitCast:
+                                  type: {BuiltinType: {type_name: char}}
+                                  target_type: {BuiltinType: {type_name: char}}
+                                  operand:
+                                    LiteralNum:
+                                      type: {BuiltinType: {type_name: int}}
+                                      value: 3
+                        - name: second
+                          value:
+                            ValueInitializer:
+                              value:
+                                ImplicitCast:
+                                  type: {BuiltinType: {type_name: long}}
+                                  target_type: {BuiltinType: {type_name: long}}
+                                  operand:
+                                    LiteralNum:
+                                      type: {BuiltinType: {type_name: int}}
+                                      value: 4
+              - VarDecl:
+                  name: pointer
+                  type:
+                    PointerType:
+                      pointee_type: {StructType: {type_name: Pair}}
+                  initializer:
+                    ValueInitializer:
+                      value:
+                        UnaryExpr:
+                          type:
+                            PointerType:
+                              pointee_type: {StructType: {type_name: Pair}}
+                          value_category: RValue
+                          op_type: GetAddress
+                          operand:
+                            VarRef:
+                              type: {StructType: {type_name: Pair}}
+                              value_category: LValue
+                              name: designated
+              - VarDecl:
+                  name: value
+                  type: {UnionType: {type_name: Value}}
+              - BinaryExpr:
+                  type: {BuiltinType: {type_name: int}}
+                  value_category: RValue
+                  op_type: Assignment
+                  left:
+                    GetField:
+                      type: {BuiltinType: {type_name: int}}
+                      value_category: LValue
+                      op_type: GetField
+                      field_name: integer
+                      operand:
+                        VarRef:
+                          type: {UnionType: {type_name: Value}}
+                          value_category: LValue
+                          name: value
+                  right:
+                    LiteralNum:
+                      type: {BuiltinType: {type_name: int}}
+                      value: 5
+              - ReturnStmt:
+                  ret_value:
+                    ImplicitCast:
+                      type: {BuiltinType: {type_name: int}}
+                      target_type: {BuiltinType: {type_name: int}}
+                      operand:
+                        BinaryExpr:
+                          type: {BuiltinType: {type_name: long}}
+                          op_type: Add
+                          operation_type: {BuiltinType: {type_name: long}}
+                          left:
+                            BinaryExpr:
+                              type: {BuiltinType: {type_name: long}}
+                              op_type: Add
+                              operation_type: {BuiltinType: {type_name: long}}
+                              left:
+                                ImplicitCast:
+                                  type: {BuiltinType: {type_name: long}}
+                                  target_type: {BuiltinType: {type_name: long}}
+                                  operand:
+                                    GetField:
+                                      type: {BuiltinType: {type_name: char}}
+                                      value_category: LValue
+                                      field_name: first
+                              right:
+                                PtrGetField:
+                                  type: {BuiltinType: {type_name: long}}
+                                  value_category: LValue
+                                  field_name: second
+                          right:
+                            ImplicitCast:
+                              type: {BuiltinType: {type_name: long}}
+                              target_type: {BuiltinType: {type_name: long}}
+                              operand:
+                                GetField:
+                                  type: {BuiltinType: {type_name: int}}
+                                  value_category: LValue
+                                  field_name: integer

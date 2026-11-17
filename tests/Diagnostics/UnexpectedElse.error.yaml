@@ -1,0 +1,5 @@
+diagnostics:
+  - error: UnexpectedElse
+    file: "@SOURCE_FILE@"
+    location: else
+    fields: {}

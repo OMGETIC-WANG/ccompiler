@@ -6,7 +6,10 @@ TranslationUnit:
         name: unary_plus
         initializer:
           ValueInitializer:
-            value: {UnaryExpr: {op_type: UnaryPlus}}
+            value:
+              UnaryExpr:
+                op_type: UnaryPlus
+                operand: {VarRef: {name: target}}
     - VarDecl:
         name: unary_minus
         initializer:
@@ -26,7 +29,10 @@ TranslationUnit:
         name: dereference
         initializer:
           ValueInitializer:
-            value: {UnaryExpr: {op_type: Deref}}
+            value:
+              UnaryExpr:
+                op_type: Deref
+                operand: {VarRef: {name: pointer}}
     - VarDecl:
         name: address
         initializer:
@@ -46,7 +52,10 @@ TranslationUnit:
         name: post_increment
         initializer:
           ValueInitializer:
-            value: {UnaryExpr: {op_type: IncAfterUse}}
+            value:
+              UnaryExpr:
+                op_type: IncAfterUse
+                operand: {VarRef: {name: target}}
     - VarDecl:
         name: post_decrement
         initializer:

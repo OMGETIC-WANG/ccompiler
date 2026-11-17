@@ -1,0 +1,9 @@
+diagnostics:
+  - error: ExpectedParameterComma
+    file: "@SOURCE_FILE@"
+    location: int
+    fields: {}
+  - error: ExpectedSemicolonAfterStatement
+    file: "@SOURCE_FILE@"
+    location: ")"
+    fields: {}

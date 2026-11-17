@@ -1,0 +1,21 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: matrix_pointer
+        type:
+          PointerType:
+            pointee_type:
+              ArrayType:
+                size: 3
+                element_type: {BuiltinType: {type_name: int}}
+    - VarDecl:
+        name: factory
+        type:
+          PointerType:
+            pointee_type:
+              FunctionType:
+                return_type:
+                  PointerType:
+                    pointee_type: {BuiltinType: {type_name: int}}
+                parameters: []
+                has_va_args: false

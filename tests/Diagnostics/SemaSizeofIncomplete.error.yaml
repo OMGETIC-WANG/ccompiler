@@ -1,0 +1,5 @@
+diagnostics:
+  - error: SizeofRequiresCompleteObject
+    file: "@SOURCE_FILE@"
+    location: "sizeof(struct Value)"
+    fields: {}

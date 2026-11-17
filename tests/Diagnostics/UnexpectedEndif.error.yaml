@@ -1,0 +1,5 @@
+diagnostics:
+  - error: UnexpectedEndif
+    file: "@SOURCE_FILE@"
+    location: endif
+    fields: {}

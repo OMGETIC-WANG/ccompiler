@@ -5,3 +5,171 @@ TranslationUnit:
         function_type:
           FunctionType:
             return_type: {BuiltinType: {type_name: int}}
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: value
+                  type: {BuiltinType: {type_name: char}}
+                  initializer:
+                    ValueInitializer:
+                      value:
+                        ImplicitCast:
+                          type: {BuiltinType: {type_name: char}}
+                          value_category: RValue
+                          constant_value: 1
+                          target_type: {BuiltinType: {type_name: char}}
+                          operand:
+                            LiteralNum:
+                              type: {BuiltinType: {type_name: int}}
+                              constant_value: 1
+                              value: 1
+              - VarDecl:
+                  name: array
+                  type:
+                    ArrayType:
+                      size: 3
+                      element_type: {BuiltinType: {type_name: int}}
+                  initializer:
+                    ArrayInitializer:
+                      initializers:
+                        - ValueInitializer:
+                            value:
+                              LiteralNum:
+                                type: {BuiltinType: {type_name: int}}
+                                value: 1
+                        - ValueInitializer:
+                            value:
+                              LiteralNum:
+                                type: {BuiltinType: {type_name: int}}
+                                value: 2
+                        - ValueInitializer:
+                            value:
+                              LiteralNum:
+                                type: {BuiltinType: {type_name: int}}
+                                value: 3
+              - VarDecl:
+                  name: result
+                  type: {BuiltinType: {type_name: int}}
+                  initializer:
+                    ValueInitializer:
+                      value:
+                        BinaryExpr:
+                          type: {BuiltinType: {type_name: int}}
+                          value_category: RValue
+                          op_type: Add
+                          operation_type: {BuiltinType: {type_name: int}}
+                          left:
+                            ImplicitCast:
+                              type: {BuiltinType: {type_name: int}}
+                              value_category: RValue
+                              target_type: {BuiltinType: {type_name: int}}
+                              operand:
+                                VarRef:
+                                  type: {BuiltinType: {type_name: char}}
+                                  value_category: LValue
+                                  name: value
+                          right:
+                            BinaryExpr:
+                              type: {BuiltinType: {type_name: int}}
+                              value_category: LValue
+                              op_type: Subscript
+                              left:
+                                ImplicitCast:
+                                  type:
+                                    PointerType:
+                                      pointee_type:
+                                        {BuiltinType: {type_name: int}}
+                                  value_category: RValue
+                                  target_type:
+                                    PointerType:
+                                      pointee_type:
+                                        {BuiltinType: {type_name: int}}
+                                  operand:
+                                    VarRef:
+                                      type:
+                                        ArrayType:
+                                          size: 3
+                                          element_type:
+                                            {BuiltinType: {type_name: int}}
+                                      value_category: LValue
+                                      name: array
+                              right:
+                                LiteralNum:
+                                  type: {BuiltinType: {type_name: int}}
+                                  value: 1
+              - IfStmt:
+                  condition:
+                    ImplicitCast:
+                      type: {BuiltinType: {type_name: i1}}
+                      target_type: {BuiltinType: {type_name: i1}}
+                      operand:
+                        ImplicitCast:
+                          type: {BuiltinType: {type_name: int}}
+                          target_type: {BuiltinType: {type_name: int}}
+                          operand:
+                            BinaryExpr:
+                              type: {BuiltinType: {type_name: i1}}
+                              value_category: RValue
+                              op_type: Lt
+                              operation_type: {BuiltinType: {type_name: int}}
+                              left:
+                                VarRef:
+                                  type: {BuiltinType: {type_name: int}}
+                                  value_category: LValue
+                                  name: result
+                              right:
+                                LiteralNum:
+                                  type: {BuiltinType: {type_name: int}}
+                                  value: 4
+                  then_branch:
+                    CompoundStmt:
+                      statements:
+                        - ReturnStmt:
+                            ret_value:
+                              TypeCast:
+                                type: {BuiltinType: {type_name: int}}
+                                value_category: RValue
+                                constant_value: 3
+                                op_type: TypeCast
+                                target_type: {BuiltinType: {type_name: int}}
+                                operand:
+                                  IntrinsicCall:
+                                    type: {BuiltinType: {type_name: long long}}
+                                    value_category: RValue
+                                    constant_value: 3
+                                    name: sizeof
+                                    args:
+                                      - Expr:
+                                          LiteralString:
+                                            type:
+                                              ArrayType:
+                                                size: 3
+                                                element_type:
+                                                  {BuiltinType: {type_name: char}}
+                                            value_category: LValue
+                                            value: "xy"
+              - ReturnStmt:
+                  ret_value:
+                    TypeCast:
+                      type: {BuiltinType: {type_name: int}}
+                      op_type: TypeCast
+                      target_type: {BuiltinType: {type_name: int}}
+                      operand:
+                        ImplicitCast:
+                          type: {BuiltinType: {type_name: int}}
+                          target_type: {BuiltinType: {type_name: int}}
+                          operand:
+                            BinaryExpr:
+                              type: {BuiltinType: {type_name: i1}}
+                              op_type: Eq
+                              operation_type: {BuiltinType: {type_name: int}}
+                              left:
+                                VarRef:
+                                  type: {BuiltinType: {type_name: int}}
+                                  value_category: LValue
+                                  name: result
+                              right:
+                                LiteralNum:
+                                  type: {BuiltinType: {type_name: int}}
+                                  value: 3

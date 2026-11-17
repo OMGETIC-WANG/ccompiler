@@ -1,0 +1,7 @@
+diagnostics:
+  - error: UnknownStructField
+    file: "@SOURCE_FILE@"
+    location: "object.missing"
+    # The generated verifier currently cannot check a field named field_name;
+    # that defect is tracked in tests/KNOWN_ISSUES.md.
+    fields: {}

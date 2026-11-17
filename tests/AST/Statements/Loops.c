@@ -12,4 +12,6 @@ void loops(void) {
   for (;;) {
     break;
   }
+  for (int index = 0; index < 2; index++) {
+  }
 }

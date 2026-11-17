@@ -6,3 +6,4 @@ struct Point {
 };
 
 struct Point point = {.x = 1, .y = 2};
+struct Point by_position = {3, 4,};

@@ -26,3 +26,23 @@ int inactive_nested = 0;
 int nested_if_enabled = 3;
 #endif
 #endif
+
+#if defined(ENABLED) && ((2 + 3 * 4) == 14) && ((1 << 3) == 8)
+int defined_and_arithmetic = 4;
+#endif
+
+#if ENABLED ? 1 : 0
+int conditional_condition = 5;
+#endif
+
+#if DISABLED
+int elif_not_selected = 0;
+#elif ENABLED
+int elif_selected = 6;
+#endif
+
+#if defined(MISSING)
+int defined_missing = 0;
+#else
+int defined_missing_else = 7;
+#endif

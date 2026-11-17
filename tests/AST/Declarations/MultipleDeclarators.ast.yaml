@@ -21,3 +21,26 @@ TranslationUnit:
               initializer:
                 ValueInitializer:
                   value: {LiteralNum: {value: 2}}
+    - DeclStmt:
+        decls:
+          - VarDecl:
+              name: first_pointer
+              type:
+                PointerType:
+                  pointee_type: {BuiltinType: {type_name: int}}
+          - VarDecl:
+              name: second_value
+              type: {BuiltinType: {type_name: int}}
+    - DeclStmt:
+        decls:
+          - VarDecl:
+              name: array_value
+              type:
+                ArrayType:
+                  size: 2
+                  element_type: {BuiltinType: {type_name: int}}
+          - VarDecl:
+              name: second_pointer
+              type:
+                PointerType:
+                  pointee_type: {BuiltinType: {type_name: int}}

@@ -1,0 +1,5 @@
+diagnostics:
+  - error: SubscriptRequiresIntegerIndex
+    file: "@SOURCE_FILE@"
+    location: "values[1.0]"
+    fields: {}

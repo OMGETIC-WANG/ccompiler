@@ -1,0 +1,35 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: answer_value
+        initializer:
+          ValueInitializer:
+            value:
+              BinaryExpr:
+                op_type: Add
+                left: {LiteralNum: {value: 3}}
+                right: {LiteralNum: {value: 3}}
+    - VarDecl:
+        name: label
+        type:
+          ArrayType:
+            size: null
+            element_type: {BuiltinType: {type_name: char}}
+        initializer:
+          ValueInitializer:
+            value: {LiteralString: {value: "single"}}
+    - VarDecl:
+        name: values
+        type:
+          ArrayType:
+            size: null
+            element_type: {BuiltinType: {type_name: int}}
+        initializer:
+          ArrayInitializer:
+            initializers:
+              - ValueInitializer:
+                  value: {LiteralNum: {value: 1}}
+              - ValueInitializer:
+                  value: {LiteralNum: {value: 2}}
+              - ValueInitializer:
+                  value: {LiteralNum: {value: 3}}

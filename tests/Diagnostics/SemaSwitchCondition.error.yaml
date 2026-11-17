@@ -1,0 +1,5 @@
+diagnostics:
+  - error: SwitchRequiresIntegerOrEnum
+    file: "@SOURCE_FILE@"
+    location: pointer
+    fields: {}

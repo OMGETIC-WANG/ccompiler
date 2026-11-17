@@ -1,0 +1,5 @@
+diagnostics:
+  - error: ContinueOutsideLoop
+    file: "@SOURCE_FILE@"
+    location: continue
+    fields: {}

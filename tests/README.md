@@ -9,6 +9,10 @@ Expected values live beside their fixtures. A `CMakeLists.txt` may name a
 fixture, test, label, or expected file, but must not contain diagnostic text,
 runtime return values, or other per-case expectations.
 
+Fixtures under `tests/Deferred/` document intended behavior that is not yet
+supported. They are not registered with CTest. Known defects are documented in
+`tests/KNOWN_ISSUES.md` rather than being encoded as failing tests.
+
 Configuring requires Python 3 with PyYAML because generated diagnostics are
 produced at build time. The default test-enabled build also requires `yaml-cpp`.
 
@@ -47,6 +51,7 @@ build/tests/ccompiler_tests tests/AST/Declarations/FunctionSignatures.c
 | Include | source, `<source>.stdout` | `<source>.args` |
 | Diagnostics source | `<case>.c`, `<case>.error.yaml` | none |
 | Diagnostics driver | `<case>.args`, `<case>.stderr` | `<case>.c` |
+| Deferred | source and any eventual sidecars | none |
 
 The exact comparison runner is `tests/cmake/ExpectProcess.cmake`. It checks
 the exit status, compares stdout and stderr exactly after stripping leading and
@@ -145,8 +150,12 @@ registration data.
 
 ## Adding compiler cases
 
-- CodeGen and Include cases call `ccompiler_add_jit_case` in their suite CMake
-  file; the expected `.stdout` is derived from the source filename.
+- CodeGen cases add their stem to `CODEGEN_JIT_CASES` in
+  `tests/CodeGen/CMakeLists.txt`; configuration fails when a `.c` file in that
+  directory is neither registered nor moved to `tests/Deferred/`. The expected
+  `.stdout` is derived from the source filename.
+- Include cases call `ccompiler_add_jit_case` in their suite CMake file; the
+  expected `.stdout` is derived from the source filename.
 - Source diagnostics call `add_frontend_diagnostic_case` with the public test
   name and fixture stem. Driver diagnostics continue to call
   `add_diagnostic_case` with an exact `.stderr` sidecar.
@@ -156,4 +165,7 @@ registration data.
   `tests/Sema/CMakeLists.txt`.
 - Every new expected file must remain beside the fixture it describes.
 
-See `tests/AST/COVERAGE.md` for node, type, and operator coverage.
+See `tests/AST/COVERAGE.md` for the syntax, semantic, lowering, and diagnostic
+coverage matrix. It distinguishes `Covered`, `Partial`, `Deferred`,
+`Known defect`, and `Internal only` behavior. See `tests/KNOWN_ISSUES.md` for
+minimal reproductions of known gaps.

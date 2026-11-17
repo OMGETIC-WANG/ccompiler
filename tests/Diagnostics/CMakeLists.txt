@@ -48,6 +48,7 @@ endfunction()
 
 add_frontend_diagnostic_case(Lex.UnknownCharacter UnknownCharacter)
 add_frontend_diagnostic_case(Lex.InvalidExponent Exponent)
+add_frontend_diagnostic_case(Lex.InvalidHexEscape InvalidHexEscape)
 add_frontend_diagnostic_case(Preprocessor.ErrorDirective ErrorDirective)
 add_frontend_diagnostic_case(Preprocessor.MissingIfdefIdentifier
                              MissingIfdefIdentifier)
@@ -56,6 +57,8 @@ add_frontend_diagnostic_case(Preprocessor.MissingIfndefIdentifier
 add_frontend_diagnostic_case(Preprocessor.MissingUndefIdentifier
                              MissingUndefIdentifier)
 add_frontend_diagnostic_case(Preprocessor.UnknownDirective UnknownDirective)
+add_frontend_diagnostic_case(Preprocessor.UnexpectedElse UnexpectedElse)
+add_frontend_diagnostic_case(Preprocessor.UnexpectedEndif UnexpectedEndif)
 add_frontend_diagnostic_case(Parser.MissingColon MissingColon)
 add_frontend_diagnostic_case(Parser.MultipleStatements MultipleStatements)
 add_frontend_diagnostic_case(Parser.MultipleTopLevel MultipleTopLevel)
@@ -67,6 +70,9 @@ add_frontend_diagnostic_case(Parser.AbstractDeclaratorName
                              AbstractDeclaratorName)
 add_frontend_diagnostic_case(Parser.NestedRecovery NestedRecovery)
 add_frontend_diagnostic_case(Parser.MissingBrace MissingBrace)
+add_frontend_diagnostic_case(Parser.VariadicParameterToken
+                             VariadicParameterToken)
+add_frontend_diagnostic_case(Parser.MissingParameterComma MissingParameterComma)
 add_frontend_diagnostic_case(Sema.UnsupportedType UnsupportedType)
 add_frontend_diagnostic_case(Parser.ExternParameter ParserExternParameter)
 add_frontend_diagnostic_case(Parser.ExternField ParserExternField)
@@ -92,6 +98,20 @@ add_frontend_diagnostic_case(Sema.VolatilePointerDiscard
                              SemaVolatilePointerDiscard)
 add_frontend_diagnostic_case(Sema.RestrictFunctionPointer
                              SemaRestrictFunctionPointer)
+add_frontend_diagnostic_case(Sema.AssignmentLValue SemaAssignmentLValue)
+add_frontend_diagnostic_case(Sema.NumericOperands SemaNumericOperands)
+add_frontend_diagnostic_case(Sema.SubscriptIndex SemaSubscriptIndex)
+add_frontend_diagnostic_case(Sema.DereferencePointer SemaDereferencePointer)
+add_frontend_diagnostic_case(Sema.UnknownField SemaUnknownField)
+add_frontend_diagnostic_case(Sema.CallArity SemaCallArity)
+add_frontend_diagnostic_case(Sema.VariadicCallArity SemaVariadicCallArity)
+add_frontend_diagnostic_case(Sema.BreakOutside SemaBreakOutside)
+add_frontend_diagnostic_case(Sema.ContinueOutside SemaContinueOutside)
+add_frontend_diagnostic_case(Sema.SwitchCondition SemaSwitchCondition)
+add_frontend_diagnostic_case(Sema.SizeofIncomplete SemaSizeofIncomplete)
+add_frontend_diagnostic_case(Sema.ArrayInitializerBounds
+                             SemaArrayInitializerBounds)
+add_frontend_diagnostic_case(Sema.ArraySizeInitializer SemaArraySizeInitializer)
 add_diagnostic_case(Driver.MissingInput MissingInput)
 add_diagnostic_case(Driver.UnknownOption UnknownOption)
 add_diagnostic_case(Driver.MissingInclude MissingInclude)

@@ -1,0 +1,196 @@
+TranslationUnit:
+  decls:
+    - FunctionDecl:
+        name: add
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}
+            parameters:
+              - {BuiltinType: {type_name: int}}
+              - {BuiltinType: {type_name: int}}
+        parameter_names: [left, right]
+    - FunctionDecl:
+        name: first
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}
+            parameters:
+              - ArrayType:
+                  size: null
+                  element_type: {BuiltinType: {type_name: int}}
+        parameter_names: [values]
+        body:
+          CompoundStmt:
+            statements:
+              - ReturnStmt:
+                  ret_value:
+                    BinaryExpr:
+                      type: {BuiltinType: {type_name: int}}
+                      value_category: LValue
+                      op_type: Subscript
+                      left:
+                        VarRef:
+                          type:
+                            PointerType:
+                              pointee_type: {BuiltinType: {type_name: int}}
+                          value_category: LValue
+                          name: values
+                      right:
+                        LiteralNum:
+                          type: {BuiltinType: {type_name: int}}
+                          value: 0
+    - FunctionDecl:
+        name: variadic
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}
+            parameters:
+              - {BuiltinType: {type_name: int}}
+            has_va_args: true
+        parameter_names: [count]
+    - FunctionDecl:
+        name: main
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: function_pointer
+                  type:
+                    PointerType:
+                      pointee_type:
+                        FunctionType:
+                          return_type: {BuiltinType: {type_name: int}}
+                          parameters:
+                            - {BuiltinType: {type_name: int}}
+                            - {BuiltinType: {type_name: int}}
+                  initializer:
+                    ValueInitializer:
+                      value:
+                        ImplicitCast:
+                          type:
+                            PointerType:
+                              pointee_type:
+                                FunctionType:
+                                  return_type:
+                                    {BuiltinType: {type_name: int}}
+                                  parameters:
+                                    - {BuiltinType: {type_name: int}}
+                                    - {BuiltinType: {type_name: int}}
+                          target_type:
+                            PointerType:
+                              pointee_type:
+                                FunctionType:
+                                  return_type:
+                                    {BuiltinType: {type_name: int}}
+                                  parameters:
+                                    - {BuiltinType: {type_name: int}}
+                                    - {BuiltinType: {type_name: int}}
+                          operand:
+                            VarRef:
+                              type:
+                                FunctionType:
+                                  return_type:
+                                    {BuiltinType: {type_name: int}}
+                                  parameters:
+                                    - {BuiltinType: {type_name: int}}
+                                    - {BuiltinType: {type_name: int}}
+                              value_category: FunctionDesignator
+                              name: add
+              - VarDecl:
+                  name: values
+                  type:
+                    ArrayType:
+                      size: 2
+                      element_type: {BuiltinType: {type_name: int}}
+              - ReturnStmt:
+                  ret_value:
+                    BinaryExpr:
+                      type: {BuiltinType: {type_name: int}}
+                      op_type: Add
+                      operation_type: {BuiltinType: {type_name: int}}
+                      left:
+                        BinaryExpr:
+                          type: {BuiltinType: {type_name: int}}
+                          op_type: Add
+                          operation_type: {BuiltinType: {type_name: int}}
+                          left:
+                            FunctionInvocation:
+                              type: {BuiltinType: {type_name: int}}
+                              value_category: RValue
+                              function:
+                                VarRef:
+                                  type:
+                                    PointerType:
+                                      pointee_type:
+                                        FunctionType:
+                                          return_type:
+                                            {BuiltinType: {type_name: int}}
+                                          parameters:
+                                            - {BuiltinType: {type_name: int}}
+                                            - {BuiltinType: {type_name: int}}
+                                  value_category: LValue
+                                  name: function_pointer
+                              arguments:
+                                - {LiteralNum: {value: 1}}
+                                - {LiteralNum: {value: 2}}
+                          right:
+                            FunctionInvocation:
+                              type: {BuiltinType: {type_name: int}}
+                              value_category: RValue
+                              arguments:
+                                - ImplicitCast:
+                                    type:
+                                      PointerType:
+                                        pointee_type:
+                                          {BuiltinType: {type_name: int}}
+                                    target_type:
+                                      PointerType:
+                                        pointee_type:
+                                          {BuiltinType: {type_name: int}}
+                                    operand:
+                                      VarRef:
+                                        type:
+                                          ArrayType:
+                                            size: 2
+                                            element_type:
+                                              {BuiltinType: {type_name: int}}
+                                        value_category: LValue
+                                        name: values
+                      right:
+                        FunctionInvocation:
+                          type: {BuiltinType: {type_name: int}}
+                          value_category: RValue
+                          function:
+                            ImplicitCast:
+                              type:
+                                PointerType:
+                                  pointee_type:
+                                    FunctionType:
+                                      return_type:
+                                        {BuiltinType: {type_name: int}}
+                                      parameters:
+                                        - {BuiltinType: {type_name: int}}
+                                      has_va_args: true
+                              target_type:
+                                PointerType:
+                                  pointee_type:
+                                    FunctionType:
+                                      return_type:
+                                        {BuiltinType: {type_name: int}}
+                                      parameters:
+                                        - {BuiltinType: {type_name: int}}
+                                      has_va_args: true
+                              operand:
+                                VarRef:
+                                  type:
+                                    FunctionType:
+                                      return_type:
+                                        {BuiltinType: {type_name: int}}
+                                      parameters:
+                                        - {BuiltinType: {type_name: int}}
+                                      has_va_args: true
+                                  value_category: FunctionDesignator
+                                  name: variadic
+                          arguments:
+                            - {LiteralNum: {value: 3}}
+                            - {LiteralNum: {value: 4}}

@@ -1,0 +1,5 @@
+diagnostics:
+  - error: BreakOutsideLoopOrSwitch
+    file: "@SOURCE_FILE@"
+    location: break
+    fields: {}
