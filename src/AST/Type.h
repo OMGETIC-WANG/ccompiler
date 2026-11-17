@@ -246,7 +246,8 @@ inline bool IsIntegerType(TypeRef type) {
 }
 
 inline bool IsFloatingKind(BuiltinKind kind) {
-  return kind == BuiltinKind::Float || kind == BuiltinKind::Double;
+  return kind == BuiltinKind::Float || kind == BuiltinKind::Double ||
+         kind == BuiltinKind::LongDouble;
 }
 
 inline bool IsFloatingType(TypeRef type) {
@@ -262,6 +263,8 @@ inline bool IsNumericType(TypeRef type) {
 }
 
 int IntegerConversionRank(BuiltinKind kind);
+
+int FloatingConversionRank(BuiltinKind kind);
 
 TypeRef PromoteInteger(TypeRef type, TypeContext &types);
 

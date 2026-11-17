@@ -282,10 +282,6 @@ end:;
     return;
   }
 
-  if ((type_mask & MDouble) && (type_mask & MLong)) {
-    context.Diagnostics().Fail(spec.location, errs::LongDoubleUnsupported{});
-  }
-
   if ((type_mask & (MShort | MLong | MLongLong)) && (type_mask & MInt)) {
     type_mask &= ~MInt;
   }

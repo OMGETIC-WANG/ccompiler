@@ -42,3 +42,9 @@ TranslationUnit:
     - VarDecl:
         name: d
         type: {BuiltinType: {type_name: double}}
+    - VarDecl:
+        name: ld
+        type: {BuiltinType: {type_name: long double}}
+    - VarDecl:
+        name: dl
+        type: {BuiltinType: {type_name: long double}}

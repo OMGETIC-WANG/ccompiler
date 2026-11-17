@@ -830,11 +830,12 @@ ParseFunctionDecl(Lexer &lexer, ParsedType type, StorageClass storage_class,
 static void AddVaList(CompileContext &context) {
   auto *va_list_type = context.Types().GetOrCreateStruct(
       context.CurrentScopeId(), "__builtin_va_list_type");
+  // x86_64 SysV va_list tag layout.
   StructField fields[] = {
       {"", context.Types().getInt(), 0},
-      {"", context.Types().Pointer(context.Types().getVoid()), 1},
+      {"", context.Types().getInt(), 1},
       {"", context.Types().Pointer(context.Types().getVoid()), 2},
-      {"", context.Types().getInt(), 3}};
+      {"", context.Types().Pointer(context.Types().getVoid()), 3}};
   context.Types().CompleteStruct(va_list_type, fields);
 
   // musl suspects that __builtin_va_list is a typedef

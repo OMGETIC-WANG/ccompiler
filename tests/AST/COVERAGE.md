@@ -59,7 +59,7 @@ assertion.
 | `UnionType` | Covered | `Declarations/Aggregates` |
 | `EnumType` | Covered | `Declarations/Aggregates` |
 | `void`, `char`, `short`, `int`, `long`, `long long` | Covered | `Declarations/BuiltinTypes` |
-| `float`, `double`, `long double` literal type | Covered | `Expressions/FloatLiterals` |
+| `float`, `double`, `long double` | Covered | `Declarations/BuiltinTypes`, `Expressions/FloatLiterals` |
 | `I1` | Internal only | Not produced by source declarations |
 | `const` tag | Covered | `Declarations/StorageAndQualifiers` |
 | `volatile` tag | Covered | `Declarations/QualifiedDeclarators` |
@@ -132,7 +132,6 @@ AST:
 | Character literals | Lexed but no primary-expression AST path |
 | Variadic parameter lists | Current parse probe aborts on type specifiers |
 | `sizeof` applied without parentheses | Intrinsic parser currently requires `(` |
-| `long double` declarations | Explicitly rejected; `L` literal type is covered |
 | `register` declarations | Explicitly rejected |
 | Nested brace initializers and compound literals | No stable supported AST path |
 | Intermediate `Declaration`/`Declarator` trees | Out of scope; final resolved types are tested |

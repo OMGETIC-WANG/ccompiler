@@ -1,0 +1,5 @@
+diagnostics:
+  - error: InvalidTypeSpecifierCombination
+    file: "@SOURCE_FILE@"
+    location: "1:1-1:5"
+    fields: {}

@@ -11,3 +11,5 @@ long long ll;
 unsigned long long ull;
 float f;
 double d;
+long double ld;
+double long dl;

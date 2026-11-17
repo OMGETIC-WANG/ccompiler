@@ -1,0 +1,117 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: global
+        type: {BuiltinType: {type_name: long double}}
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: long double}}
+                value: 1.0
+    - FunctionDecl:
+        name: promote
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: long double}}
+            parameters:
+              - {BuiltinType: {type_name: long double}}
+              - {BuiltinType: {type_name: double}}
+        parameter_names: [left, right]
+        body:
+          CompoundStmt:
+            statements:
+              - ReturnStmt:
+                  ret_value:
+                    BinaryExpr:
+                      type: {BuiltinType: {type_name: long double}}
+                      op_type: Add
+                      operation_type: {BuiltinType: {type_name: long double}}
+                      left:
+                        VarRef:
+                          type: {BuiltinType: {type_name: long double}}
+                          value_category: LValue
+                          name: left
+                      right:
+                        ImplicitCast:
+                          type: {BuiltinType: {type_name: long double}}
+                          value_category: RValue
+                          target_type: {BuiltinType: {type_name: long double}}
+                          operand:
+                            VarRef:
+                              type: {BuiltinType: {type_name: double}}
+                              value_category: LValue
+                              name: right
+    - FunctionDecl:
+        name: main
+        function_type:
+          FunctionType:
+            return_type: {BuiltinType: {type_name: int}}
+            parameters: []
+        parameter_names: []
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: value
+                  type: {BuiltinType: {type_name: long double}}
+              - BinaryExpr:
+                  type: {BuiltinType: {type_name: long double}}
+                  op_type: Assignment
+                  operation_type: {BuiltinType: {type_name: long double}}
+                  compound_op: Add
+                  left:
+                    VarRef:
+                      type: {BuiltinType: {type_name: long double}}
+                      value_category: LValue
+                      name: value
+                  right:
+                    ImplicitCast:
+                      type: {BuiltinType: {type_name: long double}}
+                      value_category: RValue
+                      target_type: {BuiltinType: {type_name: long double}}
+                      operand:
+                        LiteralNum:
+                          type: {BuiltinType: {type_name: int}}
+                          value: 2
+              - VarDecl:
+                  name: narrowed
+                  type: {BuiltinType: {type_name: double}}
+                  initializer:
+                    ValueInitializer:
+                      value:
+                        TypeCast:
+                          type: {BuiltinType: {type_name: double}}
+                          op_type: TypeCast
+                          target_type: {BuiltinType: {type_name: double}}
+                          operand:
+                            VarRef:
+                              type: {BuiltinType: {type_name: long double}}
+                              value_category: LValue
+                              name: value
+              - VarDecl:
+                  name: widened
+                  type: {BuiltinType: {type_name: long double}}
+                  initializer:
+                    ValueInitializer:
+                      value:
+                        ImplicitCast:
+                          type: {BuiltinType: {type_name: long double}}
+                          value_category: RValue
+                          target_type: {BuiltinType: {type_name: long double}}
+                          operand:
+                            VarRef:
+                              type: {BuiltinType: {type_name: double}}
+                              value_category: LValue
+                              name: narrowed
+              - ReturnStmt:
+                  ret_value:
+                    TypeCast:
+                      type: {BuiltinType: {type_name: int}}
+                      op_type: TypeCast
+                      target_type: {BuiltinType: {type_name: int}}
+                      operand:
+                        VarRef:
+                          type: {BuiltinType: {type_name: long double}}
+                          value_category: LValue
+                          name: value

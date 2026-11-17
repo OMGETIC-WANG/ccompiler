@@ -62,6 +62,7 @@ add_frontend_diagnostic_case(Parser.MultipleTopLevel MultipleTopLevel)
 add_frontend_diagnostic_case(Parser.MultipleStorageClasses
                              ParserMultipleStorageClasses)
 add_frontend_diagnostic_case(Parser.MissingSemicolon MissingSemicolon)
+add_frontend_diagnostic_case(Parser.InvalidLongDouble ParserInvalidLongDouble)
 add_frontend_diagnostic_case(Parser.AbstractDeclaratorName
                              AbstractDeclaratorName)
 add_frontend_diagnostic_case(Parser.NestedRecovery NestedRecovery)

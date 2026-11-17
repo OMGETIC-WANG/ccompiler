@@ -461,10 +461,6 @@ SignednessCannotQualifyTag:
   format: "signedness cannot qualify a struct, enum, or typedef type"
   fields: []
 
-LongDoubleUnsupported:
-  format: "long double is not supported yet"
-  fields: []
-
 InvalidTypeSpecifierCombination:
   format: "Invalid combination of type specifiers"
   fields: []

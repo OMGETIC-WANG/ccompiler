@@ -160,13 +160,21 @@ NumericValue ConvertConstant(NumericValue value, TypeRef type) {
 
   BuiltinKind kind = type->As<BuiltinType>()->Kind();
   if (IsFloatingKind(kind)) {
+    long double converted;
     if (std::holds_alternative<long double>(value)) {
-      return static_cast<long double>(std::get<long double>(value));
+      converted = std::get<long double>(value);
+    } else if (std::holds_alternative<uint64_t>(value)) {
+      converted = static_cast<long double>(std::get<uint64_t>(value));
+    } else {
+      converted = static_cast<long double>(std::get<int64_t>(value));
     }
-    if (std::holds_alternative<uint64_t>(value)) {
-      return static_cast<long double>(std::get<uint64_t>(value));
+    if (kind == BuiltinKind::Float) {
+      return static_cast<long double>(static_cast<float>(converted));
     }
-    return static_cast<long double>(std::get<int64_t>(value));
+    if (kind == BuiltinKind::Double) {
+      return static_cast<long double>(static_cast<double>(converted));
+    }
+    return converted;
   }
   if (!IsIntegerKind(kind)) {
     return value;

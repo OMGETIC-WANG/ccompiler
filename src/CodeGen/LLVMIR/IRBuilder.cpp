@@ -207,8 +207,10 @@ RValue IRBuilder::CreateNumericCast(const RValue &value, TypeRef target_type) {
                  ? _builder.CreateUIToFP(value.ir_value, to_type)
                  : _builder.CreateSIToFP(value.ir_value, to_type);
   } else {
-    if (from_type->getPrimitiveSizeInBits() >
-        to_type->getPrimitiveSizeInBits()) {
+    ASSERT(IsFloatingType(value.c_type) && IsFloatingType(target_type),
+           "Numeric cast has unsupported source and target types");
+    if (FloatingConversionRank(from_c->Kind()) >
+        FloatingConversionRank(to_c->Kind())) {
       result = _builder.CreateFPTrunc(value.ir_value, to_type);
     } else {
       result = _builder.CreateFPExt(value.ir_value, to_type);
@@ -405,6 +407,39 @@ void IRBuilder::CreateVaEnd(const LValue &va_list) {
 }
 
 RValue IRBuilder::CreateVaArg(const LValue &va_list, TypeRef type) {
+  if (auto *builtin = type->DynCast<BuiltinType>();
+      builtin && builtin->Kind() == BuiltinKind::LongDouble) {
+    // x86_64 passes long double in the overflow area, aligned to 16 bytes.
+    auto *va_list_array = va_list.c_type->As<ArrayType>();
+    ASSERT(va_list_array->element_type->Is<StructType>(),
+           "va_list must be an array containing the ABI va_list structure");
+    auto *tag_type = va_list_array->element_type->As<StructType>();
+
+    auto *tag_pointer = _builder.CreateInBoundsGEP(
+        _context.LLVMArrayType(va_list.c_type), va_list.address,
+        {_builder.getInt64(0), _builder.getInt64(0)});
+    auto *overflow_address = _builder.CreateStructGEP(
+        _context.LLVMStructType(tag_type), tag_pointer, 2);
+    auto *overflow_area =
+        _builder.CreateLoad(_builder.getPtrTy(), overflow_address);
+    llvm::Align field_alignment(tag_type->fields[2].type->GetAlign());
+    overflow_area->setAlignment(field_alignment);
+
+    auto *bias =
+        _builder.CreateInBoundsGEP(_builder.getInt8Ty(), overflow_area,
+                                   _builder.getInt64(type->GetAlign() - 1));
+    auto *aligned_area = _builder.CreateIntrinsic(
+        llvm::Intrinsic::ptrmask, {_builder.getPtrTy(), _builder.getInt64Ty()},
+        {bias, _builder.getInt64(-static_cast<int64_t>(type->GetAlign()))});
+    auto *next_overflow_area = _builder.CreateInBoundsGEP(
+        _builder.getInt8Ty(), aligned_area, _builder.getInt64(type->GetSize()));
+    auto *store = _builder.CreateStore(next_overflow_area, overflow_address);
+    store->setAlignment(field_alignment);
+
+    auto *load = _builder.CreateLoad(_context.LLVMType(type), aligned_area);
+    load->setAlignment(llvm::Align(type->GetAlign()));
+    return RValue{type, load};
+  }
   return RValue{type,
                 _builder.CreateVAArg(va_list.address, _context.LLVMType(type))};
 }

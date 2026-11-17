@@ -267,6 +267,19 @@ int IntegerConversionRank(BuiltinKind kind) {
   }
 }
 
+int FloatingConversionRank(BuiltinKind kind) {
+  switch (kind) {
+  case BuiltinKind::Float:
+    return 0;
+  case BuiltinKind::Double:
+    return 1;
+  case BuiltinKind::LongDouble:
+    return 2;
+  default:
+    RAISE_ERROR("Type does not have a floating conversion rank: ", kind);
+  }
+}
+
 TypeRef PromoteInteger(TypeRef type, TypeContext &types) {
   ASSERT(IsIntegerType(type), "Integer promotion requires an integer type");
   type = StripTypeQualifiers(type);
@@ -295,11 +308,19 @@ TypeRef UsualArithmeticType(TypeRef left, TypeRef right, TypeContext &types) {
   const auto *left_builtin = left->As<BuiltinType>();
   const auto *right_builtin = right->As<BuiltinType>();
   if (IsFloatingType(left) || IsFloatingType(right)) {
-    if (left_builtin->Kind() == BuiltinKind::Double ||
-        right_builtin->Kind() == BuiltinKind::Double) {
-      return types.getDouble();
+    BuiltinKind left_kind = left_builtin->Kind();
+    BuiltinKind right_kind = right_builtin->Kind();
+    if (!IsFloatingKind(left_kind)) {
+      return right;
     }
-    return types.getFloat();
+    if (!IsFloatingKind(right_kind)) {
+      return left;
+    }
+    BuiltinKind common =
+        FloatingConversionRank(left_kind) >= FloatingConversionRank(right_kind)
+            ? left_kind
+            : right_kind;
+    return types.Builtin(common);
   }
 
   left = PromoteInteger(left, types);

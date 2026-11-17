@@ -410,7 +410,7 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
     if (std::holds_alternative<long double>(literal_num->value)) {
       return RValue{
           literal_num->type,
-          llvm::ConstantFP::get(context.LLVMType(literal_num->type),
+          LowerFloatingConstant(context.LLVMType(literal_num->type),
                                 std::get<long double>(literal_num->value))};
     }
   }
