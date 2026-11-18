@@ -82,7 +82,7 @@ static MacroDef ScanMacro(Scanner &scanner, SourceManager &source_manager,
   scanner.ConsumeToken(tok);
 
   tok = scanner.PeekNextTokenH();
-  if (tok.type == TokenType::LParen && tok.has_leading_space) {
+  if (tok.type == TokenType::LParen && !tok.has_leading_space) {
     macro.has_arg = true;
     scanner.ConsumeToken(tok);
     while (true) {

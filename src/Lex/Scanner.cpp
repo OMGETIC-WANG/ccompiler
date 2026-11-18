@@ -459,14 +459,14 @@ std::pair<std::string_view, bool> Scanner::TrimSourceBlank() {
   size_t old_pos = _pos;
   size_t pos = GetTrimmedPos(_source.text, _pos);
   _pos = pos;
-  return {_source.text.substr(_pos), pos == old_pos};
+  return {_source.text.substr(_pos), pos != old_pos};
 }
 
 std::pair<std::string_view, bool> Scanner::TrimSourceBlankH() {
   size_t old_pos = _pos;
   size_t pos = GetHTrimmedPos(_source.text, _pos);
   _pos = pos;
-  return {_source.text.substr(_pos), pos == old_pos};
+  return {_source.text.substr(_pos), pos != old_pos};
 }
 
 static ScannedToken ScanToken(std::string_view rest,
