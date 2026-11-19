@@ -107,7 +107,7 @@ ordered `RawLexer` token stream. They do not parse the source. Each nonempty
 line must be `EndOfFile`.
 
 Token types accept either the full `TokenType` name or an alias from
-`tests/Lexer/token_type_aliases`. The alias file contains one
+`tests/Lexer/.TokenTypeAliases`. The alias file contains one
 `<token_type> <alias>` mapping per line. Omit `token_value` for token types
 whose source spelling is fixed, including keywords and punctuation. Keep it for
 tokens whose spelling varies, such as identifiers, literals, and the

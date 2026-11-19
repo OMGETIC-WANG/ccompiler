@@ -74,7 +74,7 @@ function(ccompiler_add_sema_cases group)
 endfunction()
 
 function(ccompiler_add_lexer_cases)
-  set(aliases_file "${CMAKE_CURRENT_SOURCE_DIR}/token_type_aliases")
+  set(aliases_file "${CMAKE_CURRENT_SOURCE_DIR}/.TokenTypeAliases")
   ccompiler_require_test_file("${aliases_file}" "Lexer token type aliases")
 
   file(GLOB lexer_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
