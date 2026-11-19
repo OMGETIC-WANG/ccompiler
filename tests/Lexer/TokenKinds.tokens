@@ -1,0 +1,88 @@
+KwIf
+KwElse
+while
+do
+for
+return
+continue
+void
+static
+const
+struct
+union
+typedef
+enum
+switch
+case
+break
+default
+goto
+int
+char
+short
+float
+double
+signed
+unsigned
+long
+volatile
+restrict restrict
+restrict __restrict
+restrict __restrict__
+extern
+register
+id identifier
+num 0x1
+num 0b10
+num 42
+num .5
+num 1.5
+string "\"text\""
+charlit 'x'
+++
+--
+*
+.
+&
+~
+!
+,
+;
+:
+(
+)
+[
+]
+{
+}
+...
+->
+?
+=
++
+-
+/
+%
+<<
+>>
+|
+^
++=
+-=
+*=
+/=
+%=
+<<=
+>>=
+&=
+|=
+^=
+&&
+||
+==
+!=
+<
+>
+<=
+>=
+EndOfFile

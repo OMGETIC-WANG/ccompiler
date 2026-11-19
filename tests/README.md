@@ -1,8 +1,8 @@
 # Test suite
 
 The CTest suite is grouped by test kind. `tests/CMakeLists.txt` owns the shared
-`ccompiler_tests` executable and adds the top-level suites. AST subgroups,
-CodeGen, Diagnostics, and Include each register their own tests in a local
+`ccompiler_tests` executable and adds the top-level suites. Lexer, AST
+subgroups, CodeGen, and Diagnostics each register their own tests in a local
 `CMakeLists.txt`.
 
 Expected values live beside their fixtures. A `CMakeLists.txt` may name a
@@ -24,11 +24,12 @@ cmake --build build -j2
 ctest --test-dir build --output-on-failure
 ```
 
-Useful labels are `ast`, `sema`, `schema`, `codegen`, `include`, and
+Useful labels are `lexer`, `ast`, `sema`, `schema`, `codegen`, `include`, and
 `diagnostics`.
 For example:
 
 ```bash
+ctest --test-dir build -L lexer --output-on-failure
 ctest --test-dir build -L ast --output-on-failure
 ctest --test-dir build -L sema --output-on-failure
 ctest --test-dir build -L diagnostics --output-on-failure
@@ -44,11 +45,11 @@ build/tests/ccompiler_tests tests/AST/Declarations/FunctionSignatures.c
 
 | Suite | Required fixture files | Optional fixture files |
 | --- | --- | --- |
+| Lexer | `<case>.c`, `<case>.tokens` | `<case>.args` |
 | AST | `<case>.c`, `<case>.ast.yaml` | none |
 | AST schema failure | `<case>.ast.yaml`, `<case>.stderr` | none |
 | Sema | `<case>.c`, `<case>.ast.yaml` | none |
 | CodeGen | `<source>.c`, `<source>.stdout` | `<source>.args` |
-| Include | source, `<source>.stdout` | `<source>.args` |
 | Diagnostics source | `<case>.c`, `<case>.error.yaml` | none |
 | Diagnostics driver | `<case>.args`, `<case>.stderr` | `<case>.c` |
 | Deferred | source and any eventual sidecars | none |
@@ -98,6 +99,39 @@ names fail. A generated field uses an exact scalar comparison. `TypeRef` fields
 instead accept either the `ToString()` result or the structured type descriptor
 used by AST tests.
 
+## Lexer assertions
+
+Lexer tests run the real lexer and preprocessor directly, then compare the
+ordered `RawLexer` token stream. They do not parse the source. Each nonempty
+`.tokens` line describes one token as `<token_type> [token_value]`; the final
+line must be `EndOfFile`.
+
+Token types accept either the full `TokenType` name or an alias from
+`tests/Lexer/token_type_aliases`. The alias file contains one
+`<token_type> <alias>` mapping per line. Omit `token_value` for token types
+whose source spelling is fixed, including keywords and punctuation. Keep it for
+tokens whose spelling varies, such as identifiers, literals, and the
+compatibility spellings of `KwRestrict`. When omitted, only the token type is
+checked. Unquoted values cannot contain whitespace, quotes, or backslashes.
+Quoted values support `\\`, `\"`, `\n`, `\r`, `\t`, `\0`, and `\xNN`.
+
+Token values are compared with `SourceManager::GetText`, so they preserve the
+source spelling. A string literal containing `\n` therefore appears as a
+quoted `.tokens` value with both escapes doubled:
+
+```text
+LiteralString "\"line\\n\""
+EndOfFile
+```
+
+Add a `.c` and matching `.tokens` file under `tests/Lexer/`. The suite is
+auto-discovered as `Lexer.<case>` with the `lexer;frontend` labels.
+
+An optional `.args` file supplies raw Lexer harness arguments, one per line.
+The supported argument is repeated `-I <directory>`. Args support the same
+`@SOURCE_FILE@`, `@SOURCE_ROOT@`, and `@BINARY_ROOT@` placeholders as process
+tests. Include-focused cases also receive the `include` label.
+
 ## AST assertions
 
 AST tests parse valid C through the real lexer, macro layer, and parser, then
@@ -143,19 +177,21 @@ the same partial YAML verifier runs. They may assert expression `type`,
 compound-assignment `compound_op`, `left_value_cast_type`, and
 `result_cast_type` annotations.
 
-`AST.Declarations.BindingIdentity`, `AST.Schema.VerifierRegistry`,
-`Diagnostics.Formatting`, and `Diagnostics.ErrorGenerator` are self-tests. Their
-expected values remain in the test implementation because they are not CMake
-registration data.
+`Lexer.Format`, `AST.Declarations.BindingIdentity`,
+`AST.Schema.VerifierRegistry`, `Diagnostics.Formatting`, and
+`Diagnostics.ErrorGenerator` are self-tests. Their expected values remain in
+the test implementation because they are not CMake registration data.
 
 ## Adding compiler cases
 
+- Lexer cases add `<case>.c` and `<case>.tokens` under `tests/Lexer/`; the
+  shared `ccompiler_add_lexer_cases` registration requires both files and
+  rejects orphan expectations. Add `<case>.args` when the source needs `-I`
+  include paths.
 - CodeGen cases add their stem to `CODEGEN_JIT_CASES` in
   `tests/CodeGen/CMakeLists.txt`; configuration fails when a `.c` file in that
   directory is neither registered nor moved to `tests/Deferred/`. The expected
   `.stdout` is derived from the source filename.
-- Include cases call `ccompiler_add_jit_case` in their suite CMake file; the
-  expected `.stdout` is derived from the source filename.
 - Source diagnostics call `add_frontend_diagnostic_case` with the public test
   name and fixture stem. Driver diagnostics continue to call
   `add_diagnostic_case` with an exact `.stderr` sidecar.

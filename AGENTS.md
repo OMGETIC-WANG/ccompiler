@@ -22,7 +22,7 @@ Important locations:
 - `src/CodeGen/LLVMIR/`: LLVM IR generation.
 - `src/JITRunner/`: native execution of generated modules.
 - `src/Util/`: command-line parsing, diagnostics, and shared utilities.
-- `tests/`: CTest-based AST, Sema, CodeGen, include, and diagnostic tests.
+- `tests/`: CTest-based Lexer, AST, Sema, CodeGen, and diagnostic tests.
 - `examples/brainfuck/`: end-to-end compiler integration example and fixtures.
 - `musl_pre_include/`: compatibility headers that must precede system headers.
 - `gdb_util/`: debugging helpers.
@@ -44,6 +44,7 @@ integration workflow also requires `llvm-as`, `llc`, and a host C compiler.
 cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build build -j2
 ctest --test-dir build --output-on-failure
+ctest --test-dir build -L lexer --output-on-failure
 ctest --test-dir build -L ast --output-on-failure
 ctest --test-dir build -L sema --output-on-failure
 ctest --test-dir build -L codegen --output-on-failure
@@ -53,8 +54,8 @@ python3 examples/brainfuck/test.py
 ```
 
 The first two commands configure and build all compiler and test targets. The
-full CTest command runs every registered suite. Useful labels are `ast`,
-`sema`, `schema`, `codegen`, `include`, and `diagnostics`.
+full CTest command runs every registered suite. Useful labels are `lexer`,
+`ast`, `sema`, `schema`, `codegen`, `include`, and `diagnostics`.
 
 A source argument is required. Pass `-` as the source file to read stdin, and
 pass `-o -` to write LLVM IR to stdout:
@@ -96,8 +97,12 @@ table and comparison runner; follow it when adding cases. In general:
   `AnalyzeTranslationUnit`, and then use the same partial YAML verifier. Add
   them under `tests/Sema/` and register the group with
   `ccompiler_add_sema_cases`.
-- CodeGen and Include cases are JIT-run end-to-end cases with a source file and
-  an exact `.stdout` expectation. An optional `.args` file supplies one raw
+- Lexer cases pair `<case>.c` with `<case>.tokens` and assert the ordered
+  post-preprocessing `RawLexer` output directly. They live under
+  `tests/Lexer/` and are auto-registered with `ccompiler_add_lexer_cases`. An
+  optional `.args` file supplies `-I` include paths.
+- CodeGen cases are JIT-run end-to-end cases with a source file and an exact
+  `.stdout` expectation. An optional `.args` file supplies one raw
   command-line argument per line.
 - Structured source diagnostics pair a `.c` fixture with `.error.yaml`.
   Driver-only cases continue to use an exact `.stderr` sidecar and may contain
@@ -121,13 +126,13 @@ programs `<case>.bf`, inputs `<case>.in`, and expected output
 
 Run the full CTest suite and Brainfuck integration test before submitting
 changes; the Brainfuck test is required whenever files under `src/` change.
-Add an AST or Sema fixture for frontend semantic behavior, and a CodeGen JIT
-case or representative IR/self-test for lowering behavior. Add a diagnostics
-case when changing a diagnostic or rejection path. When adding AST/type nodes
-or printer behavior, keep verifier registration, AST output, and schema
-descriptors in sync; the self-tests and `AST.PrintingCLI` cover those paths. No
-coverage threshold or general-purpose unit-test framework is currently
-configured.
+Add a Lexer fixture for lexical or preprocessing output, an AST or Sema fixture
+for frontend semantic behavior, and a CodeGen JIT case or representative
+IR/self-test for lowering behavior. Add a diagnostics case when changing a
+diagnostic or rejection path. When adding AST/type nodes or printer behavior,
+keep verifier registration, AST output, and schema descriptors in sync; the
+self-tests and `AST.PrintingCLI` cover those paths. No coverage threshold or
+general-purpose unit-test framework is currently configured.
 
 ## Commit & Pull Request Guidelines
 

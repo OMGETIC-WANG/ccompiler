@@ -1,0 +1,15 @@
+int
+id main
+(
+void
+)
+{
+return
+num 10
++
+num 20
++
+num 30
+;
+}
+EndOfFile

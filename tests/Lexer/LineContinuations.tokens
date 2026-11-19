@@ -1,0 +1,25 @@
+int
+id joined
+=
+num 12
+;
+int
+id main
+(
+void
+)
+{
+char
+id text
+[
+]
+=
+string "\"ab\""
+;
+return
+num 1
++
+num 2
+;
+}
+EndOfFile

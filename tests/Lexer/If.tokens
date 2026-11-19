@@ -1,0 +1,36 @@
+int
+id if_enabled
+=
+num 1
+;
+int
+id if_disabled_else
+=
+num 2
+;
+int
+id nested_if_enabled
+=
+num 3
+;
+int
+id defined_and_arithmetic
+=
+num 4
+;
+int
+id conditional_condition
+=
+num 5
+;
+int
+id elif_selected
+=
+num 6
+;
+int
+id defined_missing_else
+=
+num 7
+;
+EndOfFile

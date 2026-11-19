@@ -73,6 +73,57 @@ function(ccompiler_add_sema_cases group)
   endforeach()
 endfunction()
 
+function(ccompiler_add_lexer_cases)
+  set(aliases_file "${CMAKE_CURRENT_SOURCE_DIR}/token_type_aliases")
+  ccompiler_require_test_file("${aliases_file}" "Lexer token type aliases")
+
+  file(GLOB lexer_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
+  list(SORT lexer_sources)
+
+  foreach(lexer_source IN LISTS lexer_sources)
+    string(REGEX REPLACE "\\.c$" ".tokens" lexer_expected "${lexer_source}")
+    string(REGEX REPLACE "\\.c$" ".args" lexer_args_file "${lexer_source}")
+    ccompiler_require_test_file("${lexer_expected}"
+                                "Lexer expectation for ${lexer_source}")
+
+    set(lexer_args)
+    if(EXISTS "${lexer_args_file}")
+      file(STRINGS "${lexer_args_file}" lexer_args ENCODING UTF-8)
+      list(TRANSFORM lexer_args REPLACE "@SOURCE_FILE@" "${lexer_source}")
+      list(TRANSFORM lexer_args REPLACE "@SOURCE_ROOT@" "${PROJECT_SOURCE_DIR}")
+      list(TRANSFORM lexer_args REPLACE "@BINARY_ROOT@"
+                                        "${CMAKE_CURRENT_BINARY_DIR}")
+    endif()
+
+    get_filename_component(case_name "${lexer_source}" NAME_WE)
+    set(test_name "Lexer.${case_name}")
+    add_test(NAME "${test_name}"
+             COMMAND $<TARGET_FILE:ccompiler_tests> --lexer "${lexer_source}"
+                     "${lexer_expected}" "${aliases_file}" ${lexer_args})
+    ccompiler_set_test_properties("${test_name}" "lexer;frontend")
+  endforeach()
+
+  file(GLOB lexer_expectations CONFIGURE_DEPENDS
+       "${CMAKE_CURRENT_SOURCE_DIR}/*.tokens")
+  foreach(lexer_expected IN LISTS lexer_expectations)
+    string(REGEX REPLACE "\\.tokens$" ".c" lexer_source "${lexer_expected}")
+    if(NOT EXISTS "${lexer_source}")
+      message(FATAL_ERROR "Orphan lexer expectation without source: "
+                          "${lexer_expected}")
+    endif()
+  endforeach()
+
+  file(GLOB lexer_args_files CONFIGURE_DEPENDS
+       "${CMAKE_CURRENT_SOURCE_DIR}/*.args")
+  foreach(lexer_args_file IN LISTS lexer_args_files)
+    string(REGEX REPLACE "\\.args$" ".c" lexer_source "${lexer_args_file}")
+    if(NOT EXISTS "${lexer_source}")
+      message(FATAL_ERROR "Orphan lexer args without source: "
+                          "${lexer_args_file}")
+    endif()
+  endforeach()
+endfunction()
+
 function(ccompiler_add_expected_process_test)
   cmake_parse_arguments(
     CASE

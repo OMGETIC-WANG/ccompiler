@@ -1,0 +1,11 @@
+int
+id joined
+=
+num 1
+;
+int
+id value
+=
+num 0
+;
+EndOfFile

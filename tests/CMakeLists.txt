@@ -8,6 +8,7 @@ add_executable(
   Support/ASTVerifier.cpp
   Support/DeclBindingTest.cpp
   Support/ASTPrintTest.cpp
+  Support/LexerTest.cpp
   Support/QualifierCodeGenTest.cpp
   Support/LongDoubleLoweringTest.cpp
   "${CCOMPILER_ERROR_VERIFY_SOURCE}")
@@ -20,8 +21,8 @@ include(cmake/CCCompilerTests.cmake)
 
 add_subdirectory(AST)
 add_subdirectory(Sema)
+add_subdirectory(Lexer)
 add_subdirectory(CodeGen)
-add_subdirectory(Include)
 add_subdirectory(Diagnostics)
 
 ccompiler_add_self_test(SourceManager.LineContinuations

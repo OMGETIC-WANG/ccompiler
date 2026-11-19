@@ -19,38 +19,39 @@ are listed in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 
 | Layer | Purpose | Representative cases |
 |---|---|---|
+| Lexer | Ordered post-preprocessing tokens, source spellings, and includes | `Lexer.TokenKinds`, `Lexer.Literals`, `Lexer.IncludeSearchOrder` |
 | AST | Final parsed `TranslationUnit`, types, declarations, expression shape, and precedence | `AST.Declarations.FunctionSignatures`, `AST.Types.DeclaratorSpiral`, `AST.Expressions.Precedence` |
 | Sema | Types, value categories, implicit casts, constant folding, and call/initializer conversions | `Sema.Core.Expressions`, `Sema.Core.AggregateAccess`, `Sema.Core.FunctionCalls` |
 | CodeGen/JIT | LLVM lowering validated by executing `main` | `CodeGen.ControlFlow`, `CodeGen.Operators`, `CodeGen.AggregatesPointers`, `CodeGen.Functions` |
 | Diagnostics | Ordered error type, location, and selected fields | `Diagnostics.Sema.*`, `Diagnostics.Parser.*`, `Diagnostics.Preprocessor.*` |
-| Include | Quoted/angle includes, nested lookup, and include search order | `Include.LocalRelative`, `Include.SearchOrder` |
 
 ## Lexing and literals
 
-| Feature | AST | Sema | CodeGen | Cases | Status |
-|---|---|---|---|---|---|
-| Decimal, hexadecimal, octal, binary integers and suffixes | Covered | Covered | Covered | `AST.Expressions.IntegerLiterals`, `CodeGen.Operators` | Covered |
-| Decimal, exponent, hexadecimal floating literals and suffixes | Covered | Covered | Covered | `AST.Expressions.FloatLiterals`, `CodeGen.LongDouble*` | Covered |
-| String literals, escapes, and adjacent concatenation | Covered | Covered | Covered | `AST.Expressions.StringLiterals`, `Sema.Core.Expressions`, `CodeGen.SizeofTypes` | Covered |
-| Invalid hexadecimal string escapes | Rejected | N/A | N/A | `Diagnostics.Lex.InvalidHexEscape` | Covered |
-| Character literals | Unsupported | N/A | Deferred | `tests/Deferred/CodeGen/CharLiterals` | Deferred |
-| Comments and whitespace | Implicit | Implicit | Implicit | All source fixtures | Covered |
-| LF and CRLF line continuations | Covered | Implicit | Implicit | `AST.Pipeline.LineContinuations`, `Diagnostics.Lex.LineContinuationLocation`, `SourceManager.LineContinuations` | Covered |
+| Feature | Lexer | AST | Sema | CodeGen | Cases | Status |
+|---|---|---|---|---|---|---|
+| Keywords, identifiers, operators, punctuation, and explicit EOF | Covered | Implicit | Implicit | Implicit | `Lexer.TokenKinds` | Covered |
+| Decimal, hexadecimal, octal, binary integers and suffixes | Covered | Covered | Covered | Covered | `Lexer.Literals`, `AST.Expressions.IntegerLiterals`, `CodeGen.Operators` | Covered |
+| Decimal, exponent, hexadecimal floating literals and suffixes | Covered | Covered | Covered | Covered | `Lexer.Literals`, `AST.Expressions.FloatLiterals`, `CodeGen.LongDouble*` | Covered |
+| String literals, escapes, and adjacent tokenization | Covered | Covered | Covered | Covered | `Lexer.Literals`, `AST.Expressions.StringLiterals`, `Sema.Core.Expressions`, `CodeGen.SizeofTypes` | Covered |
+| Invalid hexadecimal string escapes | Rejected | N/A | N/A | N/A | `Diagnostics.Lex.InvalidHexEscape` | Covered |
+| Character literal tokenization | Covered | Unsupported | N/A | Deferred | `Lexer.Literals`, `tests/Deferred/CodeGen/CharLiterals` | Deferred end-to-end |
+| Comments and whitespace | Covered | Implicit | Implicit | Implicit | `Lexer.CommentsAndWhitespace` | Covered |
+| LF and CRLF line continuations | Covered | Covered | Implicit | Implicit | `Lexer.LineContinuations`, `Diagnostics.Lex.LineContinuationLocation`, `SourceManager.LineContinuations` | Covered |
 
 ## Preprocessor and includes
 
 | Feature | Positive coverage | Negative coverage | Status |
 |---|---|---|---|
-| Object-like and function-like macros | `AST.Pipeline.Macros` | Existing parser diagnostics | Covered |
-| Nested expansion, token paste, single-token stringification, variadic macros | `AST.Pipeline.AdvancedMacros` | `Diagnostics.Parser.*` for malformed declarations | Covered |
+| Object-like and function-like macros | `Lexer.Macros` | Existing parser diagnostics | Covered |
+| Nested expansion, token paste, single-token stringification, variadic macros | `Lexer.AdvancedMacros` | `Diagnostics.Parser.*` for malformed declarations | Covered |
 | Multi-token stringification | None | None | Known defect |
-| `#if`, `#ifdef`, `#ifndef`, nesting, inactive groups | `AST.Pipeline.If`, `AST.Pipeline.Ifdef` | Existing directive diagnostics | Covered |
-| `defined`, arithmetic, shift, comparison, logical, conditional conditions | `AST.Pipeline.If` | Existing expression diagnostics | Covered |
-| `#elif` and `#else` selection | `AST.Pipeline.If`, `AST.Pipeline.Ifdef` | `Diagnostics.Preprocessor.UnexpectedElse` | Partial |
+| `#if`, `#ifdef`, `#ifndef`, nesting, inactive groups | `Lexer.If`, `Lexer.Ifdef` | Existing directive diagnostics | Covered |
+| `defined`, arithmetic, shift, comparison, logical, conditional conditions | `Lexer.If` | Existing expression diagnostics | Covered |
+| `#elif` and `#else` selection | `Lexer.If`, `Lexer.Ifdef` | `Diagnostics.Preprocessor.UnexpectedElse` | Partial |
 | `#elif` after an earlier selected branch | None | None | Known defect |
-| `#undef` | `AST.Pipeline.Undef` | `Diagnostics.Preprocessor.MissingUndefIdentifier` | Covered |
-| `#error` and `#warning` control flow | `AST.Pipeline.Warning`, `AST.Pipeline.If` | `Diagnostics.Preprocessor.ErrorDirective` | Partial: warnings are not emitted |
-| Quoted and angle includes, nested relative lookup, search order, include guards | `AST.Pipeline.IncludeQuoted`, `Include.*` | `Diagnostics.Driver.MissingInclude` | Covered |
+| `#undef` | `Lexer.Undef` | `Diagnostics.Preprocessor.MissingUndefIdentifier` | Covered |
+| `#error` and `#warning` control flow | `Lexer.Warning`, `Lexer.If` | `Diagnostics.Preprocessor.ErrorDirective` | Partial: warnings are not emitted |
+| Quoted and angle includes, nested relative lookup, search order, include guards | `Lexer.IncludeQuoted`, `Lexer.IncludeLocalRelative`, `Lexer.IncludeSearchOrder` | `Diagnostics.Driver.MissingInclude` | Covered |
 
 ## Declarations and types
 
@@ -145,6 +146,7 @@ the Sema cases above.
 
 | Area | Cases | Status |
 |---|---|---|
+| Ordered token streams, aliases, values, explicit EOF, and `-I` args | All Lexer fixtures | Covered |
 | Partial YAML AST verification and exact sequences | All AST/Sema fixtures | Covered |
 | Unknown fields, node/tag mismatches, sequence length, and null/scalar mismatch | `AST.Schema.*` | Covered |
 | AST verifier and intrinsic registration completeness | `AST.Schema.VerifierRegistry` | Covered |

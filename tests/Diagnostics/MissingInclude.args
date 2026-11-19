@@ -1,2 +1,2 @@
 -I
-@SOURCE_ROOT@/tests/Include/include-first
+@SOURCE_ROOT@/tests/Lexer/include-first

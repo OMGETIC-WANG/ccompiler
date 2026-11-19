@@ -1,0 +1,19 @@
+int
+id object
+=
+num 7
+;
+int
+id function
+=
+(
+(
+num 1
+)
++
+(
+num 2
+)
+)
+;
+EndOfFile

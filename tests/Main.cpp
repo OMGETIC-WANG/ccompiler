@@ -11,6 +11,7 @@
 #include "Support/ASTPrintTest.h"
 #include "Support/ASTVerifier.h"
 #include "Support/DeclBindingTest.h"
+#include "Support/LexerTest.h"
 #include "Support/LongDoubleLoweringTest.h"
 #include "Support/QualifierCodeGenTest.h"
 #include "Util/Diagnostic.h"
@@ -515,9 +516,26 @@ int main(int argc, char **argv) {
     return RunSourceManagerSelfTest();
   }
 
+  if (argc == 2 && std::string_view(argv[1]) == "--lexer-self-test") {
+    return RunLexerSelfTest();
+  }
+
   if (argc == 4 && std::string_view(argv[1]) == "--diagnostics") {
     try {
       return RunStructuredDiagnosticTest(argv[2], argv[3]);
+    } catch (const std::exception &error) {
+      std::cerr << "FAIL " << argv[2] << '\n' << error.what() << '\n';
+      return 1;
+    }
+  }
+
+  if (argc >= 5 && std::string_view(argv[1]) == "--lexer") {
+    try {
+      std::vector<std::string_view> lexer_args;
+      for (int index = 5; index < argc; ++index) {
+        lexer_args.emplace_back(argv[index]);
+      }
+      return RunLexerTest(argv[2], argv[3], argv[4], lexer_args);
     } catch (const std::exception &error) {
       std::cerr << "FAIL " << argv[2] << '\n' << error.what() << '\n';
       return 1;
@@ -572,6 +590,13 @@ int main(int argc, char **argv) {
                  "       "
               << argv[0]
               << " --diagnostics <source.c> <expected.error.yaml>\n"
+                 "       "
+              << argv[0]
+              << " --lexer <source.c> <expected.tokens> <aliases> "
+                 "[-I <directory>]...\n"
+                 "       "
+              << argv[0]
+              << " --lexer-self-test\n"
                  "       "
               << argv[0]
               << " --decl-binding-self-test\n"

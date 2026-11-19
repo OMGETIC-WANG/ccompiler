@@ -1,0 +1,16 @@
+int
+id before_undef
+=
+num 7
+;
+int
+id value_removed
+=
+num 1
+;
+int
+id feature_removed
+=
+num 2
+;
+EndOfFile

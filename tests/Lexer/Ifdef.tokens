@@ -1,0 +1,31 @@
+int
+id ifdef_defined
+=
+num 1
+;
+int
+id ifdef_function_like
+=
+num 2
+;
+int
+id ifdef_missing_else
+=
+num 3
+;
+int
+id ifndef_missing_then
+=
+num 4
+;
+int
+id ifndef_defined_else
+=
+num 5
+;
+int
+id nested_active
+=
+num 6
+;
+EndOfFile

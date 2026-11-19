@@ -1,7 +1,0 @@
-TranslationUnit:
-  decls:
-    - VarDecl:
-        name: included_value
-        initializer:
-          ValueInitializer:
-            value: {LiteralNum: {value: 7}}

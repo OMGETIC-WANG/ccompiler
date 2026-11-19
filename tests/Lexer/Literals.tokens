@@ -1,0 +1,15 @@
+num 42
+num 0x10U
+num 010L
+num 0b101LL
+num 42ULL
+num .5
+num 1.5F
+num 1.0L
+num 1e2
+num 0x1p2
+string "\"line\\n\""
+string "\"ab\""
+string "\"cd\""
+charlit 'x'
+EndOfFile

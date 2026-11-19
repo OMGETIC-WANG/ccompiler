@@ -1,0 +1,9 @@
+int
+id included_value
+;
+int
+id local
+=
+num 7
+;
+EndOfFile
