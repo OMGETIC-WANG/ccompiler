@@ -1,9 +1,10 @@
 # Test suite
 
-The CTest suite is grouped by test kind. `tests/CMakeLists.txt` owns the shared
-`ccompiler_tests` executable and adds the top-level suites. Lexer, AST
-subgroups, CodeGen, and Diagnostics each register their own tests in a local
-`CMakeLists.txt`.
+The CTest suite is grouped by test kind. `tests/CMakeLists.txt` owns the
+type-specific fixture drivers and shared test support. Lexer, AST subgroups,
+CodeGen, and Diagnostics each register their own fixture tests in a local
+`CMakeLists.txt`. `tests/SelfTests/` builds `ccompiler_self_tests`, a Google
+Test executable whose cases are discovered individually by CTest.
 
 Expected values live beside their fixtures. A `CMakeLists.txt` may name a
 fixture, test, label, or expected file, but must not contain diagnostic text,
@@ -14,7 +15,9 @@ supported. They are not registered with CTest. Known defects are documented in
 `tests/KNOWN_ISSUES.md` rather than being encoded as failing tests.
 
 Configuring requires Python 3 with PyYAML because generated diagnostics are
-produced at build time. The default test-enabled build also requires `yaml-cpp`.
+produced at build time. The default test-enabled build also requires `yaml-cpp`
+and an installed Google Test CMake package. Google Test is found through the
+configured `CMAKE_INSTALL_PREFIX` or `CMAKE_PREFIX_PATH`.
 
 ## Running
 
@@ -24,8 +27,8 @@ cmake --build build -j2
 ctest --test-dir build --output-on-failure
 ```
 
-Useful labels are `lexer`, `ast`, `sema`, `schema`, `codegen`, `include`, and
-`diagnostics`.
+Useful labels are `lexer`, `ast`, `sema`, `schema`, `codegen`, `include`,
+`diagnostics`, and `selftest`.
 For example:
 
 ```bash
@@ -33,12 +36,21 @@ ctest --test-dir build -L lexer --output-on-failure
 ctest --test-dir build -L ast --output-on-failure
 ctest --test-dir build -L sema --output-on-failure
 ctest --test-dir build -L diagnostics --output-on-failure
+ctest --test-dir build -L selftest --output-on-failure
 ```
 
 Run an AST fixture directly when inspecting a mismatch:
 
 ```bash
-build/tests/ccompiler_tests tests/AST/Declarations/FunctionSignatures.c
+build/tests/ccompiler_ast_tests \
+  tests/AST/Declarations/FunctionSignatures.c
+```
+
+Run all Google Test self-tests directly, or filter one suite:
+
+```bash
+build/tests/SelfTests/ccompiler_self_tests
+build/tests/SelfTests/ccompiler_self_tests --gtest_filter='LexerFixture.*'
 ```
 
 ## Test data
@@ -65,10 +77,10 @@ these placeholders:
 - `@SOURCE_ROOT@`: the repository source root.
 - `@BINARY_ROOT@`: the suite's CMake binary directory.
 
-Structured source diagnostics run through `ccompiler_tests` and compare the
-recorded error type, location, and selected fields. Driver diagnostics keep the
-exact stderr runner; for driver cases without a `.c` fixture, the `.args` file
-is the complete argument list.
+Structured source diagnostics run through `ccompiler_diagnostics_tests` and
+compare the recorded error type, location, and selected fields. Driver
+diagnostics keep the exact stderr runner; for driver cases without a `.c`
+fixture, the `.args` file is the complete argument list.
 
 ## Structured diagnostics
 
@@ -77,8 +89,8 @@ Error types and their formatting are generated from
 then use the generated `errs::<ErrorName>` value at the diagnostic call site.
 All Lex, AST, and Sema diagnostics must use a generated error instead of raw
 message chunks. The generated header only forward-declares YAML nodes; `Verify`
-implementations are compiled into the test target, so the compiler does not
-depend on `yaml-cpp`.
+implementations are compiled into the diagnostic test support target, so the
+compiler does not depend on `yaml-cpp`.
 
 Source diagnostic fixtures use this format:
 
@@ -177,10 +189,11 @@ the same partial YAML verifier runs. They may assert expression `type`,
 compound-assignment `compound_op`, `left_value_cast_type`, and
 `result_cast_type` annotations.
 
-`Lexer.Format`, `AST.Declarations.BindingIdentity`,
-`AST.Schema.VerifierRegistry`, `Diagnostics.Formatting`, and
-`Diagnostics.ErrorGenerator` are self-tests. Their expected values remain in
-the test implementation because they are not CMake registration data.
+Unit-level self-tests live in `tests/SelfTests/` and use Google Test. Their
+CTest names start with `SelfTests.` and are discovered with
+`gtest_discover_tests`; category labels remain available alongside the
+`selftest` label. `Diagnostics.ErrorGenerator` remains a Python unittest
+because it exercises the Python diagnostic generator.
 
 ## Adding compiler cases
 
@@ -199,6 +212,8 @@ the test implementation because they are not CMake registration data.
   `tests/AST/Schema/CMakeLists.txt`.
 - Sema fixtures call `ccompiler_add_sema_cases` from
   `tests/Sema/CMakeLists.txt`.
+- Unit behavior that needs direct access to compiler internals belongs in
+  `tests/SelfTests/` as a focused Google Test case.
 - Every new expected file must remain beside the fixture it describes.
 
 See `tests/AST/COVERAGE.md` for the syntax, semantic, lowering, and diagnostic

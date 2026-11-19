@@ -10,6 +10,9 @@ LLVM IR generation, and optional JIT execution. The main CMake targets are:
   type system, semantic analysis, and shared utilities.
 - `ccompiler_codegen`: LLVM IR generation and builtin intrinsic registration.
 - `ccompiler`: the command-line executable with IR output and JIT execution.
+- `ccompiler_ast_tests`, `ccompiler_sema_tests`, `ccompiler_lexer_tests`, and
+  `ccompiler_diagnostics_tests`: test-type-specific fixture drivers.
+- `ccompiler_self_tests`: Google Test executable for unit-level self-tests.
 
 Important locations:
 
@@ -22,23 +25,26 @@ Important locations:
 - `src/CodeGen/LLVMIR/`: LLVM IR generation.
 - `src/JITRunner/`: native execution of generated modules.
 - `src/Util/`: command-line parsing, diagnostics, and shared utilities.
-- `tests/`: CTest-based Lexer, AST, Sema, CodeGen, and diagnostic tests.
+- `tests/`: fixture-driven Lexer, AST, Sema, CodeGen, and diagnostic tests,
+  plus Google Test self-tests under `tests/SelfTests/`.
 - `examples/brainfuck/`: end-to-end compiler integration example and fixtures.
 - `musl_pre_include/`: compatibility headers that must precede system headers.
 - `gdb_util/`: debugging helpers.
 
 Keep related `.h`/`.cpp` files together and register new source files in the
-nearest `CMakeLists.txt`. The shared `tests/ccompiler_tests` executable and
-top-level test suites are registered in `tests/CMakeLists.txt`; suite-local
-fixtures belong in the corresponding `tests/<suite>/CMakeLists.txt`.
+nearest `CMakeLists.txt`. Test-driver targets and shared fixture support are
+defined in `tests/CMakeLists.txt`; suite-local fixtures and registration belong
+in the corresponding `tests/<suite>/CMakeLists.txt`.
 
 ## Build, Test, and Development Commands
 
 Requirements are CMake 3.28+, a C++23 compiler, LLVM 23.1.3 exactly, and
 Python 3 with PyYAML for generated diagnostics. The default test-enabled build
-also requires `yaml-cpp`. Set the `LLVM_DIR` CMake cache variable or environment
-variable if LLVM is not discoverable through `llvm-config`. The Brainfuck
-integration workflow also requires `llvm-as`, `llc`, and a host C compiler.
+also requires `yaml-cpp` and Google Test with a CMake package installed under
+`CMAKE_INSTALL_PREFIX` or `CMAKE_PREFIX_PATH`. Set the `LLVM_DIR` CMake cache
+variable or environment variable if LLVM is not discoverable through
+`llvm-config`. The Brainfuck integration workflow also requires `llvm-as`,
+`llc`, and a host C compiler.
 
 ```bash
 cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
@@ -49,13 +55,14 @@ ctest --test-dir build -L ast --output-on-failure
 ctest --test-dir build -L sema --output-on-failure
 ctest --test-dir build -L codegen --output-on-failure
 ctest --test-dir build -L diagnostics --output-on-failure
+ctest --test-dir build -L selftest --output-on-failure
 build/ccompiler examples/brainfuck/main.c -o build/main.ll
 python3 examples/brainfuck/test.py
 ```
 
 The first two commands configure and build all compiler and test targets. The
 full CTest command runs every registered suite. Useful labels are `lexer`,
-`ast`, `sema`, `schema`, `codegen`, `include`, and `diagnostics`.
+`ast`, `sema`, `schema`, `codegen`, `include`, `diagnostics`, and `selftest`.
 
 A source argument is required. Pass `-` as the source file to read stdin, and
 pass `-o -` to write LLVM IR to stdout:
@@ -133,8 +140,9 @@ for frontend semantic behavior, and a CodeGen JIT case or representative
 IR/self-test for lowering behavior. Add a diagnostics case when changing a
 diagnostic or rejection path. When adding AST/type nodes or printer behavior,
 keep verifier registration, AST output, and schema descriptors in sync; the
-self-tests and `AST.PrintingCLI` cover those paths. No coverage threshold or
-general-purpose unit-test framework is currently configured.
+Google Test self-tests and `AST.PrintingCLI` cover those paths. Add unit-level
+regressions as focused `TEST`/`TEST_F` cases under `tests/SelfTests/`; no
+coverage threshold is currently configured.
 
 ## Commit & Pull Request Guidelines
 

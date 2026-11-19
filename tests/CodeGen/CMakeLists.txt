@@ -29,8 +29,3 @@ foreach(source IN LISTS codegen_sources)
     )
   endif()
 endforeach()
-
-ccompiler_add_self_test(CodeGen.QualifiedIR --qualified-ir-self-test
-                        "codegen;frontend")
-ccompiler_add_self_test(CodeGen.LongDoubleLowering
-                        --long-double-lowering-self-test "codegen;frontend")

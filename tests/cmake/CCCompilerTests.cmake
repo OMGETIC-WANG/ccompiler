@@ -13,12 +13,6 @@ function(ccompiler_set_test_properties test_name labels)
   set_tests_properties("${test_name}" PROPERTIES LABELS "${labels}" TIMEOUT 15)
 endfunction()
 
-function(ccompiler_add_self_test test_name argument labels)
-  add_test(NAME "${test_name}" COMMAND $<TARGET_FILE:ccompiler_tests>
-                                       "${argument}")
-  ccompiler_set_test_properties("${test_name}" "${labels}")
-endfunction()
-
 function(ccompiler_add_ast_cases group)
   file(GLOB ast_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
   list(SORT ast_sources)
@@ -30,7 +24,7 @@ function(ccompiler_add_ast_cases group)
 
     get_filename_component(case_name "${ast_source}" NAME_WE)
     set(test_name "AST.${group}.${case_name}")
-    add_test(NAME "${test_name}" COMMAND $<TARGET_FILE:ccompiler_tests>
+    add_test(NAME "${test_name}" COMMAND $<TARGET_FILE:ccompiler_ast_tests>
                                          "${ast_source}" "${ast_expected}")
     ccompiler_set_test_properties("${test_name}" "ast;frontend")
   endforeach()
@@ -57,7 +51,7 @@ function(ccompiler_add_sema_cases group)
 
     get_filename_component(case_name "${sema_source}" NAME_WE)
     set(test_name "Sema.${group}.${case_name}")
-    add_test(NAME "${test_name}" COMMAND $<TARGET_FILE:ccompiler_tests> --sema
+    add_test(NAME "${test_name}" COMMAND $<TARGET_FILE:ccompiler_sema_tests>
                                          "${sema_source}" "${sema_expected}")
     ccompiler_set_test_properties("${test_name}" "sema;frontend")
   endforeach()
@@ -98,7 +92,7 @@ function(ccompiler_add_lexer_cases)
     get_filename_component(case_name "${lexer_source}" NAME_WE)
     set(test_name "Lexer.${case_name}")
     add_test(NAME "${test_name}"
-             COMMAND $<TARGET_FILE:ccompiler_tests> --lexer "${lexer_source}"
+             COMMAND $<TARGET_FILE:ccompiler_lexer_tests> "${lexer_source}"
                      "${lexer_expected}" "${aliases_file}" ${lexer_args})
     ccompiler_set_test_properties("${test_name}" "lexer;frontend")
   endforeach()

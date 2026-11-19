@@ -6,8 +6,6 @@ add_subdirectory(Schema)
 add_subdirectory(Statements)
 add_subdirectory(Types)
 
-ccompiler_add_self_test(AST.Printing --ast-print-self-test "ast;frontend")
-
 add_test(
   NAME AST.PrintingCLI
   COMMAND

@@ -36,7 +36,7 @@ are listed in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 | Invalid hexadecimal string escapes | Rejected | N/A | N/A | N/A | `Diagnostics.Lex.InvalidHexEscape` | Covered |
 | Character literal tokenization | Covered | Unsupported | N/A | Deferred | `Lexer.Literals`, `tests/Deferred/CodeGen/CharLiterals` | Deferred end-to-end |
 | Comments and whitespace | Covered | Implicit | Implicit | Implicit | `Lexer.CommentsAndWhitespace` | Covered |
-| LF and CRLF line continuations | Covered | Covered | Implicit | Implicit | `Lexer.LineContinuations`, `Diagnostics.Lex.LineContinuationLocation`, `SourceManager.LineContinuations` | Covered |
+| LF and CRLF line continuations | Covered | Covered | Implicit | Implicit | `Lexer.LineContinuations`, `Diagnostics.Lex.LineContinuationLocation`, `SelfTests.SourceManager.*` | Covered |
 
 ## Preprocessor and includes
 
@@ -59,7 +59,7 @@ are listed in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 |---|---|---|---|
 | Builtin integer/floating types, signedness, `long double` | AST/Sema/CodeGen | `AST.Declarations.BuiltinTypes`, `Sema.Core.LongDouble` | Covered |
 | `const`, `volatile`, `restrict` on objects and pointers | AST/Sema/CodeGen | `AST.Declarations.QualifiedDeclarators`, `CodeGen.Qualifiers` | Covered |
-| `static` and `extern` linkage, tentative definitions, local externs | AST/Sema/CodeGen | `AST.Declarations.ExternDeclarations`, `Sema.Core.ExternalLinkage`, `CodeGen.QualifiedIR` | Covered |
+| `static` and `extern` linkage, tentative definitions, local externs | AST/Sema/CodeGen | `AST.Declarations.ExternDeclarations`, `Sema.Core.ExternalLinkage`, `SelfTests.QualifiedCodeGen.*` | Covered |
 | `typedef` and typedef names | AST | `AST.Declarations.Typedefs` | Covered |
 | Struct/union/enum definitions, forward declarations, fixed enum underlying type | AST | `AST.Declarations.Aggregates`, `AST.Declarations.ForwardTags` | Covered |
 | Pointers, arrays, functions, function pointers, pointer-to-array, complex declarators | AST | `AST.Types.FunctionPointers`, `AST.Types.PointersArrays`, `AST.Types.DeclaratorSpiral` | Covered |
@@ -149,7 +149,7 @@ the Sema cases above.
 | Ordered token streams, aliases, values, explicit EOF, and `-I` args | All Lexer fixtures | Covered |
 | Partial YAML AST verification and exact sequences | All AST/Sema fixtures | Covered |
 | Unknown fields, node/tag mismatches, sequence length, and null/scalar mismatch | `AST.Schema.*` | Covered |
-| AST verifier and intrinsic registration completeness | `AST.Schema.VerifierRegistry` | Covered |
+| AST verifier and intrinsic registration completeness | `SelfTests.VerifierRegistry.AllASTAndTypeVerifiersAreRegistered` | Covered |
 | CodeGen source registration and expected-output pairing | CodeGen configure-time orphan check | Covered |
 | Key lexer, preprocessor, parser, Sema, initializer, and control-flow rejection paths | `Diagnostics.*` | Covered |
 | String field named `field_name` in generated diagnostic verifiers | `Diagnostics.Sema.UnknownField` | Known defect |

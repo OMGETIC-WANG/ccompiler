@@ -40,8 +40,8 @@ function(add_frontend_diagnostic_case test_case file_stem)
   ccompiler_require_test_file("${expected_file}"
                               "structured diagnostics for ${test_case}")
   add_test(NAME "Diagnostics.${test_case}"
-           COMMAND $<TARGET_FILE:ccompiler_tests> --diagnostics
-                   "${source_file}" "${expected_file}")
+           COMMAND $<TARGET_FILE:ccompiler_diagnostics_tests> "${source_file}"
+                   "${expected_file}")
   ccompiler_set_test_properties("Diagnostics.${test_case}"
                                 "diagnostics;frontend")
 endfunction()
@@ -133,9 +133,6 @@ ccompiler_add_expected_process_test(
   ON
   LABELS
   "diagnostics;include;frontend")
-
-ccompiler_add_self_test(Diagnostics.Formatting --diagnostic-self-test
-                        "diagnostics;frontend")
 
 add_test(
   NAME Diagnostics.ErrorGenerator

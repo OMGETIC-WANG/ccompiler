@@ -45,7 +45,7 @@ target_include_directories(ccompiler_frontend
                            PUBLIC "${CCOMPILER_GENERATED_DIR}")
 add_dependencies(ccompiler_frontend ccompiler_generate_errors)
 
-# The verification source is compiled only by ccompiler_tests.
+# The verification source is compiled into the diagnostic test support target.
 set(CCOMPILER_ERROR_VERIFY_SOURCE
     "${CCOMPILER_ERROR_VERIFY_SOURCE}"
     PARENT_SCOPE)

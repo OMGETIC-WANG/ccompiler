@@ -13,7 +13,7 @@ function(add_ast_schema_failure test_case file_stem)
     NAME
     "AST.Schema.${test_case}"
     EXECUTABLE
-    "$<TARGET_FILE:ccompiler_tests>"
+    "$<TARGET_FILE:ccompiler_ast_tests>"
     SOURCE_FILE
     "${schema_source}"
     AST_EXPECTED_FILE
@@ -25,9 +25,6 @@ function(add_ast_schema_failure test_case file_stem)
     LABELS
     "ast;schema")
 endfunction()
-
-ccompiler_add_self_test(AST.Schema.VerifierRegistry --check-verifiers
-                        "ast;schema")
 
 add_ast_schema_failure(UnknownField unknown_field)
 add_ast_schema_failure(WrongNode wrong_node)

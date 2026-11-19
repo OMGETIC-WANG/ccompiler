@@ -13,29 +13,19 @@
 #include <format>
 #include <fstream>
 #include <iostream>
-#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
-namespace {
+namespace lexer_test {
 
 class LexerTestError : public std::runtime_error {
 public:
   using std::runtime_error::runtime_error;
 };
-
-struct ExpectedToken {
-  TokenType type;
-  std::optional<std::string> value;
-  std::size_t line;
-};
-
-using AliasMap = std::unordered_map<std::string, TokenType>;
 
 std::string_view TrimWhitespace(std::string_view text) {
   while (!text.empty() &&
@@ -400,293 +390,20 @@ LexSource(const std::filesystem::path &source_path,
   }
 }
 
-template <typename Action>
-bool ExpectLexerTestError(std::string_view expected_message, Action action) {
-  try {
-    action();
-  } catch (const LexerTestError &error) {
-    return std::string_view(error.what()).find(expected_message) !=
-           std::string_view::npos;
-  }
-  return false;
-}
-
-} // namespace
+} // namespace lexer_test
 
 int RunLexerTest(const std::filesystem::path &source_path,
                  const std::filesystem::path &expected_path,
                  const std::filesystem::path &aliases_path,
                  std::span<const std::string_view> args) {
-  const AliasMap aliases = LoadAliases(aliases_path);
-  const std::vector<ExpectedToken> expected =
-      LoadExpectedTokens(expected_path, aliases);
+  const lexer_test::AliasMap aliases = lexer_test::LoadAliases(aliases_path);
+  const std::vector<lexer_test::ExpectedToken> expected =
+      lexer_test::LoadExpectedTokens(expected_path, aliases);
   const std::vector<std::filesystem::path> include_paths =
-      ParseIncludePaths(args);
-  const auto actual = LexSource(source_path, include_paths);
-  VerifyTokens(expected, actual, expected_path);
+      lexer_test::ParseIncludePaths(args);
+  const auto actual = lexer_test::LexSource(source_path, include_paths);
+  lexer_test::VerifyTokens(expected, actual, expected_path);
 
   std::cout << "PASS " << source_path << '\n';
-  return 0;
-}
-
-int RunLexerSelfTest() {
-  const std::filesystem::path aliases_path = "<aliases>";
-  const std::filesystem::path tokens_path = "<tokens>";
-
-  try {
-    const AliasMap aliases = ParseAliases(
-        {
-            "KwInt int",
-            "Semicolon ;",
-        },
-        aliases_path);
-    const std::vector<ExpectedToken> expected = ParseExpectedTokens(
-        {
-            "KwInt 123",
-            "; ;",
-            "Identifier \"hello\\tworld\"",
-            "EndOfFile",
-            "",
-        },
-        aliases, tokens_path);
-    if (expected.size() != 4 || expected[0].type != TokenType::KwInt ||
-        expected[0].value != "123" ||
-        expected[1].type != TokenType::Semicolon || expected[1].value != ";" ||
-        expected[2].type != TokenType::Identifier ||
-        expected[2].value != "hello\tworld" ||
-        expected[3].type != TokenType::EndOfFile ||
-        expected[3].value.has_value()) {
-      std::cerr << "Lexer fixture parser did not preserve token descriptions\n";
-      return 1;
-    }
-  } catch (const std::exception &error) {
-    std::cerr << "Lexer fixture parser rejected valid input: " << error.what()
-              << '\n';
-    return 1;
-  }
-
-  const AliasMap aliases = ParseAliases(
-      {
-          "KwInt int",
-          "Semicolon ;",
-      },
-      aliases_path);
-
-  try {
-    const std::vector<std::string_view> args{"-I", "first", "-I", "second"};
-    const std::vector<std::filesystem::path> include_paths =
-        ParseIncludePaths(args);
-    const std::vector<std::string_view> no_args;
-    if (include_paths.size() != 2 || include_paths[0] != "first" ||
-        include_paths[1] != "second" || !ParseIncludePaths(no_args).empty()) {
-      std::cerr << "Lexer include argument parsing returned wrong paths\n";
-      return 1;
-    }
-  } catch (const std::exception &error) {
-    std::cerr << "Lexer include argument parser rejected valid input: "
-              << error.what() << '\n';
-    return 1;
-  }
-
-  struct ErrorCase {
-    std::string_view message;
-    bool matches;
-  };
-  const std::vector<ErrorCase> cases = {
-      {
-          .message = "unknown lexer test argument",
-          .matches = ExpectLexerTestError(
-              "unknown lexer test argument",
-              [] {
-                const std::vector<std::string_view> args{"--unknown"};
-                ParseIncludePaths(args);
-              }),
-      },
-      {
-          .message = "missing directory after '-I'",
-          .matches = ExpectLexerTestError(
-              "missing directory after '-I'",
-              [] {
-                const std::vector<std::string_view> args{"-I"};
-                ParseIncludePaths(args);
-              }),
-      },
-      {
-          .message = "unknown TokenType full name",
-          .matches = ExpectLexerTestError(
-              "unknown TokenType full name",
-              [&] { ParseAliases({"Bogus alias"}, aliases_path); }),
-      },
-      {
-          .message = "duplicate alias",
-          .matches = ExpectLexerTestError("duplicate alias",
-                                          [&] {
-                                            ParseAliases(
-                                                {
-                                                    "KwInt value",
-                                                    "KwChar value",
-                                                },
-                                                aliases_path);
-                                          }),
-      },
-      {
-          .message = "duplicate alias for TokenType",
-          .matches = ExpectLexerTestError("duplicate alias for TokenType",
-                                          [&] {
-                                            ParseAliases(
-                                                {
-                                                    "KwInt first",
-                                                    "KwInt second",
-                                                },
-                                                aliases_path);
-                                          }),
-      },
-      {
-          .message = "unknown token type or alias",
-          .matches = ExpectLexerTestError(
-              "unknown token type or alias",
-              [&] { ParseExpectedTokens({"missing"}, aliases, tokens_path); }),
-      },
-      {
-          .message = "missing EndOfFile",
-          .matches = ExpectLexerTestError("missing EndOfFile",
-                                          [&] {
-                                            ParseExpectedTokens(
-                                                {
-                                                    "int 1",
-                                                },
-                                                aliases, tokens_path);
-                                          }),
-      },
-      {
-          .message = "EndOfFile must be the last token",
-          .matches = ExpectLexerTestError("EndOfFile must be the last token",
-                                          [&] {
-                                            ParseExpectedTokens(
-                                                {
-                                                    "EndOfFile",
-                                                    "int 1",
-                                                },
-                                                aliases, tokens_path);
-                                          }),
-      },
-      {
-          .message = "must be quoted",
-          .matches = ExpectLexerTestError("must be quoted",
-                                          [&] {
-                                            ParseExpectedTokens(
-                                                {
-                                                    "Identifier hello world",
-                                                    "EndOfFile",
-                                                },
-                                                aliases, tokens_path);
-                                          }),
-      },
-      {
-          .message = "unterminated quoted token value",
-          .matches = ExpectLexerTestError("unterminated quoted token value",
-                                          [&] {
-                                            ParseExpectedTokens(
-                                                {
-                                                    "Identifier \"unterminated",
-                                                    "EndOfFile",
-                                                },
-                                                aliases, tokens_path);
-                                          }),
-      },
-      {
-          .message = "unknown escape sequence",
-          .matches = ExpectLexerTestError("unknown escape sequence",
-                                          [&] {
-                                            ParseExpectedTokens(
-                                                {
-                                                    "Identifier \"bad\\q\"",
-                                                    "EndOfFile",
-                                                },
-                                                aliases, tokens_path);
-                                          }),
-      },
-      {
-          .message = "type mismatch",
-          .matches = ExpectLexerTestError(
-              "type mismatch",
-              [&] {
-                const std::vector<ExpectedToken> expected = ParseExpectedTokens(
-                    {
-                        "int 1",
-                        "EndOfFile",
-                    },
-                    aliases, tokens_path);
-                VerifyTokens(expected,
-                             {
-                                 {TokenType::Identifier, "x"},
-                                 {TokenType::EndOfFile, ""},
-                             },
-                             tokens_path);
-              }),
-      },
-      {
-          .message = "value mismatch",
-          .matches = ExpectLexerTestError(
-              "value mismatch",
-              [&] {
-                const std::vector<ExpectedToken> expected = ParseExpectedTokens(
-                    {
-                        "int 1",
-                        "EndOfFile",
-                    },
-                    aliases, tokens_path);
-                VerifyTokens(expected,
-                             {
-                                 {TokenType::KwInt, "2"},
-                                 {TokenType::EndOfFile, ""},
-                             },
-                             tokens_path);
-              }),
-      },
-      {
-          .message = "missing token",
-          .matches =
-              ExpectLexerTestError("missing token",
-                                   [&] {
-                                     const std::vector<ExpectedToken> expected =
-                                         ParseExpectedTokens(
-                                             {
-                                                 "EndOfFile",
-                                             },
-                                             aliases, tokens_path);
-                                     VerifyTokens(expected, {}, tokens_path);
-                                   }),
-      },
-      {
-          .message = "unexpected token",
-          .matches = ExpectLexerTestError(
-              "unexpected token",
-              [&] {
-                const std::vector<ExpectedToken> expected = ParseExpectedTokens(
-                    {
-                        "EndOfFile",
-                    },
-                    aliases, tokens_path);
-                VerifyTokens(expected,
-                             {
-                                 {TokenType::EndOfFile, ""},
-                                 {TokenType::Identifier, "extra"},
-                             },
-                             tokens_path);
-              }),
-      },
-  };
-
-  for (const ErrorCase &test_case : cases) {
-    if (!test_case.matches) {
-      std::cerr << "Lexer fixture parser accepted invalid input or reported "
-                   "the wrong error for "
-                << test_case.message << '\n';
-      return 1;
-    }
-  }
-
-  std::cout << "PASS lexer fixture parsing\n";
   return 0;
 }

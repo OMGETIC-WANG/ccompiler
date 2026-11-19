@@ -6,5 +6,3 @@ foreach(include_case IncludeQuoted IncludeLocalRelative IncludeSearchOrder)
     APPEND
     PROPERTY LABELS include)
 endforeach()
-
-ccompiler_add_self_test(Lexer.Format --lexer-self-test "lexer;frontend")
