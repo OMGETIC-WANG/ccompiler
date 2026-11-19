@@ -10,6 +10,7 @@
 #include "SourceManager.h"
 #include "Support/ASTPrintTest.h"
 #include "Support/ASTVerifier.h"
+#include "Support/CmdLineTest.h"
 #include "Support/DeclBindingTest.h"
 #include "Support/LexerTest.h"
 #include "Support/LongDoubleLoweringTest.h"
@@ -563,6 +564,10 @@ int main(int argc, char **argv) {
     return RunASTPrintSelfTest();
   }
 
+  if (argc == 2 && std::string_view(argv[1]) == "--cmdline-self-test") {
+    return RunCmdLineSelfTest();
+  }
+
   if (argc == 2 && std::string_view(argv[1]) == "--qualified-ir-self-test") {
     return RunQualifierCodeGenSelfTest();
   }
@@ -603,6 +608,9 @@ int main(int argc, char **argv) {
                  "       "
               << argv[0]
               << " --ast-print-self-test\n"
+                 "       "
+              << argv[0]
+              << " --cmdline-self-test\n"
                  "       "
               << argv[0]
               << " --qualified-ir-self-test\n"

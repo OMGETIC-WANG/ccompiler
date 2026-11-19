@@ -1,9 +1,11 @@
 #pragma once
 
 #include <charconv>
+#include <format>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 class CmdLineArgParseError : public std::runtime_error {
@@ -11,13 +13,14 @@ public:
   using std::runtime_error::runtime_error;
 };
 
-enum class CmdLineArgType { None, Single };
+enum class CmdLineArgType { None, Single, Repeatable };
 
 struct CmdLineArgDesc {
 public:
   std::string name;
   CmdLineArgType type;
   void *ptr;
+  int *input_count;
   void (*parser)(void *, std::string_view);
 };
 
@@ -45,7 +48,7 @@ template <typename T> struct IsVector<std::vector<T>> {
 template <typename T>
   requires IsVector<T>::value
 struct CmdLineArgTypeOf<T> {
-  static constexpr CmdLineArgType value = CmdLineArgType::Single;
+  static constexpr CmdLineArgType value = CmdLineArgType::Repeatable;
 };
 
 template <typename T> struct CmdLineArgParser {};
@@ -58,11 +61,11 @@ struct CmdLineArgParser<T> {
     auto [ptr_end, ec] =
         std::from_chars(str.data(), str.data() + str.size(), *pval);
     if (ec != std::errc{}) {
-      throw CmdLineArgParseError("Failed to parse value: " + std::string(str));
+      throw CmdLineArgParseError(std::format("Failed to parse value: {}", str));
     }
     if (ptr_end != str.data() + str.size()) {
-      throw CmdLineArgParseError("Failed to parse rest of the value: " +
-                                 std::string(str));
+      throw CmdLineArgParseError(
+          std::format("Failed to parse rest of the value: {}", str));
     }
   }
 };
@@ -85,8 +88,8 @@ template <> struct CmdLineArgParser<bool> {
       } else if (str == "1" || str == "true") {
         *pval = true;
       } else {
-        throw CmdLineArgParseError("Failed to parse boolean value: " +
-                                   std::string(str));
+        throw CmdLineArgParseError(
+            std::format("Failed to parse boolean value: {}", str));
       }
     }
   }
@@ -112,17 +115,19 @@ public:
   static std::vector<std::string_view> Parse(int argc, char **argv);
 };
 
-#define CMDLINE_ARG_IMPL_4(type, name, flag_name, def_val)                     \
-  inline type name = def_val;                                                  \
-  inline auto __cmdline_arg_##name = []() {                                    \
-    CmdLine::CmdLineArgs().push_back({flag_name,                               \
-                                      CmdLineArgTypeOf<type>::value, &name,    \
-                                      &CmdLineArgParser<type>::Parse});        \
+#define CMDLINE_ARG_IMPL_4(TYPE, NAME, FLAG_NAME, DEFAULT_VALUE)               \
+  inline TYPE NAME = DEFAULT_VALUE;                                            \
+  inline int __cmdline_arg_##NAME##_input_count = 0;                           \
+  inline auto __cmdline_arg_##NAME = []() {                                    \
+    CmdLine::CmdLineArgs().push_back({FLAG_NAME,                               \
+                                      CmdLineArgTypeOf<TYPE>::value, &NAME,    \
+                                      &__cmdline_arg_##NAME##_input_count,     \
+                                      &CmdLineArgParser<TYPE>::Parse});        \
     return 0;                                                                  \
   }();
 
-#define CMDLINE_ARG_IMPL_3(type, name, def_val)                                \
-  CMDLINE_ARG_IMPL_4(type, name, #name, def_val)
+#define CMDLINE_ARG_IMPL_3(TYPE, NAME, DEFAULT_VALUE)                          \
+  CMDLINE_ARG_IMPL_4(TYPE, NAME, #NAME, DEFAULT_VALUE)
 
 #define GET_CMDLINE_ARG_IMPL(_1, _2, _3, _4, macro, ...) macro
 

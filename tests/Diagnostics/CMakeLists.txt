@@ -118,6 +118,21 @@ add_diagnostic_case(Driver.MissingInput MissingInput)
 add_diagnostic_case(Driver.UnknownOption UnknownOption)
 add_diagnostic_case(Driver.MissingInclude MissingInclude)
 add_diagnostic_case(Driver.InvalidOutputPath InvalidOutputPath)
+add_diagnostic_case(Driver.DuplicateColor DuplicateColor)
+
+ccompiler_add_expected_process_test(
+  NAME
+  Diagnostics.Driver.AttachedIncludePath
+  EXECUTABLE
+  "$<TARGET_FILE:ccompiler>"
+  SOURCE_FILE
+  "${PROJECT_SOURCE_DIR}/tests/Lexer/IncludeSearchOrder.c"
+  ARGS_FILE
+  "${CMAKE_CURRENT_SOURCE_DIR}/AttachedIncludePath.args"
+  EXPECT_SUCCESS
+  ON
+  LABELS
+  "diagnostics;include;frontend")
 
 ccompiler_add_self_test(Diagnostics.Formatting --diagnostic-self-test
                         "diagnostics;frontend")

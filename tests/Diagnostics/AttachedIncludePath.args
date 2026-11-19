@@ -1,0 +1,3 @@
+--no-ir
+-I@SOURCE_ROOT@/tests/Lexer/include-first
+-I@SOURCE_ROOT@/tests/Lexer/include-second
