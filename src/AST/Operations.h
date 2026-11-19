@@ -6,7 +6,7 @@
 #include <optional>
 
 class FunctionInvocation : public Expr {
-  ASTNodeImpl(FunctionInvocation);
+  ASTNodeImpl(FunctionInvocation, Expr);
   AST_PRINT_MEMBERS_DECL();
 
 public:
@@ -15,7 +15,7 @@ public:
 };
 
 class SequenceEval : public Expr {
-  ASTNodeImpl(SequenceEval);
+  ASTNodeImpl(SequenceEval, Expr);
   AST_PRINT_MEMBERS_DECL();
 
 public:
@@ -77,7 +77,7 @@ MAKE_ENUM(UnaryOpType, UNARY_OP_TYPE_VALUES)
 REGISTER_ENUM(UnaryOpType, UNARY_OP_TYPE_VALUES)
 
 class UnaryOp : public Expr {
-  ASTNodeImpl(UnaryExpr);
+  ASTNodeImpl(UnaryExpr, Expr);
   AST_PRINT_MEMBERS_DECL();
 
 public:
@@ -90,7 +90,7 @@ public:
 };
 
 class TypeCast : public UnaryOp {
-  ASTNodeImpl(TypeCast);
+  ASTNodeImpl(TypeCast, UnaryOp);
   AST_PRINT_FIELDS_DECL();
 
 public:
@@ -101,7 +101,7 @@ public:
 };
 
 class ImplicitCast : public UnaryOp {
-  ASTNodeImpl(ImplicitCast);
+  ASTNodeImpl(ImplicitCast, UnaryOp);
   AST_PRINT_FIELDS_DECL();
 
 public:
@@ -112,7 +112,7 @@ public:
 };
 
 class BinaryOp : public Expr {
-  ASTNodeImpl(BinaryExpr);
+  ASTNodeImpl(BinaryExpr, Expr);
   AST_PRINT_MEMBERS_DECL();
 
 public:
@@ -130,7 +130,7 @@ public:
 };
 
 class GetField : public UnaryOp {
-  ASTNodeImpl(GetField);
+  ASTNodeImpl(GetField, UnaryOp);
   AST_PRINT_FIELDS_DECL();
 
 public:
@@ -141,7 +141,7 @@ public:
 };
 
 class PtrGetField : public UnaryOp {
-  ASTNodeImpl(PtrGetField);
+  ASTNodeImpl(PtrGetField, UnaryOp);
   AST_PRINT_FIELDS_DECL();
 
 public:

@@ -39,7 +39,7 @@ llvm::Constant *LowerFloatingConstant(llvm::Type *llvm_type,
 
 llvm::Constant *LowerNumericConstant(TypeRef type, ASTNode *node,
                                      GenContext &context) {
-  auto *expr = dynamic_cast<Expr *>(node);
+  auto *expr = node ? node->DynCast<Expr>() : nullptr;
   ASSERT(expr != nullptr && expr->constant_value.has_value(),
          "Sema did not cache a required constant value");
 

@@ -20,7 +20,7 @@ RValue GenSizeof(std::vector<IntrinsicCallArg> &args,
     operand_type = *type;
   } else {
     auto *expression = std::get<std::unique_ptr<ASTNode>>(args[0]).get();
-    auto *expr = dynamic_cast<Expr *>(expression);
+    auto *expr = expression ? expression->DynCast<Expr>() : nullptr;
     ASSERT(expr != nullptr && expr->type != nullptr,
            "sizeof expression is missing its Sema type");
     operand_type = expr->type;

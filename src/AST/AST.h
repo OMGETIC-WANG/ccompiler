@@ -9,6 +9,7 @@
 #include <variant>
 
 class NamedDecl : public ASTNode {
+  ASTNodeImpl(NamedDecl, ASTNode);
   AST_PRINT_ROLE_DECL(Declaration);
 
 public:
@@ -17,7 +18,9 @@ public:
   std::string_view name;
 };
 
-class ValueDecl : public NamedDecl {};
+class ValueDecl : public NamedDecl {
+  ASTNodeImpl(ValueDecl, NamedDecl);
+};
 
 using NumericValue = std::variant<long double, uint64_t, int64_t>;
 
@@ -32,6 +35,8 @@ MAKE_ENUM(ValueCategory, VALUE_CATEGORY_VALUES)
 REGISTER_ENUM(ValueCategory, VALUE_CATEGORY_VALUES)
 
 class Expr : public ASTNode {
+  ASTNodeImpl(Expr, ASTNode);
+
 public:
   TypeRef type = nullptr;
   ValueCategory value_category = ValueCategory::RValue;
@@ -42,7 +47,7 @@ public:
   std::string ToStringImpl() const override { return std::format("{}", field); }
 
 class LiteralString : public Expr {
-  ASTNodeImpl(LiteralString);
+  ASTNodeImpl(LiteralString, Expr);
   AST_PRINT_FIELDS_DECL();
 
 public:
@@ -50,7 +55,7 @@ public:
 };
 
 class LiteralNum : public Expr {
-  ASTNodeImpl(LiteralNum);
+  ASTNodeImpl(LiteralNum, Expr);
   AST_PRINT_FIELDS_DECL();
 
 public:
@@ -58,11 +63,12 @@ public:
 };
 
 class Stmt : public ASTNode {
+  ASTNodeImpl(Stmt, ASTNode);
   AST_PRINT_ROLE_DECL(Statement);
 };
 
 class DeclStmt : public Stmt {
-  ASTNodeImpl(DeclStmt);
+  ASTNodeImpl(DeclStmt, Stmt);
   AST_PRINT_CHILDREN_DECL();
 
 public:
@@ -114,7 +120,7 @@ private:
 };
 
 class ParamDecl : public ValueDecl {
-  ASTNodeImpl(ParamDecl);
+  ASTNodeImpl(ParamDecl, ValueDecl);
   AST_PRINT_FIELDS_DECL();
 
 public:
@@ -122,7 +128,7 @@ public:
 };
 
 class VarDecl : public ValueDecl {
-  ASTNodeImpl(VarDecl);
+  ASTNodeImpl(VarDecl, ValueDecl);
   AST_PRINT_MEMBERS_DECL();
 
 public:
@@ -132,7 +138,7 @@ public:
 };
 
 class TypedefDecl : public NamedDecl {
-  ASTNodeImpl(TypedefDecl);
+  ASTNodeImpl(TypedefDecl, NamedDecl);
   AST_PRINT_FIELDS_DECL();
 
 public:
@@ -140,7 +146,7 @@ public:
 };
 
 class VarRef : public Expr {
-  ASTNodeImpl(VarRef);
+  ASTNodeImpl(VarRef, Expr);
   AST_PRINT_FIELDS_DECL();
 
 public:
@@ -152,7 +158,7 @@ public:
 };
 
 class CompoundStmt : public Stmt {
-  ASTNodeImpl(CompoundStmt);
+  ASTNodeImpl(CompoundStmt, Stmt);
   AST_PRINT_CHILDREN_DECL();
 
 public:
@@ -166,7 +172,7 @@ public:
 };
 
 class StructDecl : public NamedDecl {
-  ASTNodeImpl(StructDecl);
+  ASTNodeImpl(StructDecl, NamedDecl);
   AST_PRINT_MEMBERS_DECL();
 
 public:
@@ -175,7 +181,7 @@ public:
 };
 
 class UnionDecl : public NamedDecl {
-  ASTNodeImpl(UnionDecl);
+  ASTNodeImpl(UnionDecl, NamedDecl);
   AST_PRINT_MEMBERS_DECL();
 
 public:
@@ -184,7 +190,7 @@ public:
 };
 
 class IfStmt : public Stmt {
-  ASTNodeImpl(IfStmt);
+  ASTNodeImpl(IfStmt, Stmt);
   AST_PRINT_CHILDREN_DECL();
 
 public:
@@ -194,7 +200,7 @@ public:
 };
 
 class WhileStmt : public Stmt {
-  ASTNodeImpl(WhileStmt);
+  ASTNodeImpl(WhileStmt, Stmt);
   AST_PRINT_CHILDREN_DECL();
 
 public:
@@ -203,7 +209,7 @@ public:
 };
 
 class DoWhileStmt : public Stmt {
-  ASTNodeImpl(DoWhileStmt);
+  ASTNodeImpl(DoWhileStmt, Stmt);
   AST_PRINT_CHILDREN_DECL();
 
 public:
@@ -212,7 +218,7 @@ public:
 };
 
 class ForStmt : public Stmt {
-  ASTNodeImpl(ForStmt);
+  ASTNodeImpl(ForStmt, Stmt);
   AST_PRINT_CHILDREN_DECL();
 
 public:
@@ -223,7 +229,7 @@ public:
 };
 
 class CaseStmt : public Stmt {
-  ASTNodeImpl(CaseStmt);
+  ASTNodeImpl(CaseStmt, Stmt);
   AST_PRINT_CHILDREN_DECL();
 
 public:
@@ -232,7 +238,7 @@ public:
 };
 
 class DefaultStmt : public Stmt {
-  ASTNodeImpl(DefaultStmt);
+  ASTNodeImpl(DefaultStmt, Stmt);
   AST_PRINT_CHILDREN_DECL();
 
 public:
@@ -240,7 +246,7 @@ public:
 };
 
 class SwitchStmt : public Stmt {
-  ASTNodeImpl(SwitchStmt);
+  ASTNodeImpl(SwitchStmt, Stmt);
   AST_PRINT_CHILDREN_DECL();
 
   DefaultStmt *DefaultBlock() {
@@ -258,15 +264,15 @@ public:
 };
 
 class BreakStmt : public Stmt {
-  ASTNodeImpl(BreakStmt);
+  ASTNodeImpl(BreakStmt, Stmt);
 };
 
 class ContinueStmt : public Stmt {
-  ASTNodeImpl(ContinueStmt);
+  ASTNodeImpl(ContinueStmt, Stmt);
 };
 
 class ReturnStmt : public Stmt {
-  ASTNodeImpl(ReturnStmt);
+  ASTNodeImpl(ReturnStmt, Stmt);
   AST_PRINT_CHILDREN_DECL();
 
 public:
@@ -274,7 +280,7 @@ public:
 };
 
 class FunctionDecl : public ValueDecl {
-  ASTNodeImpl(FunctionDecl);
+  ASTNodeImpl(FunctionDecl, ValueDecl);
   AST_PRINT_MEMBERS_DECL();
 
 public:
@@ -285,7 +291,7 @@ public:
 };
 
 class EnumElemDecl : public ValueDecl {
-  ASTNodeImpl(EnumElemDecl);
+  ASTNodeImpl(EnumElemDecl, ValueDecl);
   AST_PRINT_MEMBERS_DECL();
 
 public:
@@ -295,7 +301,7 @@ public:
 };
 
 class EnumDecl : public NamedDecl {
-  ASTNodeImpl(EnumDecl);
+  ASTNodeImpl(EnumDecl, NamedDecl);
   AST_PRINT_MEMBERS_DECL();
 
 public:
@@ -306,7 +312,7 @@ public:
 };
 
 class LabelStmt : public Stmt {
-  ASTNodeImpl(LabelStmt);
+  ASTNodeImpl(LabelStmt, Stmt);
   AST_PRINT_FIELDS_DECL();
 
 public:
@@ -316,7 +322,7 @@ public:
 };
 
 class GotoStmt : public Stmt {
-  ASTNodeImpl(GotoStmt);
+  ASTNodeImpl(GotoStmt, Stmt);
   AST_PRINT_FIELDS_DECL();
 
 public:
@@ -326,11 +332,11 @@ public:
 };
 
 class EmptyStmt : public Stmt {
-  ASTNodeImpl(EmptyStmt);
+  ASTNodeImpl(EmptyStmt, Stmt);
 };
 
 class ConditionalExpr : public Expr {
-  ASTNodeImpl(ConditionalExpr);
+  ASTNodeImpl(ConditionalExpr, Expr);
   AST_PRINT_MEMBERS_DECL();
 
 public:

@@ -515,6 +515,25 @@ VERIFY_FIELDS("decls")
 VERIFY_FIELD(decls)
 END_VERIFY_NODE()
 
+BEGIN_VERIFY_NODE(NamedDecl)
+VERIFY_FIELDS("name")
+VERIFY_FIELD(name)
+END_VERIFY_NODE()
+
+BEGIN_VERIFY_NODE(ValueDecl)
+VERIFY_FIELDS("name")
+VERIFY_FIELD(name)
+END_VERIFY_NODE()
+
+BEGIN_VERIFY_NODE(Expr)
+VERIFY_FIELDS("type", "value_category", "constant_value")
+VerifyExprFields(*node, expected, context);
+END_VERIFY_NODE()
+
+BEGIN_VERIFY_NODE(Stmt)
+VERIFY_FIELDS()
+END_VERIFY_NODE()
+
 BEGIN_VERIFY_NODE(DeclStmt)
 VERIFY_FIELDS("decls")
 VERIFY_FIELD(decls)
@@ -929,6 +948,10 @@ const bool context_verifiers_registered = [] {
 #define REGISTER_CONTEXT_VERIFIER(NODE)                                        \
   ContextVerifiers().emplace(#NODE, Verify##NODE)
   REGISTER_CONTEXT_VERIFIER(TranslationUnit);
+  REGISTER_CONTEXT_VERIFIER(NamedDecl);
+  REGISTER_CONTEXT_VERIFIER(ValueDecl);
+  REGISTER_CONTEXT_VERIFIER(Expr);
+  REGISTER_CONTEXT_VERIFIER(Stmt);
   REGISTER_CONTEXT_VERIFIER(DeclStmt);
   REGISTER_CONTEXT_VERIFIER(CompoundStmt);
   REGISTER_CONTEXT_VERIFIER(FunctionDecl);

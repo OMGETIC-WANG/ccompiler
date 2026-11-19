@@ -150,7 +150,7 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
            "Sema accepted a non-numeric builtin initializer");
     auto *val_init = initializer->DynCast<ValueInitializer>();
     ASSERT(val_init, "Sema accepted an invalid builtin initializer");
-    auto *value = dynamic_cast<Expr *>(val_init->value.get());
+    auto *value = val_init->value ? val_init->value->DynCast<Expr>() : nullptr;
     ASSERT(value && value->type == builtin_type,
            "Sema left an initializer with the wrong type");
     return LowerNumericConstant(value->type, value, context);
@@ -162,7 +162,7 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
     auto *cast = val_init->value->DynCast<ImplicitCast>();
     ASSERT(cast && cast->target_type == ptr_type,
            "Sema omitted the global pointer initializer conversion");
-    auto *source = dynamic_cast<Expr *>(cast->operand.get());
+    auto *source = cast->operand ? cast->operand->DynCast<Expr>() : nullptr;
     ASSERT(source && source->constant_value.has_value(),
            "Sema did not retain the pointer initializer constant");
     auto *intptr = LowerNumericConstant(source->type, source, context);

@@ -912,7 +912,7 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
       }
 
       for (const auto &val : case_stmt->case_vals) {
-        auto *case_expr = dynamic_cast<Expr *>(val.get());
+        auto *case_expr = val ? val->DynCast<Expr>() : nullptr;
         ASSERT(case_expr && case_expr->type == switched_val.c_type,
                "Sema left a switch case value with the wrong type");
         auto *folded =

@@ -227,7 +227,7 @@ public:
 
 private:
   Expr *AsExpr(ASTNode *node) {
-    auto *expr = dynamic_cast<Expr *>(node);
+    auto *expr = node ? node->DynCast<Expr>() : nullptr;
     ASSERT(expr != nullptr, "Expected an expression AST node");
     return expr;
   }
@@ -334,16 +334,16 @@ private:
 
   ExprInfo AnalyzeVarRef(VarRef *var_ref) {
     ValueDecl *decl = var_ref->decl;
-    if (auto *var = dynamic_cast<VarDecl *>(decl)) {
+    if (auto *var = decl->DynCast<VarDecl>()) {
       return {var->type, ValueCategory::LValue};
     }
-    if (auto *param = dynamic_cast<ParamDecl *>(decl)) {
+    if (auto *param = decl->DynCast<ParamDecl>()) {
       return {AdjustedType(param->type, types), ValueCategory::LValue};
     }
-    if (auto *function = dynamic_cast<FunctionDecl *>(decl)) {
+    if (auto *function = decl->DynCast<FunctionDecl>()) {
       return {function->function_type, ValueCategory::FunctionDesignator};
     }
-    if (auto *enumerator = dynamic_cast<EnumElemDecl *>(decl)) {
+    if (auto *enumerator = decl->DynCast<EnumElemDecl>()) {
       ASSERT(enumerator->type != nullptr,
              "Enum constant is missing its type after analysis");
       return {enumerator->type, ValueCategory::RValue};
@@ -1275,7 +1275,7 @@ private:
       AnalyzeReturn(return_stmt);
       return;
     }
-    if (dynamic_cast<Expr *>(current)) {
+    if (current->Is<Expr>()) {
       AnalyzeExpr(node);
       return;
     }
@@ -1347,7 +1347,7 @@ private:
       return literal->value;
     }
     if (auto *var_ref = expr->DynCast<VarRef>()) {
-      if (auto *enumerator = dynamic_cast<EnumElemDecl *>(var_ref->decl)) {
+      if (auto *enumerator = var_ref->decl->DynCast<EnumElemDecl>()) {
         return enumerator->constant_value;
       }
       return std::nullopt;

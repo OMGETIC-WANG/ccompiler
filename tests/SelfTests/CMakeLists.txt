@@ -1,6 +1,7 @@
 add_executable(
   ccompiler_self_tests
   ASTPrintingTest.cpp
+  ASTNodeTest.cpp
   CmdLineTest.cpp
   CodeGenTestSupport.cpp
   DeclarationBindingTest.cpp

@@ -61,7 +61,7 @@ struct IntrinsicDesc {
 };
 
 class IntrinsicCall : public Expr {
-  ASTNodeImpl(IntrinsicCall);
+  ASTNodeImpl(IntrinsicCall, Expr);
   AST_PRINT_MEMBERS_DECL();
 
   RValue Eval(ExprEmitter *emitter) { return desc->evaluator(args, emitter); }

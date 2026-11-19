@@ -324,6 +324,7 @@ def render_header(definitions: list[ErrorDefinition]) -> str:
       lines.append("")
     lines.extend(
       [
+        f'  std::string_view GetTypeName() const override {{ return "{error.name}"; }}',
         "  std::string ToString() const override;",
         "  bool Verify(const YAML::Node &node) const;",
         "};",
@@ -465,14 +466,17 @@ def render_verify_source(definitions: list[ErrorDefinition]) -> str:
     [
       "bool VerifyErrorFields(const IError &error, std::string_view error_name,",
       "                       const YAML::Node &fields) {",
+      "  if (error.GetTypeName() != error_name) {",
+      "    return false;",
+      "  }",
     ]
   )
   for error in definitions:
     lines.extend(
       [
         f'  if (error_name == "{error.name}") {{',
-        f"    const auto *typed = dynamic_cast<const {error.name} *>(&error);",
-        "    return typed != nullptr && typed->Verify(fields);",
+        f"    const auto &typed = static_cast<const {error.name} &>(error);",
+        "    return typed.Verify(fields);",
         "  }",
       ]
     )

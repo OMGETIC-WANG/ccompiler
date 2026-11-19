@@ -7,7 +7,7 @@
 #include <vector>
 
 class TranslationUnit : public ASTNode {
-  ASTNodeImpl(TranslationUnit);
+  ASTNodeImpl(TranslationUnit, ASTNode);
   AST_PRINT_ROLE_DECL(TranslationUnit);
   AST_PRINT_CHILDREN_DECL();
 

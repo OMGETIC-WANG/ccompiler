@@ -14,6 +14,10 @@
 // clang-format off
 #define AST_NODE_TYPE_VALUES(x)\
   x(Unknown)\
+  x(NamedDecl)\
+  x(ValueDecl)\
+  x(Expr)\
+  x(Stmt)\
   x(TranslationUnit)\
   x(FunctionDecl)\
   x(StructDecl)\
@@ -79,7 +83,7 @@ public:
 
   template <std::derived_from<ASTNode> T> T *As() {
 #ifdef ENABLE_AS_TYPE_CHECK
-    if (GetType() != T::__type) {
+    if (!Is<T>()) {
       RAISE_ERROR("Invalid ASTNode type cast from ", GetType(), " to ",
                   T::__type);
     }
@@ -89,7 +93,7 @@ public:
 
   template <std::derived_from<ASTNode> T> const T *As() const {
 #ifdef ENABLE_AS_TYPE_CHECK
-    if (GetType() != T::__type) {
+    if (!Is<T>()) {
       RAISE_ERROR("Invalid ASTNode type cast from ", GetType(), " to ",
                   T::__type);
     }
@@ -98,27 +102,37 @@ public:
   }
 
   template <std::derived_from<ASTNode> T> T *DynCast() {
-    if (GetType() != T::__type) {
+    if (!Is<T>()) {
       return nullptr;
     }
     return static_cast<T *>(this);
   }
 
   template <std::derived_from<ASTNode> T> const T *DynCast() const {
-    if (GetType() != T::__type) {
+    if (!Is<T>()) {
       return nullptr;
     }
     return static_cast<const T *>(this);
   }
 
   template <std::derived_from<ASTNode> T> bool Is() const {
-    return GetType() == T::__type;
+    return IsCastable(T::__type);
   }
+
+protected:
+  virtual bool IsCastable(ASTNodeType type) const { return false; }
 };
 
 template <class T> ASTNodeType ASTNodeTypeOf() { return T::__type; }
 
-#define ASTNodeImpl(type_enum)                                                 \
+#define ASTNodeImpl(TYPE, BASE)                                                \
 public:                                                                        \
-  ASTNodeType GetType() const override { return ASTNodeType::type_enum; }      \
-  constexpr static ASTNodeType __type = ASTNodeType::type_enum
+  static constexpr ASTNodeType __type = ASTNodeType::TYPE;                     \
+  ASTNodeType GetType() const override { return ASTNodeType::TYPE; }           \
+                                                                               \
+protected:                                                                     \
+  bool IsCastable(ASTNodeType type) const override {                           \
+    if (type == __type)                                                        \
+      return true;                                                             \
+    return BASE::IsCastable(type);                                             \
+  }
