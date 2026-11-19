@@ -47,6 +47,8 @@ function(add_frontend_diagnostic_case test_case file_stem)
 endfunction()
 
 add_frontend_diagnostic_case(Lex.UnknownCharacter UnknownCharacter)
+add_frontend_diagnostic_case(Lex.LineContinuationLocation
+                             LineContinuationLocation)
 add_frontend_diagnostic_case(Lex.InvalidExponent Exponent)
 add_frontend_diagnostic_case(Lex.InvalidHexEscape InvalidHexEscape)
 add_frontend_diagnostic_case(Preprocessor.ErrorDirective ErrorDirective)

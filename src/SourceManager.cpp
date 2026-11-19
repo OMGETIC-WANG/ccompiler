@@ -40,24 +40,44 @@ static std::string ReadFileContent(std::string_view path) {
   return content;
 }
 
-static std::string RemoveLineContinuations(std::string_view src) {
-  std::string result;
-  result.reserve(src.size());
+char GetAndAdvanceChar(std::string_view str, size_t &pos) {
+  ASSERT(pos < str.size(), "Cannot read past the end of a source buffer");
 
-  for (size_t i = 0; i < src.size(); ++i) {
-    if (src[i] == '\\') {
-      if (i + 1 < src.size() && src[i + 1] == '\n') {
-        i++;
-        continue;
-      }
-      if (i + 2 < src.size() && src[i + 1] == '\r' && src[i + 2] == '\n') {
-        i += 2;
-        continue;
-      }
+  while (true) {
+    char c = str[pos++];
+    if (c != '\\') {
+      return c;
     }
-    result.push_back(src[i]);
+
+    if (pos < str.size() && str[pos] == '\n') {
+      ++pos;
+    } else if (pos + 1 < str.size() && str[pos] == '\r' &&
+               str[pos + 1] == '\n') {
+      pos += 2;
+    } else {
+      return c;
+    }
+
+    if (pos == str.size()) {
+      return '\0';
+    }
   }
-  return result;
+}
+
+static bool HasLineContinuation(std::string_view text) {
+  for (size_t pos = 0; pos < text.size(); ++pos) {
+    if (text[pos] != '\\') {
+      continue;
+    }
+    if (pos + 1 < text.size() && text[pos + 1] == '\n') {
+      return true;
+    }
+    if (pos + 2 < text.size() && text[pos + 1] == '\r' &&
+        text[pos + 2] == '\n') {
+      return true;
+    }
+  }
+  return false;
 }
 
 SourceHandle SourceManager::AddSource(std::string name, std::string text) {
@@ -85,7 +105,7 @@ SourceHandle SourceManager::AddSource(std::string name, std::string text) {
 }
 
 SourceHandle SourceManager::LoadSource(std::string source, std::string name) {
-  return AddSource(std::move(name), RemoveLineContinuations(source));
+  return AddSource(std::move(name), std::move(source));
 }
 
 void SourceManager::AddIncludePath(std::filesystem::path path) {
@@ -105,8 +125,8 @@ SourceHandle SourceManager::LoadSourceFrom(std::string_view path) {
     return {.id = entry.id, .text = entry.text};
   }
 
-  SourceHandle source = AddSource(
-      absolute_path, RemoveLineContinuations(ReadFileContent(absolute_path)));
+  SourceHandle source =
+      AddSource(absolute_path, ReadFileContent(absolute_path));
   _files.emplace(GetEntry(source.id).name, source.id);
   return source;
 }
@@ -180,9 +200,39 @@ std::string_view SourceManager::GetText(SourceLocation location) const {
   ASSERT(location.end <= entry.text.size(),
          "Source location is outside of its source: [", location.begin, ", ",
          location.end, ")");
-  return std::string_view(entry.text)
-      .substr(location.begin,
-              static_cast<std::size_t>(location.end) - location.begin);
+
+  std::string_view text =
+      std::string_view(entry.text)
+          .substr(location.begin,
+                  static_cast<std::size_t>(location.end) - location.begin);
+  if (!HasLineContinuation(text)) {
+    return text;
+  }
+
+  for (const SourceEntry::CachedText &cached : entry.cached_texts) {
+    if (cached.begin == location.begin && cached.end == location.end) {
+      return cached.text;
+    }
+  }
+
+  std::string normalized;
+  normalized.reserve(text.size());
+  size_t pos = 0;
+  while (pos < text.size()) {
+    size_t old_pos = pos;
+    char c = GetAndAdvanceChar(text, pos);
+    if (c == '\0' && pos == text.size() && text[old_pos] == '\\') {
+      break;
+    }
+    normalized.push_back(c);
+  }
+
+  entry.cached_texts.push_back({
+      .begin = location.begin,
+      .end = location.end,
+      .text = std::move(normalized),
+  });
+  return entry.cached_texts.back().text;
 }
 
 std::string_view SourceManager::GetFileName(SourceLocation location) const {

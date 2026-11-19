@@ -1,0 +1,23 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: joined
+        initializer:
+          ValueInitializer:
+            value: {LiteralNum: {value: 12}}
+    - FunctionDecl:
+        name: main
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: text
+                  initializer:
+                    ValueInitializer:
+                      value: {LiteralString: {value: "ab"}}
+              - ReturnStmt:
+                  ret_value:
+                    BinaryExpr:
+                      op_type: Add
+                      left: {LiteralNum: {value: 1}}
+                      right: {LiteralNum: {value: 2}}

@@ -35,6 +35,7 @@ are listed in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 | Invalid hexadecimal string escapes | Rejected | N/A | N/A | `Diagnostics.Lex.InvalidHexEscape` | Covered |
 | Character literals | Unsupported | N/A | Deferred | `tests/Deferred/CodeGen/CharLiterals` | Deferred |
 | Comments and whitespace | Implicit | Implicit | Implicit | All source fixtures | Covered |
+| LF and CRLF line continuations | Covered | Implicit | Implicit | `AST.Pipeline.LineContinuations`, `Diagnostics.Lex.LineContinuationLocation`, `SourceManager.LineContinuations` | Covered |
 
 ## Preprocessor and includes
 

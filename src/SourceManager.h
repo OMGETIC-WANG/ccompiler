@@ -17,6 +17,9 @@ struct SourceHandle {
   std::string_view text;
 };
 
+// Return the next logical source character, skipping line splices before it.
+char GetAndAdvanceChar(std::string_view str, size_t &pos);
+
 struct SourcePosition {
   std::uint32_t line = 0;
   std::uint32_t column = 0;
@@ -45,10 +48,17 @@ public:
 
 private:
   struct SourceEntry {
+    struct CachedText {
+      std::uint32_t begin;
+      std::uint32_t end;
+      std::string text;
+    };
+
     SourceId id = INVALID_SOURCE_ID;
     std::string name;
     std::string text;
     std::vector<std::uint32_t> line_starts;
+    mutable std::deque<CachedText> cached_texts;
   };
 
   SourceHandle AddSource(std::string name, std::string text);

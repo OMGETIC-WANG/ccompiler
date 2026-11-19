@@ -5,11 +5,116 @@
 #include "Diagnostics/Errors.generated.h"
 #include <algorithm>
 #include <ranges>
+#include <span>
 
 struct ScannedToken {
   TokenType type = TokenType::Unknown;
   size_t length = 0;
 };
+
+static bool HasLineContinuation(std::string_view text) {
+  for (size_t pos = 0; pos < text.size(); ++pos) {
+    if (text[pos] != '\\') {
+      continue;
+    }
+    if (pos + 1 < text.size() && text[pos + 1] == '\n') {
+      return true;
+    }
+    if (pos + 2 < text.size() && text[pos + 1] == '\r' &&
+        text[pos + 2] == '\n') {
+      return true;
+    }
+  }
+  return false;
+}
+
+struct LocationMap {
+  SourceId source_id;
+  bool identity;
+  std::span<const std::uint32_t> raw_begins;
+  std::span<const std::uint32_t> raw_ends;
+
+  SourceLocation Point(size_t logical_pos) const {
+    if (identity) {
+      return {
+          .source_id = source_id,
+          .begin = static_cast<std::uint32_t>(logical_pos),
+          .end = static_cast<std::uint32_t>(logical_pos + 1),
+      };
+    }
+    ASSERT(logical_pos < raw_begins.size(),
+           "Logical position is outside of the source");
+    return {
+        .source_id = source_id,
+        .begin = raw_begins[logical_pos],
+        .end = raw_ends[logical_pos],
+    };
+  }
+};
+
+Scanner::Scanner(SourceHandle source, DiagnosticContext &diagnostics)
+    : _source(source), _diagnostics(diagnostics) {
+  _has_line_continuations = HasLineContinuation(_source.text);
+  if (_has_line_continuations) {
+    BuildLogicalText();
+  }
+}
+
+void Scanner::BuildLogicalText() {
+  _logical_text.reserve(_source.text.size());
+  _logical_char_raw_begins.reserve(_source.text.size());
+  _logical_char_raw_ends.reserve(_source.text.size());
+
+  size_t raw_pos = 0;
+  while (raw_pos < _source.text.size()) {
+    size_t old_pos = raw_pos;
+    char c = GetAndAdvanceChar(_source.text, raw_pos);
+    if (c == '\0' && raw_pos == _source.text.size() &&
+        _source.text[old_pos] == '\\') {
+      break;
+    }
+    _logical_text.push_back(c);
+    _logical_char_raw_begins.push_back(raw_pos - 1);
+    _logical_char_raw_ends.push_back(raw_pos);
+  }
+}
+
+std::string_view Scanner::Text() const {
+  return _has_line_continuations ? std::string_view(_logical_text)
+                                 : _source.text;
+}
+
+std::uint32_t Scanner::GetRawBegin(size_t logical_pos) const {
+  if (!_has_line_continuations) {
+    return static_cast<std::uint32_t>(logical_pos);
+  }
+  if (logical_pos == _logical_char_raw_begins.size()) {
+    return static_cast<std::uint32_t>(_source.text.size());
+  }
+  ASSERT(logical_pos < _logical_char_raw_begins.size(),
+         "Logical position is outside of the source");
+  return _logical_char_raw_begins[logical_pos];
+}
+
+std::uint32_t Scanner::GetRawEnd(size_t logical_end) const {
+  if (!_has_line_continuations) {
+    return static_cast<std::uint32_t>(logical_end);
+  }
+  ASSERT(logical_end > 0 && logical_end <= _logical_char_raw_ends.size(),
+         "Logical position is outside of the source");
+  return _logical_char_raw_ends[logical_end - 1];
+}
+
+size_t Scanner::GetLogicalEnd(std::uint32_t raw_end) const {
+  if (!_has_line_continuations) {
+    return raw_end;
+  }
+  auto found = std::lower_bound(_logical_char_raw_ends.begin(),
+                                _logical_char_raw_ends.end(), raw_end);
+  ASSERT(found != _logical_char_raw_ends.end() && *found == raw_end,
+         "Token end does not align with a logical source character");
+  return static_cast<size_t>(found - _logical_char_raw_ends.begin()) + 1;
+}
 
 static bool IsBlank(char c) {
   return c == ' ' || c == '\t' || c == '\n' || c == '\r';
@@ -168,18 +273,9 @@ constexpr auto AdvanceHexFloatNum =
 
 constexpr auto AdvanceDecFloatNum = AdvanceFloatNum<std::pair{'0', '9'}>;
 
-static SourceLocation PointLocation(SourceLocation token_location,
-                                    size_t offset) {
-  return {
-      .source_id = token_location.source_id,
-      .begin = token_location.begin + static_cast<std::uint32_t>(offset),
-      .end = token_location.begin + static_cast<std::uint32_t>(offset + 1),
-  };
-}
-
 static std::optional<std::string_view>
 TryPeekAsLiteralHex(std::string_view s, DiagnosticContext &diagnostics,
-                    SourceLocation token_location) {
+                    const LocationMap &location_map, size_t token_begin) {
   if (s.starts_with("0x") || s.starts_with("0X")) {
     size_t pos = 2;
     pos = AdvanceHexFloatNum(s, pos);
@@ -187,7 +283,7 @@ TryPeekAsLiteralHex(std::string_view s, DiagnosticContext &diagnostics,
       return std::nullopt;
     }
     if (pos < s.size() && (s[pos] == 'p' || s[pos] == 'P')) {
-      SourceLocation exponent_location = PointLocation(token_location, pos);
+      SourceLocation exponent_location = location_map.Point(token_begin + pos);
       pos++;
       if (pos < s.size() && (s[pos] == '+' || s[pos] == '-')) {
         pos++;
@@ -205,13 +301,13 @@ TryPeekAsLiteralHex(std::string_view s, DiagnosticContext &diagnostics,
 
 static std::optional<std::string_view>
 TryPeekAsLiteralDec(std::string_view s, DiagnosticContext &diagnostics,
-                    SourceLocation token_location) {
+                    const LocationMap &location_map, size_t token_begin) {
   size_t pos = AdvanceDecFloatNum(s, 0);
   if (pos == 0) {
     return std::nullopt;
   }
   if (pos < s.size() && (s[pos] == 'e' || s[pos] == 'E')) {
-    SourceLocation exponent_location = PointLocation(token_location, pos);
+    SourceLocation exponent_location = location_map.Point(token_begin + pos);
     pos++;
     if (pos < s.size() && (s[pos] == '+' || s[pos] == '-')) {
       pos++;
@@ -256,15 +352,18 @@ static std::string_view TryAddPostfix(std::string_view s,
 
 static ScannedToken TryPeekAsLiteralNum(std::string_view s,
                                         DiagnosticContext &diagnostics,
-                                        SourceLocation token_location) {
-  if (auto hex = TryPeekAsLiteralHex(s, diagnostics, token_location)) {
+                                        const LocationMap &location_map,
+                                        size_t token_begin) {
+  if (auto hex =
+          TryPeekAsLiteralHex(s, diagnostics, location_map, token_begin)) {
     return {TokenType::LiteralNum, TryAddPostfix(s, hex.value()).size()};
   }
   if (auto bin = TryPeekAsLiteralBin(s)) {
     return {TokenType::LiteralNum, TryAddPostfix(s, bin.value()).size()};
   }
   // Treat oct as dec in lexer
-  if (auto dec = TryPeekAsLiteralDec(s, diagnostics, token_location)) {
+  if (auto dec =
+          TryPeekAsLiteralDec(s, diagnostics, location_map, token_begin)) {
     return {TokenType::LiteralNum, TryAddPostfix(s, dec.value()).size()};
   }
   return {};
@@ -457,28 +556,29 @@ static ScannedToken PeekAsLiteralString(std::string_view s) {
 
 std::pair<std::string_view, bool> Scanner::TrimSourceBlank() {
   size_t old_pos = _pos;
-  size_t pos = GetTrimmedPos(_source.text, _pos);
+  size_t pos = GetTrimmedPos(Text(), _pos);
   _pos = pos;
-  return {_source.text.substr(_pos), pos != old_pos};
+  return {Text().substr(_pos), pos != old_pos};
 }
 
 std::pair<std::string_view, bool> Scanner::TrimSourceBlankH() {
   size_t old_pos = _pos;
-  size_t pos = GetHTrimmedPos(_source.text, _pos);
+  size_t pos = GetHTrimmedPos(Text(), _pos);
   _pos = pos;
-  return {_source.text.substr(_pos), pos != old_pos};
+  return {Text().substr(_pos), pos != old_pos};
 }
 
 static ScannedToken ScanToken(std::string_view rest,
                               DiagnosticContext &diagnostics,
-                              SourceLocation token_location) {
+                              const LocationMap &location_map,
+                              size_t token_begin) {
   if (rest.starts_with("##")) {
     return {TokenType::SharpSharp, 2};
   }
 
   if (rest[0] == '.') {
     if (1 < rest.size() && isdigit(rest[1])) {
-      return TryPeekAsLiteralNum(rest, diagnostics, token_location);
+      return TryPeekAsLiteralNum(rest, diagnostics, location_map, token_begin);
     }
     if (rest.starts_with("...")) {
       return {TokenType::DotDotDot, 3};
@@ -501,7 +601,7 @@ static ScannedToken ScanToken(std::string_view rest,
   }
 
   if (isdigit(rest[0])) {
-    return TryPeekAsLiteralNum(rest, diagnostics, token_location);
+    return TryPeekAsLiteralNum(rest, diagnostics, location_map, token_begin);
   }
 
   ScannedToken op_tok = TryPeekAsOperator(rest);
@@ -513,25 +613,24 @@ static ScannedToken ScanToken(std::string_view rest,
     return {single_char_tokens[rest[0]], 1};
   }
 
-  diagnostics.Fail(PointLocation(token_location, 0),
+  diagnostics.Fail(location_map.Point(token_begin),
                    errs::UnknownCharacter{rest[0]});
 }
 
-static Token MakeToken(const SourceHandle &source, size_t begin,
-                       ScannedToken scanned, bool has_leading_space) {
-  if (scanned.type == TokenType::Unknown || scanned.length == 0) {
-    return Token{scanned.type, {}, has_leading_space};
+Token Scanner::MakeToken(size_t begin, TokenType type, size_t length,
+                         bool has_leading_space) const {
+  if (type == TokenType::Unknown || length == 0) {
+    return Token{type, {}, has_leading_space};
   }
 
-  ASSERT(begin <= source.text.size() &&
-             scanned.length <= source.text.size() - begin,
+  ASSERT(begin <= Text().size() && length <= Text().size() - begin,
          "Invalid token range at offset ", begin);
   return Token{
-      scanned.type,
+      type,
       {
-          .source_id = source.id,
-          .begin = static_cast<std::uint32_t>(begin),
-          .end = static_cast<std::uint32_t>(begin + scanned.length),
+          .source_id = _source.id,
+          .begin = GetRawBegin(begin),
+          .end = GetRawEnd(begin + length),
       },
       has_leading_space,
   };
@@ -544,20 +643,22 @@ Token Scanner::PeekNextToken() {
         TokenType::EndOfFile,
         {
             .source_id = _source.id,
-            .begin = static_cast<std::uint32_t>(_pos),
-            .end = static_cast<std::uint32_t>(_pos),
+            .begin = static_cast<std::uint32_t>(_source.text.size()),
+            .end = static_cast<std::uint32_t>(_source.text.size()),
         },
     };
   }
 
-  size_t token_begin = _pos;
-  SourceLocation token_location{
+  LocationMap location_map{
       .source_id = _source.id,
-      .begin = static_cast<std::uint32_t>(token_begin),
-      .end = static_cast<std::uint32_t>(token_begin + 1),
+      .identity = !_has_line_continuations,
+      .raw_begins = _logical_char_raw_begins,
+      .raw_ends = _logical_char_raw_ends,
   };
-  return MakeToken(_source, token_begin,
-                   ScanToken(rest, _diagnostics, token_location),
+  size_t token_begin = _pos;
+  ScannedToken scanned =
+      ScanToken(rest, _diagnostics, location_map, token_begin);
+  return MakeToken(token_begin, scanned.type, scanned.length,
                    has_leading_space);
 }
 
@@ -568,38 +669,51 @@ Token Scanner::PeekNextTokenH() {
         TokenType::EndOfFile,
         {
             .source_id = _source.id,
-            .begin = static_cast<std::uint32_t>(_pos),
-            .end = static_cast<std::uint32_t>(_pos),
+            .begin = static_cast<std::uint32_t>(_source.text.size()),
+            .end = static_cast<std::uint32_t>(_source.text.size()),
         },
     };
   }
 
+  LocationMap location_map{
+      .source_id = _source.id,
+      .identity = !_has_line_continuations,
+      .raw_begins = _logical_char_raw_begins,
+      .raw_ends = _logical_char_raw_ends,
+  };
   size_t token_begin = _pos;
   if (rest[0] == '\n') {
-    return MakeToken(_source, token_begin, {TokenType::NextLine, 1},
-                     has_leading_space);
+    return MakeToken(token_begin, TokenType::NextLine, 1, has_leading_space);
   }
   if (rest.starts_with("\r\n")) {
-    return MakeToken(_source, token_begin, {TokenType::NextLine, 2},
-                     has_leading_space);
+    return MakeToken(token_begin, TokenType::NextLine, 2, has_leading_space);
   }
 
-  SourceLocation token_location{
-      .source_id = _source.id,
-      .begin = static_cast<std::uint32_t>(token_begin),
-      .end = static_cast<std::uint32_t>(token_begin + 1),
-  };
-  return MakeToken(_source, token_begin,
-                   ScanToken(rest, _diagnostics, token_location),
+  ScannedToken scanned =
+      ScanToken(rest, _diagnostics, location_map, token_begin);
+  return MakeToken(token_begin, scanned.type, scanned.length,
                    has_leading_space);
 }
 
 void Scanner::ConsumeToken(Token tok) {
   ASSERT(tok.location.IsValid() && tok.location.source_id == _source.id,
          "Cannot consume a token from a different source");
-  ASSERT(tok.location.begin == _pos,
+  const std::string_view text = Text();
+  const std::uint32_t expected_begin =
+      _pos < text.size() ? GetRawBegin(_pos)
+                         : static_cast<std::uint32_t>(_source.text.size());
+  ASSERT(tok.location.begin == expected_begin,
          "Cannot consume a token that is not at the current scanner position");
   ASSERT(tok.location.end <= _source.text.size(),
          "Token end is outside of the source buffer");
-  _pos = tok.location.end;
+  if (_pos == text.size()) {
+    ASSERT(tok.location.end == tok.location.begin,
+           "EOF token must have an empty location");
+    return;
+  }
+
+  size_t logical_end = GetLogicalEnd(tok.location.end);
+  ASSERT(logical_end > _pos,
+         "Cannot consume a token that does not advance the scanner");
+  _pos = logical_end;
 }

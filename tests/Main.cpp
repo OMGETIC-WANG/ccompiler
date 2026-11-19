@@ -406,6 +406,97 @@ int RunDiagnosticSelfTest() {
   return 1;
 }
 
+int RunSourceManagerSelfTest() {
+  {
+    std::string_view text = "A\\\r\nB";
+    size_t pos = 0;
+    if (GetAndAdvanceChar(text, pos) != 'A' ||
+        GetAndAdvanceChar(text, pos) != 'B' || pos != text.size()) {
+      std::cerr << "Failed to skip a CRLF line continuation\n";
+      return 1;
+    }
+  }
+
+  {
+    std::string_view text = "A\\\n\\\nB";
+    size_t pos = 0;
+    if (GetAndAdvanceChar(text, pos) != 'A' ||
+        GetAndAdvanceChar(text, pos) != 'B' || pos != text.size()) {
+      std::cerr << "Failed to skip consecutive line continuations\n";
+      return 1;
+    }
+  }
+
+  {
+    std::string_view text = "A\\B";
+    size_t pos = 0;
+    if (GetAndAdvanceChar(text, pos) != 'A' ||
+        GetAndAdvanceChar(text, pos) != '\\' ||
+        GetAndAdvanceChar(text, pos) != 'B') {
+      std::cerr << "A non-continuation backslash was not preserved\n";
+      return 1;
+    }
+  }
+
+  {
+    std::string_view text = "A\\\n";
+    size_t pos = 0;
+    if (GetAndAdvanceChar(text, pos) != 'A' ||
+        GetAndAdvanceChar(text, pos) != '\0' || pos != text.size()) {
+      std::cerr << "A trailing line continuation did not reach EOF\n";
+      return 1;
+    }
+  }
+
+  SourceManager sources;
+  const std::string raw = "a\\\nb\r\nc";
+  SourceHandle source = sources.LoadSource(raw, "<line-continuations>");
+  if (source.text != raw) {
+    std::cerr << "Source loading unexpectedly rewrote line continuations\n";
+    return 1;
+  }
+
+  SourceLocation whole_location{
+      .source_id = source.id,
+      .begin = 0,
+      .end = static_cast<std::uint32_t>(raw.size()),
+  };
+  std::string_view whole = sources.GetText(whole_location);
+  if (whole != "ab\r\nc") {
+    std::cerr << "GetText did not remove line continuations\n";
+    return 1;
+  }
+  if (sources.GetText(whole_location).data() != whole.data()) {
+    std::cerr << "GetText did not reuse its cached normalized text\n";
+    return 1;
+  }
+
+  SourcePosition position = sources.GetLineColumn({
+      .source_id = source.id,
+      .begin = 3,
+      .end = 4,
+  });
+  if (position.line != 2 || position.column != 1) {
+    std::cerr << "Source position did not use raw line boundaries\n";
+    return 1;
+  }
+
+  SourceHandle direct = sources.LoadSource("direct", "<direct>");
+  SourceLocation direct_location{
+      .source_id = direct.id,
+      .begin = 1,
+      .end = 4,
+  };
+  std::string_view direct_text = sources.GetText(direct_location);
+  if (direct_text != "ire" || direct_text.data() != direct.text.data() + 1) {
+    std::cerr << "GetText did not return a direct source view\n";
+    return 1;
+  }
+
+  std::cout << "PASS source manager line continuations\n";
+  return 0;
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -418,6 +509,10 @@ int main(int argc, char **argv) {
 
   if (argc == 2 && std::string_view(argv[1]) == "--diagnostic-self-test") {
     return RunDiagnosticSelfTest();
+  }
+
+  if (argc == 2 && std::string_view(argv[1]) == "--source-manager-self-test") {
+    return RunSourceManagerSelfTest();
   }
 
   if (argc == 4 && std::string_view(argv[1]) == "--diagnostics") {
@@ -471,6 +566,9 @@ int main(int argc, char **argv) {
                  "       "
               << argv[0]
               << " --diagnostic-self-test\n"
+                 "       "
+              << argv[0]
+              << " --source-manager-self-test\n"
                  "       "
               << argv[0]
               << " --diagnostics <source.c> <expected.error.yaml>\n"

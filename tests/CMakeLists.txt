@@ -23,3 +23,6 @@ add_subdirectory(Sema)
 add_subdirectory(CodeGen)
 add_subdirectory(Include)
 add_subdirectory(Diagnostics)
+
+ccompiler_add_self_test(SourceManager.LineContinuations
+                        --source-manager-self-test "frontend")

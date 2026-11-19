@@ -4,6 +4,7 @@
 #include "../Util/EnumRefl.h"
 
 #include <cassert>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -44,8 +45,7 @@ class Scanner : public IScanner {
   IScannerImpl(Scanner);
 
 public:
-  explicit Scanner(SourceHandle source, DiagnosticContext &diagnostics)
-      : _source(source), _diagnostics(diagnostics) {}
+  explicit Scanner(SourceHandle source, DiagnosticContext &diagnostics);
 
   Token PeekNextToken() override;
 
@@ -59,11 +59,25 @@ public:
   void ConsumeToken(Token tok) override;
 
 private:
+  void BuildLogicalText();
+
+  std::string_view Text() const;
+  std::uint32_t GetRawBegin(size_t logical_pos) const;
+  std::uint32_t GetRawEnd(size_t logical_end) const;
+  size_t GetLogicalEnd(std::uint32_t raw_end) const;
+
   std::pair<std::string_view, bool> TrimSourceBlank();
 
   std::pair<std::string_view, bool> TrimSourceBlankH();
 
+  Token MakeToken(size_t begin, TokenType type, size_t length,
+                  bool has_leading_space) const;
+
   SourceHandle _source;
   DiagnosticContext &_diagnostics;
+  std::string _logical_text;
+  std::vector<std::uint32_t> _logical_char_raw_begins;
+  std::vector<std::uint32_t> _logical_char_raw_ends;
+  bool _has_line_continuations = false;
   size_t _pos = 0;
 };
