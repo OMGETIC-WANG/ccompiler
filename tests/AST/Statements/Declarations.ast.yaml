@@ -18,6 +18,22 @@ TranslationUnit:
                         initializer:
                           ValueInitializer:
                             value: {LiteralNum: {value: 2}}
+              - DeclStmt:
+                  decls:
+                    - VarDecl:
+                        name: first
+                        initializer:
+                          ValueInitializer:
+                            value: {LiteralNum: {value: 1}}
+                    - VarDecl:
+                        name: second
+                        initializer:
+                          ValueInitializer:
+                            value:
+                              BinaryExpr:
+                                op_type: Add
+                                left: {VarRef: {name: first}}
+                                right: {LiteralNum: {value: 1}}
               - ReturnStmt:
                   ret_value:
                     BinaryExpr:

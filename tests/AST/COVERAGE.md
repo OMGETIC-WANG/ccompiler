@@ -65,7 +65,7 @@ are listed in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 | Pointers, arrays, functions, function pointers, pointer-to-array, complex declarators | AST | `AST.Types.FunctionPointers`, `AST.Types.PointersArrays`, `AST.Types.DeclaratorSpiral` | Covered |
 | Multiple declarators with distinct pointer/array types | AST | `AST.Declarations.MultipleDeclarators` | Covered |
 | Named, anonymous, array, and variadic function parameters | AST/Sema/CodeGen | `AST.Declarations.FunctionSignatures`, `Sema.Core.FunctionCalls`, `CodeGen.Functions` | Covered |
-| Initializer referencing an earlier declarator in the same declaration | None | None | Known defect |
+| Initializer referencing an earlier declarator in the same declaration | AST | `AST.Statements.Declarations` | Covered |
 | `register` and local static storage | Rejected | `Diagnostics.*` | Intentionally unsupported |
 
 ## Initializers

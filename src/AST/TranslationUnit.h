@@ -16,14 +16,8 @@ public:
   bool is_semantically_analyzed = false;
 };
 
-std::unique_ptr<StructDecl> ParseStructDecl(Lexer &lexer, std::string_view name,
-                                            CompileContext &context);
-
-std::unique_ptr<UnionDecl> ParseUnionDecl(Lexer &lexer, std::string_view name,
-                                          CompileContext &context);
-
-std::unique_ptr<EnumDecl> ParseEnumDecl(Lexer &lexer, std::string_view name,
-                                        CompileContext &context);
+std::unique_ptr<CompoundStmt> ParseCompoundStmt(Lexer &lexer,
+                                                CompileContext &context);
 
 std::unique_ptr<TranslationUnit>
 ParseTranslationUnit(Lexer &lexer, TypeContext &types, SourceManager &sources,

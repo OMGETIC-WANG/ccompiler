@@ -657,16 +657,15 @@ std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(Lexer &lexer,
       if (IsDeclarationSpecifier(type_start, context)) {
         lexer.ConsumeToken(tok);
 
-        auto declaration = ParseDeclaration(lexer, context);
-        auto parsed_type = ParseType(declaration.get(), context);
-        if (parsed_type.size() != 1) {
+        TypeRef target_type = ParseTypeName(lexer, context);
+        if (lexer.PeekNextToken().type == TokenType::Comma) {
           RaiseParserError(context, tok.location,
                            errs::ExpectedSingleCastType{});
         }
 
         auto type_cast = std::make_unique<TypeCast>();
         type_cast->location = tok.location;
-        type_cast->target_type = parsed_type[0].type;
+        type_cast->target_type = target_type;
         add_prefix(std::move(type_cast));
         Token rparen = lexer.PeekNextToken();
         if (rparen.type != TokenType::RParen) {

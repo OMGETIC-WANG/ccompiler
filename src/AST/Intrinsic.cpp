@@ -59,11 +59,11 @@ std::unique_ptr<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,
       call->args.push_back(ParseExpr(lexer, context));
       break;
     case IntrinsicCallArgKind::Type:
-      call->args.push_back(ParseType(lexer, context));
+      call->args.push_back(ParseTypeName(lexer, context));
       break;
     case IntrinsicCallArgKind::ExprOrType: {
       if (IsDeclarationSpecifier(lexer.PeekNextToken(), context)) {
-        call->args.push_back(ParseType(lexer, context));
+        call->args.push_back(ParseTypeName(lexer, context));
       } else {
         call->args.push_back(ParseExpr(lexer, context));
       }

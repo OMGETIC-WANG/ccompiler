@@ -193,12 +193,6 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
   RAISE_ERROR("Unexpected declarator type");
 }
 
-static ParsedType ParseInitDeclarator(TypeRef base_type,
-                                      const InitDeclarator *init_declarator,
-                                      CompileContext &context) {
-  return ParseDeclarator(base_type, init_declarator->declarator.get(), context);
-}
-
 } // namespace
 
 TypeRef ApplyTypeQualifier(TypeRef type, TypeTag qualifier, TypeContext &types,
@@ -362,58 +356,18 @@ TypeRef ResolveTypeSpecifier(const TypeSpecifier &specifier,
   return GetOrCreateBaseType(specifier, context);
 }
 
-std::vector<ParsedType> ParseType(const Declaration *decl,
-                                  CompileContext &context) {
-  std::vector<ParsedType> results;
-  TypeRef base_type = context.GetType(decl->declaration_specifier.type_spec);
-
+ParsedType ParseDeclaratorType(const TypeSpecifier &spec,
+                               const Declarator &declarator,
+                               CompileContext &context) {
+  const TypeRef base_type = context.GetType(spec);
   if (!base_type) {
-    context.Diagnostics().Fail(
-        decl->declaration_specifier.type_spec.location,
-        errs::UnknownTagName{decl->declaration_specifier.type_spec.type_name});
+    context.Diagnostics().Fail(spec.location,
+                               errs::UnknownTagName{spec.type_name});
   }
 
-  if (decl->init_declarators.size()) {
-    results.reserve(decl->init_declarators.size());
-    for (const auto &init_declarator : decl->init_declarators) {
-      ParsedType parsed =
-          ParseInitDeclarator(base_type, init_declarator.get(), context);
-      SourceLocation declaration_start{
-          .source_id = decl->location.source_id,
-          .begin = decl->location.begin,
-          .end = decl->location.begin,
-      };
-      parsed.location =
-          CombineLocation(declaration_start, init_declarator->location);
-      results.push_back(std::move(parsed));
-    }
-  } else {
-    results.push_back({
-        .type = base_type,
-        .location = decl->location,
-        .declarator_name = {},
-        .parameters = {},
-    });
-  }
-  return results;
-}
-
-TypeRef ParseType(Lexer &lexer, CompileContext &context) {
-  auto decl = ParseDeclaration(lexer, context);
-  TypeRef base_type = context.GetType(decl->declaration_specifier.type_spec);
-  if (!base_type) {
-    context.Diagnostics().Fail(
-        decl->declaration_specifier.type_spec.location,
-        errs::UnknownTagName{decl->declaration_specifier.type_spec.type_name});
-  }
-  if (decl->init_declarators.size()) {
-    ASSERT(decl->init_declarators.size() == 1, "Expected a single declarator");
-    return ParseInitDeclarator(base_type, decl->init_declarators[0].get(),
-                               context)
-        .type;
-  } else {
-    return base_type;
-  }
+  ParsedType parsed = ParseDeclarator(base_type, &declarator, context);
+  parsed.location = CombineLocation(spec.location, declarator.location);
+  return parsed;
 }
 
 std::string_view TypeBase::GetNodeTypeName() const {

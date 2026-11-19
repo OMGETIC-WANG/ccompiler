@@ -177,7 +177,6 @@ class InitDeclarator : public DeclBase {
 
 public:
   std::unique_ptr<Declarator> declarator;
-  std::unique_ptr<Initializer> initializer;
 };
 
 class Declaration : public DeclBase {
@@ -197,7 +196,9 @@ bool IsDeclarationSpecifier(Token tok, const CompileContext &context);
 DeclarationSpecifier ParseDeclarationSpecifier(Lexer &lexer,
                                                CompileContext &context);
 
-std::unique_ptr<Declaration> ParseDeclaration(Lexer &lexer,
-                                              CompileContext &context);
+std::unique_ptr<ASTNode> ParseDeclaration(Lexer &lexer,
+                                          CompileContext &context);
+
+TypeRef ParseTypeName(Lexer &lexer, CompileContext &context);
 
 bool IsConstantFoldable(const Initializer *initializer);

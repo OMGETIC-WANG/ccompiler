@@ -534,7 +534,7 @@ private:
   ArrayType() = default;
 };
 
-class Declaration;
+class Declarator;
 
 struct ParsedParameter {
   TypeRef type = nullptr;
@@ -567,7 +567,6 @@ TypeRef ApplyAggregateMemberQualifiers(TypeRef member_type,
 TypeRef ResolveTypeSpecifier(const TypeSpecifier &specifier,
                              CompileContext &context);
 
-std::vector<ParsedType> ParseType(const Declaration *decl,
-                                  CompileContext &context);
-
-TypeRef ParseType(Lexer &lexer, CompileContext &context);
+ParsedType ParseDeclaratorType(const TypeSpecifier &spec,
+                               const Declarator &declarator,
+                               CompileContext &context);

@@ -52,14 +52,6 @@ CodeGen coverage.
 When an earlier `#if` or `#elif` branch is active, a true later `#elif` can
 incorrectly become active as well.
 
-### Same-declaration initializers cannot reference earlier declarators
-
-This is rejected even though the earlier declarator is already in scope:
-
-```c
-int first = 1, second = first + 1;
-```
-
 ### Enum constants fail numeric operators
 
 Enum constants work in returns, initializers, and switch labels, but arithmetic
