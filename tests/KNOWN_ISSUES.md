@@ -42,20 +42,6 @@ CodeGen coverage.
 
 ## Incorrect supported behavior
 
-### Switch case bodies do not fall through
-
-Case labels sharing a body are supported, but execution of one case body does
-not continue into the next case body. For example, a `switch (1)` using:
-
-```c
-case 1:
-  value = 1;
-case 2:
-  value += 2;
-```
-
-returns with `value == 1` instead of `value == 3`.
-
 ### Multi-token macro stringification loses spaces
 
 `#value` works for a single token, but `STRINGIFY(hello world)` produces

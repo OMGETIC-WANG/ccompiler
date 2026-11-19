@@ -910,7 +910,6 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
       for (const auto &statement : case_stmt->body) {
         EmitStmt(statement.get());
       }
-      builder.CreateBr(default_block);
 
       for (const auto &val : case_stmt->case_vals) {
         auto *case_expr = dynamic_cast<Expr *>(val.get());
@@ -921,6 +920,16 @@ void ExprEmitter::EmitStmt(ASTNode *node) {
         case_blocks.push_back({llvm::cast<llvm::ConstantInt>(folded), body});
       }
     }
+
+    for (size_t i = 0; i < case_blocks.size(); i++) {
+      builder.SetInsertPoint(case_blocks[i].second);
+      if (i + 1 < case_blocks.size()) {
+        builder.CreateBr(case_blocks[i + 1].second);
+      } else {
+        builder.CreateBr(end_block);
+      }
+    }
+
     builder.SetInsertPoint(curr_block);
     builder.CreateSwitch(switched_val, case_blocks, default_block, num_cases);
     builder.SetInsertPoint(end_block);

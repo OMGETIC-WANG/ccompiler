@@ -12,7 +12,8 @@ set(CODEGEN_JIT_CASES
     Qualifiers
     Recursion
     SemanticTypes
-    SizeofTypes)
+    SizeofTypes
+    SwitchFallthrough)
 
 foreach(case_name IN LISTS CODEGEN_JIT_CASES)
   ccompiler_add_jit_case(CodeGen.${case_name} ${case_name}.c "codegen;frontend")
