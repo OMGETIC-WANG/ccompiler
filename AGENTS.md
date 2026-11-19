@@ -42,7 +42,7 @@ integration workflow also requires `llvm-as`, `llc`, and a host C compiler.
 
 ```bash
 cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-cmake --build build -j2
+cmake --build build -j4
 ctest --test-dir build --output-on-failure
 ctest --test-dir build -L lexer --output-on-failure
 ctest --test-dir build -L ast --output-on-failure
@@ -84,6 +84,8 @@ macros/constants use `UPPER_SNAKE_CASE`. Match names already used by adjacent
 modules.
 
 Format changed `CMakeLists.txt` files with `cmake-format -i <files>`.
+
+Format changed Python files with `ruff format <files>`
 
 ## Testing Guidelines
 
