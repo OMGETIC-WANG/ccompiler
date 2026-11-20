@@ -7,12 +7,6 @@ and has a normal positive or negative assertion.
 
 ## Deferred syntax
 
-### Character literals
-
-`tests/Deferred/CodeGen/CharLiterals` demonstrates the intended behavior.
-Character tokens are scanned, but `ParsePrimary` has no character-literal AST
-node or value conversion path.
-
 ### Parenthesis-free `sizeof`
 
 `sizeof` currently requires an opening parenthesis:

@@ -34,7 +34,8 @@ are listed in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 | Decimal, exponent, hexadecimal floating literals and suffixes | Covered | Covered | Covered | Covered | `Lexer.Literals`, `AST.Expressions.FloatLiterals`, `CodeGen.LongDouble*` | Covered |
 | String literals, escapes, and adjacent tokenization | Covered | Covered | Covered | Covered | `Lexer.Literals`, `AST.Expressions.StringLiterals`, `Sema.Core.Expressions`, `CodeGen.SizeofTypes` | Covered |
 | Invalid hexadecimal string escapes | Rejected | N/A | N/A | N/A | `Diagnostics.Lex.InvalidHexEscape` | Covered |
-| Character literal tokenization | Covered | Unsupported | N/A | Deferred | `Lexer.Literals`, `tests/Deferred/CodeGen/CharLiterals` | Deferred end-to-end |
+| Ordinary character literals, simple escapes, and octal/hex escapes | Covered | Covered | Covered | Covered | `Lexer.CharacterLiterals`, `AST.Expressions.CharacterLiterals`, `Sema.Core.CharacterLiterals`, `CodeGen.CharacterLiterals` | Covered |
+| Invalid or unsupported character literals | Rejected | N/A | N/A | N/A | `Diagnostics.Parser.CharacterLiteral*`, `Diagnostics.Lex.*CharacterLiteral*` | Covered |
 | Comments and whitespace | Covered | Implicit | Implicit | Implicit | `Lexer.CommentsAndWhitespace` | Covered |
 | LF and CRLF line continuations | Covered | Covered | Implicit | Implicit | `Lexer.LineContinuations`, `Diagnostics.Lex.LineContinuationLocation`, `SelfTests.SourceManager.*` | Covered |
 
@@ -124,14 +125,15 @@ Every source-produced AST node has at least one positive AST fixture:
 |---|---|
 | Translation unit, function, variable, parameter, typedef declarations | `AST.Declarations.*` |
 | Struct, union, enum, and enum element declarations | `AST.Declarations.Aggregates`, `AST.Declarations.ForwardTags` |
-| Numeric/string literals and variable references | `AST.Expressions.IntegerLiterals`, `AST.Expressions.FloatLiterals`, `AST.Expressions.StringLiterals`, `AST.Expressions.Calls` |
+| Numeric, character, and string literals; variable references | `AST.Expressions.IntegerLiterals`, `AST.Expressions.FloatLiterals`, `AST.Expressions.CharacterLiterals`, `AST.Expressions.StringLiterals`, `AST.Expressions.Calls` |
 | Binary, unary, cast, implicit cast, field access, calls, sequence, conditional | `AST.Expressions.*`, `Sema.Core.*` |
 | Declaration, compound, if, loop, switch/case/default, jump, return, empty statements | `AST.Statements.*` |
 | Intrinsic calls | `AST.Intrinsics.*` |
 
 `EmptyStmt` is intentionally filtered from `CompoundStmt`; `AST.Statements.Empty`
 asserts that filtering. `ImplicitCast` is introduced by Sema and is covered by
-the Sema cases above.
+the Sema cases above. Ordinary character literals use `LiteralNum` with type
+`int`, matching their C expression type.
 
 ## Type inventory
 

@@ -8,7 +8,4 @@ Each subdirectory names the suite that should eventually own the fixture. When
 the compiler support and the corresponding expectations are ready, move the
 fixture and its sidecars back into that suite and register it there.
 
-Current cases:
-
-- `CodeGen/CharLiterals`: character literals are scanned, but the parser has no
-  character-literal primary-expression path yet.
+There are currently no deferred cases.

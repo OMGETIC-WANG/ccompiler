@@ -51,6 +51,10 @@ add_frontend_diagnostic_case(Lex.LineContinuationLocation
                              LineContinuationLocation)
 add_frontend_diagnostic_case(Lex.InvalidExponent Exponent)
 add_frontend_diagnostic_case(Lex.InvalidHexEscape InvalidHexEscape)
+add_frontend_diagnostic_case(Lex.UnterminatedCharacterLiteral
+                             CharacterLiteralUnterminated)
+add_frontend_diagnostic_case(Lex.UnsupportedCharacterLiteralPrefix
+                             CharacterLiteralPrefix)
 add_frontend_diagnostic_case(Preprocessor.ErrorDirective ErrorDirective)
 add_frontend_diagnostic_case(Preprocessor.MissingIfdefIdentifier
                              MissingIfdefIdentifier)
@@ -75,6 +79,19 @@ add_frontend_diagnostic_case(Parser.MissingBrace MissingBrace)
 add_frontend_diagnostic_case(Parser.VariadicParameterToken
                              VariadicParameterToken)
 add_frontend_diagnostic_case(Parser.MissingParameterComma MissingParameterComma)
+add_frontend_diagnostic_case(Parser.EmptyCharacterLiteral CharacterLiteralEmpty)
+add_frontend_diagnostic_case(Parser.CharacterLiteralMultiple
+                             CharacterLiteralMultiple)
+add_frontend_diagnostic_case(Parser.CharacterLiteralNonAscii
+                             CharacterLiteralNonAscii)
+add_frontend_diagnostic_case(Parser.CharacterLiteralUnknownEscape
+                             CharacterLiteralUnknownEscape)
+add_frontend_diagnostic_case(Parser.CharacterLiteralMissingHexDigit
+                             CharacterLiteralMissingHexDigit)
+add_frontend_diagnostic_case(Parser.CharacterLiteralOctalOutOfRange
+                             CharacterLiteralOctalOutOfRange)
+add_frontend_diagnostic_case(Parser.CharacterLiteralHexOutOfRange
+                             CharacterLiteralHexOutOfRange)
 add_frontend_diagnostic_case(Sema.UnsupportedType UnsupportedType)
 add_frontend_diagnostic_case(Parser.ExternParameter ParserExternParameter)
 add_frontend_diagnostic_case(Parser.ExternField ParserExternField)

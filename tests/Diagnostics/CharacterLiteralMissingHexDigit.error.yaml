@@ -1,0 +1,5 @@
+diagnostics:
+  - error: CharacterLiteralHexEscapeRequiresDigit
+    file: "@SOURCE_FILE@"
+    location: "2:10-2:14"
+    fields: {}

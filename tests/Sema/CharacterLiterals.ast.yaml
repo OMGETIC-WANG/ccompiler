@@ -1,0 +1,28 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: hex
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: int}}
+                constant_value: 66
+                value: 66
+    - VarDecl:
+        name: newline
+        initializer:
+          ValueInitializer:
+            value:
+              ImplicitCast:
+                type: {BuiltinType: {type_name: char}}
+                value_category: RValue
+                constant_value: 10
+                target_type: {BuiltinType: {type_name: char}}
+                operand:
+                  LiteralNum:
+                    type: {BuiltinType: {type_name: int}}
+                    constant_value: 10
+                    value: 10
+    - FunctionDecl:
+        name: main

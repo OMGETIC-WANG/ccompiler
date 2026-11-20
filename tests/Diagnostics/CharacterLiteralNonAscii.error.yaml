@@ -1,0 +1,5 @@
+diagnostics:
+  - error: NonAsciiCharacterLiteral
+    file: "@SOURCE_FILE@"
+    location: "2:10-2:15"
+    fields: {}

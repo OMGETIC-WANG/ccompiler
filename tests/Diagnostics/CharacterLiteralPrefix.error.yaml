@@ -1,0 +1,5 @@
+diagnostics:
+  - error: UnsupportedCharacterLiteralPrefix
+    file: "@SOURCE_FILE@"
+    location: "2:10-2:11"
+    fields: {}

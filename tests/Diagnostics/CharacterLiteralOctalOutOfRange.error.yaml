@@ -1,0 +1,5 @@
+diagnostics:
+  - error: CharacterLiteralEscapeOutOfRange
+    file: "@SOURCE_FILE@"
+    location: "2:10-2:16"
+    fields: {}

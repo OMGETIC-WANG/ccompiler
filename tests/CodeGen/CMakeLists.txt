@@ -1,5 +1,6 @@
 set(CODEGEN_JIT_CASES
     AggregatesPointers
+    CharacterLiterals
     ConstantFlow
     Conversions
     ControlFlow

@@ -486,13 +486,37 @@ static ScannedToken TryPeekAsOperator(std::string_view s) {
   return result;
 }
 
-static ScannedToken PeekAsLiterlChar(std::string_view s) {
-  if (s.size() >= 3) {
-    if (s[0] == '\'' && s[2] == '\'') {
-      return {TokenType::LiteralChar, 3};
+static std::optional<ScannedToken>
+PeekAsLiteralChar(std::string_view s, DiagnosticContext &diagnostics,
+                  const LocationMap &location_map, size_t token_begin) {
+  ASSERT(s.starts_with('\''));
+
+  size_t pos = 1;
+  while (pos < s.size()) {
+    if (s[pos] == '\n' || s[pos] == '\r') {
+      diagnostics.Error(location_map.Point(token_begin),
+                        errs::UnterminatedCharacterLiteral{});
+      return std::nullopt;
     }
+    if (s[pos] == '\\') {
+      ++pos;
+      if (pos == s.size() || s[pos] == '\n' || s[pos] == '\r') {
+        diagnostics.Error(location_map.Point(token_begin),
+                          errs::UnterminatedCharacterLiteral{});
+        return std::nullopt;
+      }
+      ++pos;
+      continue;
+    }
+    if (s[pos] == '\'') {
+      return ScannedToken{TokenType::LiteralChar, pos + 1};
+    }
+    ++pos;
   }
-  return {};
+
+  diagnostics.Error(location_map.Point(token_begin),
+                    errs::UnterminatedCharacterLiteral{});
+  return std::nullopt;
 }
 
 #pragma region literal_string_detail
@@ -602,13 +626,20 @@ static std::optional<ScannedToken> ScanToken(std::string_view rest,
     }
   }
 
+  if (rest.starts_with("u8'") || rest.starts_with("L'") ||
+      rest.starts_with("u'") || rest.starts_with("U'")) {
+    diagnostics.Error(location_map.Point(token_begin),
+                      errs::UnsupportedCharacterLiteralPrefix{});
+    return std::nullopt;
+  }
+
   if (IsIdentifierStart(rest[0])) {
     std::string_view ident = GetIdentifier(rest);
     return ResolveIdentifier(ident);
   }
 
   if (rest[0] == '\'') {
-    return PeekAsLiterlChar(rest);
+    return PeekAsLiteralChar(rest, diagnostics, location_map, token_begin);
   }
 
   if (rest[0] == '\"') {

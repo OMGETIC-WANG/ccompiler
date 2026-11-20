@@ -1,0 +1,74 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: plain
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: int}}
+                value: 65
+    - VarDecl:
+        name: newline
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: int}}
+                value: 10
+    - VarDecl:
+        name: quote
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: int}}
+                value: 39
+    - VarDecl:
+        name: backslash
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: int}}
+                value: 92
+    - VarDecl:
+        name: hex
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: int}}
+                value: 66
+    - VarDecl:
+        name: octal
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: int}}
+                value: 65
+    - VarDecl:
+        name: nul
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: int}}
+                value: 0
+    - VarDecl:
+        name: maximum
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: int}}
+                value: 255
+    - VarDecl:
+        name: long_hex
+        initializer:
+          ValueInitializer:
+            value:
+              LiteralNum:
+                type: {BuiltinType: {type_name: int}}
+                value: 65

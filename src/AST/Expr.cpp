@@ -400,6 +400,131 @@ static std::optional<int> HexToInt(char c, SourceLocation location,
   }
 }
 
+static bool IsOctalDigit(char c) { return c >= '0' && c <= '7'; }
+
+static bool IsHexDigit(char c) {
+  return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+         (c >= 'A' && c <= 'F');
+}
+
+static unsigned HexDigitValue(char c) {
+  if (c >= '0' && c <= '9') {
+    return static_cast<unsigned>(c - '0');
+  }
+  if (c >= 'a' && c <= 'f') {
+    return static_cast<unsigned>(c - 'a' + 10);
+  }
+  return static_cast<unsigned>(c - 'A' + 10);
+}
+
+static std::optional<uint64_t>
+ParseCharacterLiteralValue(std::string_view spelling, SourceLocation location,
+                           CompileContext &context) {
+  ASSERT(spelling.size() >= 2 && spelling.front() == '\'' &&
+             spelling.back() == '\'',
+         "Invalid character literal token");
+
+  std::string_view content = spelling.substr(1, spelling.size() - 2);
+  if (content.empty()) {
+    ReportParserError(context, location, errs::EmptyCharacterLiteral{});
+    return std::nullopt;
+  }
+
+  for (char c : content) {
+    if (static_cast<unsigned char>(c) >= 0x80) {
+      ReportParserError(context, location, errs::NonAsciiCharacterLiteral{});
+      return std::nullopt;
+    }
+  }
+
+  if (content.front() != '\\') {
+    if (content.size() != 1) {
+      ReportParserError(context, location,
+                        errs::CharacterLiteralRequiresSingleCharacter{});
+      return std::nullopt;
+    }
+    return static_cast<unsigned char>(content.front());
+  }
+
+  size_t pos = 1;
+  ASSERT(pos < content.size(), "Character literal escape is incomplete");
+  char escape = content[pos++];
+
+  if (escape == 'x') {
+    const size_t digits_begin = pos;
+    uint64_t value = 0;
+    bool out_of_range = false;
+    while (pos < content.size() && IsHexDigit(content[pos])) {
+      unsigned digit = HexDigitValue(content[pos++]);
+      if (!out_of_range) {
+        if (value > (0xffu - digit) / 16u) {
+          out_of_range = true;
+        } else {
+          value = value * 16 + digit;
+        }
+      }
+    }
+    if (digits_begin == pos) {
+      ReportParserError(context, location,
+                        errs::CharacterLiteralHexEscapeRequiresDigit{});
+      return std::nullopt;
+    }
+    if (out_of_range) {
+      ReportParserError(context, location,
+                        errs::CharacterLiteralEscapeOutOfRange{});
+      return std::nullopt;
+    }
+    if (pos != content.size()) {
+      ReportParserError(context, location,
+                        errs::CharacterLiteralRequiresSingleCharacter{});
+      return std::nullopt;
+    }
+    return value;
+  }
+
+  if (IsOctalDigit(escape)) {
+    uint64_t value = static_cast<unsigned>(escape - '0');
+    size_t digits = 1;
+    while (digits < 3 && pos < content.size() && IsOctalDigit(content[pos])) {
+      value = value * 8 + static_cast<unsigned>(content[pos++] - '0');
+      ++digits;
+    }
+    if (value > 0xff) {
+      ReportParserError(context, location,
+                        errs::CharacterLiteralEscapeOutOfRange{});
+      return std::nullopt;
+    }
+    if (pos != content.size()) {
+      ReportParserError(context, location,
+                        errs::CharacterLiteralRequiresSingleCharacter{});
+      return std::nullopt;
+    }
+    return value;
+  }
+
+  TRY_ASSIGN_NEW(value,
+                 CastSimpleEscape(escape, location, context.Diagnostics()));
+  if (pos != content.size()) {
+    ReportParserError(context, location,
+                      errs::CharacterLiteralRequiresSingleCharacter{});
+    return std::nullopt;
+  }
+  return static_cast<unsigned char>(value);
+}
+
+static std::optional<std::unique_ptr<LiteralNum>>
+ParseLiteralChar(Token tok, CompileContext &context) {
+  TRY_ASSIGN_NEW(value,
+                 ParseCharacterLiteralValue(context.Sources().GetText(tok),
+                                            tok.location, context));
+
+  auto literal_num = std::make_unique<LiteralNum>();
+  literal_num->type = context.Types().getInt();
+  literal_num->value = static_cast<int64_t>(value);
+  literal_num->location = tok.location;
+  return literal_num;
+}
+
 static std::optional<CowString>
 ParseLiteralStringValue(std::string_view s_, SourceLocation location,
                         DiagnosticContext &diagnostics) {
@@ -453,6 +578,10 @@ std::optional<std::unique_ptr<ASTNode>> ParsePrimary(Lexer &lexer,
   case TokenType::LiteralNum: {
     lexer.ConsumeToken(tok);
     return ParseLiteralNum(tok, context);
+  }
+  case TokenType::LiteralChar: {
+    lexer.ConsumeToken(tok);
+    return ParseLiteralChar(tok, context);
   }
   case TokenType::LiteralString: {
     lexer.ConsumeToken(tok);
