@@ -4,6 +4,7 @@
 #include "AST.h"
 #include "Type.h"
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -100,7 +101,6 @@ private:
   }
 };
 
-std::unique_ptr<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,
-                                                  Token name_token,
-                                                  Lexer &lexer,
-                                                  CompileContext &context);
+std::optional<std::unique_ptr<IntrinsicCall>>
+ParseIntrinsicCall(const IntrinsicDesc *desc, Token name_token, Lexer &lexer,
+                   CompileContext &context);

@@ -34,15 +34,25 @@ int RunASTFixtureTest(const std::filesystem::path &source_path,
   Lexer lexer(raw_lexer);
   auto translation_unit =
       ParseTranslationUnit(lexer, types, sources, diagnostics);
+  if (!translation_unit) {
+    std::cerr << diagnostics.Format(diagnostics.Messages()) << '\n';
+    return 1;
+  }
   if (mode == ASTFixtureMode::ParseAndAnalyze) {
-    diagnostics.ThrowIfErrors();
-    AnalyzeTranslationUnit(*translation_unit, types, diagnostics);
+    if (diagnostics.HasErrors()) {
+      std::cerr << diagnostics.Format(diagnostics.Messages()) << '\n';
+      return 1;
+    }
+    if (!AnalyzeTranslationUnit(**translation_unit, types, diagnostics)) {
+      std::cerr << diagnostics.Format(diagnostics.Messages()) << '\n';
+      return 1;
+    }
   }
 
   YAML::Node expected = YAML::LoadFile(expected_path.string());
   VerifyContext verify_context;
   verify_context.path_stack.emplace_back("AST");
-  VerifyTreeNode(translation_unit.get(), expected, verify_context);
+  VerifyTreeNode((*translation_unit).get(), expected, verify_context);
   if (!verify_context.messages.empty()) {
     std::cerr << "FAIL " << source_path << '\n';
     for (const std::string &message : verify_context.messages) {

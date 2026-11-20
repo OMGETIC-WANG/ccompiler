@@ -1,4 +1,5 @@
 #include "Intrinsic.h"
+#include "../Util/Util.h"
 #include "Declaration.h"
 #include "Diagnostics/Errors.generated.h"
 #include "Expr.h"
@@ -41,46 +42,60 @@ std::vector<const ASTNode *> IntrinsicCall::GetPrintChildren() const {
   return print_children;
 }
 
-std::unique_ptr<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,
-                                                  Token name_token,
-                                                  Lexer &lexer,
-                                                  CompileContext &context) {
+std::optional<std::unique_ptr<IntrinsicCall>>
+ParseIntrinsicCall(const IntrinsicDesc *desc, Token name_token, Lexer &lexer,
+                   CompileContext &context) {
   auto call = std::make_unique<IntrinsicCall>();
   call->desc = desc;
-  Token lparen = lexer.PeekNextToken();
+  Token next;
+  TRY_ASSIGN_NEW(lparen, lexer.PeekNextToken());
   if (lparen.type != TokenType::LParen) {
-    RaiseParserError(context, lparen.location, errs::ExpectedIntrinsicLParen{});
+    ReportParserError(context, lparen.location,
+                      errs::ExpectedIntrinsicLParen{});
+    return std::nullopt;
   }
   lexer.ConsumeToken(lparen);
   for (size_t i = 0; i < desc->arg_kinds.size(); i++) {
     IntrinsicCallArgKind kind = desc->arg_kinds[i];
     switch (kind) {
-    case IntrinsicCallArgKind::Expr:
-      call->args.push_back(ParseExpr(lexer, context));
+    case IntrinsicCallArgKind::Expr: {
+      TRY_ASSIGN_NEW(argument, ParseExpr(lexer, context));
+      call->args.push_back(std::move(argument));
       break;
-    case IntrinsicCallArgKind::Type:
-      call->args.push_back(ParseTypeName(lexer, context));
+    }
+    case IntrinsicCallArgKind::Type: {
+      TRY_ASSIGN_NEW(argument, ParseTypeName(lexer, context));
+      call->args.push_back(argument);
       break;
+    }
     case IntrinsicCallArgKind::ExprOrType: {
-      if (IsDeclarationSpecifier(lexer.PeekNextToken(), context)) {
-        call->args.push_back(ParseTypeName(lexer, context));
+      TRY_ASSIGN(next, lexer.PeekNextToken());
+      if (IsDeclarationSpecifier(next, context)) {
+        TRY_ASSIGN_NEW(argument, ParseTypeName(lexer, context));
+        call->args.push_back(argument);
       } else {
-        call->args.push_back(ParseExpr(lexer, context));
+        TRY_ASSIGN_NEW(argument, ParseExpr(lexer, context));
+        call->args.push_back(std::move(argument));
       }
     } break;
     }
     if (i != desc->arg_kinds.size() - 1) {
-      Token comma = lexer.PeekNextToken();
+      TRY_ASSIGN(next, lexer.PeekNextToken());
+      Token comma = next;
       if (comma.type != TokenType::Comma) {
-        RaiseParserError(context, comma.location,
-                         errs::ExpectedIntrinsicComma{});
+        ReportParserError(context, comma.location,
+                          errs::ExpectedIntrinsicComma{});
+        return std::nullopt;
       }
       lexer.ConsumeToken(comma);
     }
   }
-  Token rparen = lexer.PeekNextToken();
+  TRY_ASSIGN(next, lexer.PeekNextToken());
+  Token rparen = next;
   if (rparen.type != TokenType::RParen) {
-    RaiseParserError(context, rparen.location, errs::ExpectedIntrinsicRParen{});
+    ReportParserError(context, rparen.location,
+                      errs::ExpectedIntrinsicRParen{});
+    return std::nullopt;
   }
   lexer.ConsumeToken(rparen);
   call->location = CombineLocation(name_token.location, rparen.location);

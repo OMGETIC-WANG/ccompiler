@@ -1,9 +1,13 @@
 #include "AST/Context.h"
+#include "AST/TranslationUnit.h"
 #include "AST/TypeContext.h"
 #include "Diagnostics/Errors.generated.h"
 #include "Lex/Lexer.h"
+#include "Lex/Macro.h"
+#include "Sema/SemanticAnalysis.h"
 #include "SourceManager.h"
 #include "Util/Diagnostic.h"
+#include "Util/Util.h"
 
 #include <gtest/gtest.h>
 
@@ -25,6 +29,73 @@ std::string TrimWhitespace(std::string_view value) {
   return std::string(value.substr(first, last - first + 1));
 }
 
+std::optional<int> OptionalValue(bool fail) {
+  if (fail) {
+    return std::nullopt;
+  }
+  return 7;
+}
+
+std::optional<int> TryAssignValue(bool fail) {
+  int value = 0;
+  TRY_ASSIGN(value, OptionalValue(fail));
+  return value;
+}
+
+std::optional<int> TryAssignNewValue(bool fail) {
+  TRY_ASSIGN_NEW(value, OptionalValue(fail));
+  return value;
+}
+
+std::optional<std::unique_ptr<int>> OptionalPointer(bool fail) {
+  if (fail) {
+    return std::nullopt;
+  }
+  return std::make_unique<int>(9);
+}
+
+std::optional<int> TryAssignNewMoveOnly(bool fail) {
+  TRY_ASSIGN_NEW(value, OptionalPointer(fail));
+  return *value;
+}
+
+std::optional<std::monostate> TryValue(bool fail) {
+  TRY(OptionalValue(fail));
+  return Succeeded();
+}
+
+std::optional<int> CountedValue(int &evaluation_count, bool fail = false) {
+  ++evaluation_count;
+  if (fail) {
+    return std::nullopt;
+  }
+  return 11;
+}
+
+std::optional<int> TryAssignCounted(int &evaluation_count, bool fail = false) {
+  int value = 0;
+  TRY_ASSIGN(value, CountedValue(evaluation_count, fail));
+  return value;
+}
+
+std::optional<int> TryAssignNewCounted(int &evaluation_count,
+                                       bool fail = false) {
+  TRY_ASSIGN_NEW(value, CountedValue(evaluation_count, fail));
+  return value;
+}
+
+std::optional<std::monostate> TryCounted(int &evaluation_count,
+                                         bool fail = false) {
+  TRY(CountedValue(evaluation_count, fail));
+  return Succeeded();
+}
+
+std::optional<std::pair<int, int>> TryAssignNewTwice(int &evaluation_count) {
+  TRY_ASSIGN_NEW(first, CountedValue(evaluation_count));
+  TRY_ASSIGN_NEW(second, CountedValue(evaluation_count));
+  return std::pair{first, second};
+}
+
 } // namespace
 
 TEST(DiagnosticsFormatting, ConsumeUntilRetainsStopTokens) {
@@ -40,16 +111,22 @@ TEST(DiagnosticsFormatting, ConsumeUntilRetainsStopTokens) {
       TokenType::RBrace,
   };
 
-  ASSERT_TRUE(lexer.ConsumeUntil(recovery_stops));
-  EXPECT_EQ(lexer.PeekNextToken().type, TokenType::RBrace);
+  std::optional<bool> consumed = lexer.ConsumeUntil(recovery_stops);
+  ASSERT_TRUE(consumed.has_value());
+  ASSERT_TRUE(*consumed);
+  EXPECT_EQ(lexer.PeekNextToken()->type, TokenType::RBrace);
   lexer.ConsumeNextToken();
-  ASSERT_TRUE(lexer.ConsumeUntil(recovery_stops));
-  EXPECT_EQ(lexer.PeekNextToken().type, TokenType::Semicolon);
+  consumed = lexer.ConsumeUntil(recovery_stops);
+  ASSERT_TRUE(consumed.has_value());
+  ASSERT_TRUE(*consumed);
+  EXPECT_EQ(lexer.PeekNextToken()->type, TokenType::Semicolon);
   lexer.ConsumeNextToken();
 
   constexpr std::array eof_stops{TokenType::RBrace};
-  EXPECT_FALSE(lexer.ConsumeUntil(eof_stops));
-  EXPECT_EQ(lexer.PeekNextToken().type, TokenType::EndOfFile);
+  consumed = lexer.ConsumeUntil(eof_stops);
+  ASSERT_TRUE(consumed.has_value());
+  EXPECT_FALSE(*consumed);
+  EXPECT_EQ(lexer.PeekNextToken()->type, TokenType::EndOfFile);
 }
 
 TEST(DiagnosticsFormatting, VerifiesGeneratedFields) {
@@ -94,7 +171,7 @@ TEST(DiagnosticsFormatting, FormatsLocalDiagnostics) {
   EXPECT_EQ(diagnostics.Messages().size(), 1);
 }
 
-TEST(DiagnosticsFormatting, ThrowsCollectedDiagnostics) {
+TEST(DiagnosticsFormatting, PreservesCollectedDiagnostics) {
   SourceManager sources;
   SourceHandle source = sources.LoadSource("abc\n", "<stdin>");
   DiagnosticContext diagnostics(sources);
@@ -106,16 +183,9 @@ TEST(DiagnosticsFormatting, ThrowsCollectedDiagnostics) {
   diagnostics.Error(location, errs::UnknownVar("localized"));
   diagnostics.Error(location, errs::ExpectedSemicolon());
 
-  bool raised = false;
-  try {
-    diagnostics.ThrowIfErrors();
-  } catch (const DiagnosticError &error) {
-    raised = true;
-    EXPECT_EQ(TrimWhitespace(diagnostics.Format(error.Messages())),
-              "<stdin>:1:2: error: Unknown var: localized\n"
-              "<stdin>:1:2: error: Expected ';'");
-  }
-  EXPECT_TRUE(raised);
+  EXPECT_EQ(TrimWhitespace(diagnostics.Format(diagnostics.Messages())),
+            "<stdin>:1:2: error: Unknown var: localized\n"
+            "<stdin>:1:2: error: Expected ';'");
 }
 
 TEST(DiagnosticsFormatting, FormatsGlobalDiagnostics) {
@@ -130,26 +200,123 @@ TEST(DiagnosticsFormatting, FormatsGlobalDiagnostics) {
             "ccompiler: error: Unexpected token");
 }
 
-TEST(DiagnosticsFormatting, FormatsFatalDiagnostics) {
-  SourceManager sources;
-  SourceHandle source = sources.LoadSource("abc\n", "<stdin>");
-  DiagnosticContext diagnostics(sources);
-  SourceLocation location{
-      .source_id = source.id,
-      .begin = 1,
-      .end = 2,
-  };
-  diagnostics.Error(location, errs::UnexpectedToken());
+TEST(DiagnosticsFormatting, PropagatesOptionalFailures) {
+  EXPECT_EQ(TryAssignValue(false), 7);
+  EXPECT_FALSE(TryAssignValue(true).has_value());
+  EXPECT_EQ(TryAssignNewValue(false), 7);
+  EXPECT_FALSE(TryAssignNewValue(true).has_value());
+  EXPECT_EQ(TryAssignNewMoveOnly(false), 9);
+  EXPECT_FALSE(TryAssignNewMoveOnly(true).has_value());
+  EXPECT_TRUE(TryValue(false).has_value());
+  EXPECT_FALSE(TryValue(true).has_value());
 
-  bool raised = false;
-  try {
-    diagnostics.Fail(location, errs::ExpectedSemicolon());
-  } catch (const DiagnosticError &error) {
-    raised = true;
-    EXPECT_EQ(error.what(), std::string_view("Expected ';'"));
-    EXPECT_EQ(TrimWhitespace(diagnostics.Format(error.Messages())),
-              "<stdin>:1:2: error: Unexpected token\n"
-              "<stdin>:1:2: error: Expected ';'");
-  }
-  EXPECT_TRUE(raised);
+  int evaluation_count = 0;
+  std::optional<std::pair<int, int>> values =
+      TryAssignNewTwice(evaluation_count);
+  ASSERT_TRUE(values.has_value());
+  EXPECT_EQ(values->first, 11);
+  EXPECT_EQ(values->second, 11);
+  EXPECT_EQ(evaluation_count, 2);
+
+  evaluation_count = 0;
+  EXPECT_EQ(TryAssignCounted(evaluation_count), 11);
+  EXPECT_EQ(evaluation_count, 1);
+
+  evaluation_count = 0;
+  EXPECT_TRUE(TryCounted(evaluation_count).has_value());
+  EXPECT_EQ(evaluation_count, 1);
+
+  evaluation_count = 0;
+  EXPECT_FALSE(TryAssignCounted(evaluation_count, true).has_value());
+  EXPECT_EQ(evaluation_count, 1);
+
+  evaluation_count = 0;
+  EXPECT_FALSE(TryCounted(evaluation_count, true).has_value());
+  EXPECT_EQ(evaluation_count, 1);
+
+  evaluation_count = 0;
+  EXPECT_EQ(TryAssignNewCounted(evaluation_count), 11);
+  EXPECT_EQ(evaluation_count, 1);
+
+  evaluation_count = 0;
+  EXPECT_FALSE(TryAssignNewCounted(evaluation_count, true).has_value());
+  EXPECT_EQ(evaluation_count, 1);
+}
+
+TEST(DiagnosticsFormatting, LexerFailureStopsTranslationUnit) {
+  SourceManager sources;
+  SourceHandle source = sources.LoadSource("int value = @;\n", "<lexer-error>");
+  DiagnosticContext diagnostics(sources);
+  MacroContext macros;
+  TypeContext types;
+  CompileContext context(types, sources, diagnostics);
+  RawLexer raw_lexer(source, macros, sources, context);
+  Lexer lexer(raw_lexer);
+
+  std::optional<std::unique_ptr<TranslationUnit>> translation_unit =
+      ParseTranslationUnit(lexer, types, sources, diagnostics);
+
+  EXPECT_FALSE(translation_unit.has_value());
+  EXPECT_TRUE(diagnostics.HasErrors());
+}
+
+TEST(DiagnosticsFormatting, PreprocessorFailureStopsTranslationUnit) {
+  SourceManager sources;
+  SourceHandle source = sources.LoadSource("#error stop\n", "<pp-error>");
+  DiagnosticContext diagnostics(sources);
+  MacroContext macros;
+  TypeContext types;
+  CompileContext context(types, sources, diagnostics);
+  RawLexer raw_lexer(source, macros, sources, context);
+  Lexer lexer(raw_lexer);
+
+  std::optional<std::unique_ptr<TranslationUnit>> translation_unit =
+      ParseTranslationUnit(lexer, types, sources, diagnostics);
+
+  EXPECT_FALSE(translation_unit.has_value());
+  EXPECT_TRUE(diagnostics.HasErrors());
+}
+
+TEST(DiagnosticsFormatting, ParserRecoveryReturnsPartialTranslationUnit) {
+  SourceManager sources;
+  SourceHandle source =
+      sources.LoadSource("int first = ;\nint second = ;\n", "<recovery>");
+  DiagnosticContext diagnostics(sources);
+  MacroContext macros;
+  TypeContext types;
+  CompileContext context(types, sources, diagnostics);
+  RawLexer raw_lexer(source, macros, sources, context);
+  Lexer lexer(raw_lexer);
+
+  std::optional<std::unique_ptr<TranslationUnit>> translation_unit =
+      ParseTranslationUnit(lexer, types, sources, diagnostics);
+
+  ASSERT_TRUE(translation_unit.has_value());
+  EXPECT_NE(*translation_unit, nullptr);
+  EXPECT_EQ(diagnostics.Messages().size(), 2);
+}
+
+TEST(DiagnosticsFormatting, SemaFailureLeavesTranslationUnitUnanalyzed) {
+  SourceManager sources;
+  SourceHandle source = sources.LoadSource(
+      "int main(void) { return \"invalid\"; }\n", "<sema-error>");
+  DiagnosticContext diagnostics(sources);
+  MacroContext macros;
+  TypeContext types;
+  CompileContext context(types, sources, diagnostics);
+  RawLexer raw_lexer(source, macros, sources, context);
+  Lexer lexer(raw_lexer);
+
+  std::optional<std::unique_ptr<TranslationUnit>> translation_unit =
+      ParseTranslationUnit(lexer, types, sources, diagnostics);
+  ASSERT_TRUE(translation_unit.has_value());
+  ASSERT_NE(*translation_unit, nullptr);
+  EXPECT_FALSE(diagnostics.HasErrors());
+
+  std::optional<std::monostate> result =
+      AnalyzeTranslationUnit(**translation_unit, types, diagnostics);
+
+  EXPECT_FALSE(result.has_value());
+  EXPECT_TRUE(diagnostics.HasErrors());
+  EXPECT_FALSE((*translation_unit)->is_semantically_analyzed);
 }

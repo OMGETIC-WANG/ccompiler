@@ -275,7 +275,8 @@ constexpr auto AdvanceDecFloatNum = AdvanceFloatNum<std::pair{'0', '9'}>;
 
 static std::optional<std::string_view>
 TryPeekAsLiteralHex(std::string_view s, DiagnosticContext &diagnostics,
-                    const LocationMap &location_map, size_t token_begin) {
+                    const LocationMap &location_map, size_t token_begin,
+                    bool &failed) {
   if (s.starts_with("0x") || s.starts_with("0X")) {
     size_t pos = 2;
     pos = AdvanceHexFloatNum(s, pos);
@@ -290,7 +291,9 @@ TryPeekAsLiteralHex(std::string_view s, DiagnosticContext &diagnostics,
       }
       size_t advanced = AdvancePureDecNum(s, pos);
       if (advanced == pos) {
-        diagnostics.Fail(exponent_location, errs::ExpectedDecimalExponentP{});
+        diagnostics.Error(exponent_location, errs::ExpectedDecimalExponentP{});
+        failed = true;
+        return std::nullopt;
       }
       pos = advanced;
     }
@@ -301,7 +304,8 @@ TryPeekAsLiteralHex(std::string_view s, DiagnosticContext &diagnostics,
 
 static std::optional<std::string_view>
 TryPeekAsLiteralDec(std::string_view s, DiagnosticContext &diagnostics,
-                    const LocationMap &location_map, size_t token_begin) {
+                    const LocationMap &location_map, size_t token_begin,
+                    bool &failed) {
   size_t pos = AdvanceDecFloatNum(s, 0);
   if (pos == 0) {
     return std::nullopt;
@@ -314,7 +318,9 @@ TryPeekAsLiteralDec(std::string_view s, DiagnosticContext &diagnostics,
     }
     size_t advanced = AdvancePureDecNum(s, pos);
     if (advanced == pos) {
-      diagnostics.Fail(exponent_location, errs::ExpectedDecimalExponentE{});
+      diagnostics.Error(exponent_location, errs::ExpectedDecimalExponentE{});
+      failed = true;
+      return std::nullopt;
     }
     pos = advanced;
   }
@@ -350,23 +356,32 @@ static std::string_view TryAddPostfix(std::string_view s,
 
 #pragma endregion literal_num_detail
 
-static ScannedToken TryPeekAsLiteralNum(std::string_view s,
-                                        DiagnosticContext &diagnostics,
-                                        const LocationMap &location_map,
-                                        size_t token_begin) {
-  if (auto hex =
-          TryPeekAsLiteralHex(s, diagnostics, location_map, token_begin)) {
-    return {TokenType::LiteralNum, TryAddPostfix(s, hex.value()).size()};
+static std::optional<ScannedToken>
+TryPeekAsLiteralNum(std::string_view s, DiagnosticContext &diagnostics,
+                    const LocationMap &location_map, size_t token_begin) {
+  bool failed = false;
+  if (auto hex = TryPeekAsLiteralHex(s, diagnostics, location_map, token_begin,
+                                     failed)) {
+    return ScannedToken{TokenType::LiteralNum,
+                        TryAddPostfix(s, hex.value()).size()};
+  }
+  if (failed) {
+    return std::nullopt;
   }
   if (auto bin = TryPeekAsLiteralBin(s)) {
-    return {TokenType::LiteralNum, TryAddPostfix(s, bin.value()).size()};
+    return ScannedToken{TokenType::LiteralNum,
+                        TryAddPostfix(s, bin.value()).size()};
   }
   // Treat oct as dec in lexer
-  if (auto dec =
-          TryPeekAsLiteralDec(s, diagnostics, location_map, token_begin)) {
-    return {TokenType::LiteralNum, TryAddPostfix(s, dec.value()).size()};
+  if (auto dec = TryPeekAsLiteralDec(s, diagnostics, location_map, token_begin,
+                                     failed)) {
+    return ScannedToken{TokenType::LiteralNum,
+                        TryAddPostfix(s, dec.value()).size()};
   }
-  return {};
+  if (failed) {
+    return std::nullopt;
+  }
+  return ScannedToken{};
 }
 
 static bool IsIdentifierStart(char c) {
@@ -568,12 +583,12 @@ std::pair<std::string_view, bool> Scanner::TrimSourceBlankH() {
   return {Text().substr(_pos), pos != old_pos};
 }
 
-static ScannedToken ScanToken(std::string_view rest,
-                              DiagnosticContext &diagnostics,
-                              const LocationMap &location_map,
-                              size_t token_begin) {
+static std::optional<ScannedToken> ScanToken(std::string_view rest,
+                                             DiagnosticContext &diagnostics,
+                                             const LocationMap &location_map,
+                                             size_t token_begin) {
   if (rest.starts_with("##")) {
-    return {TokenType::SharpSharp, 2};
+    return ScannedToken{TokenType::SharpSharp, 2};
   }
 
   if (rest[0] == '.') {
@@ -581,9 +596,9 @@ static ScannedToken ScanToken(std::string_view rest,
       return TryPeekAsLiteralNum(rest, diagnostics, location_map, token_begin);
     }
     if (rest.starts_with("...")) {
-      return {TokenType::DotDotDot, 3};
+      return ScannedToken{TokenType::DotDotDot, 3};
     } else {
-      return {TokenType::Dot, 1};
+      return ScannedToken{TokenType::Dot, 1};
     }
   }
 
@@ -610,11 +625,12 @@ static ScannedToken ScanToken(std::string_view rest,
   }
 
   if (single_char_tokens[rest[0]] != TokenType::Unknown) {
-    return {single_char_tokens[rest[0]], 1};
+    return ScannedToken{single_char_tokens[rest[0]], 1};
   }
 
-  diagnostics.Fail(location_map.Point(token_begin),
-                   errs::UnknownCharacter{rest[0]});
+  diagnostics.Error(location_map.Point(token_begin),
+                    errs::UnknownCharacter{rest[0]});
+  return std::nullopt;
 }
 
 Token Scanner::MakeToken(size_t begin, TokenType type, size_t length,
@@ -636,7 +652,7 @@ Token Scanner::MakeToken(size_t begin, TokenType type, size_t length,
   };
 }
 
-Token Scanner::PeekNextToken() {
+std::optional<Token> Scanner::PeekNextToken() {
   auto [rest, has_leading_space] = TrimSourceBlank();
   if (rest.empty()) {
     return Token{
@@ -656,13 +672,13 @@ Token Scanner::PeekNextToken() {
       .raw_ends = _logical_char_raw_ends,
   };
   size_t token_begin = _pos;
-  ScannedToken scanned =
-      ScanToken(rest, _diagnostics, location_map, token_begin);
+  TRY_ASSIGN_NEW(scanned,
+                 ScanToken(rest, _diagnostics, location_map, token_begin));
   return MakeToken(token_begin, scanned.type, scanned.length,
                    has_leading_space);
 }
 
-Token Scanner::PeekNextTokenH() {
+std::optional<Token> Scanner::PeekNextTokenH() {
   auto [rest, has_leading_space] = TrimSourceBlankH();
   if (rest.empty()) {
     return Token{
@@ -689,8 +705,8 @@ Token Scanner::PeekNextTokenH() {
     return MakeToken(token_begin, TokenType::NextLine, 2, has_leading_space);
   }
 
-  ScannedToken scanned =
-      ScanToken(rest, _diagnostics, location_map, token_begin);
+  TRY_ASSIGN_NEW(scanned,
+                 ScanToken(rest, _diagnostics, location_map, token_begin));
   return MakeToken(token_begin, scanned.type, scanned.length,
                    has_leading_space);
 }

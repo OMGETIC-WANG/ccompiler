@@ -54,7 +54,7 @@ MacroScanner::IsArgConcatPrefix() const {
   return std::nullopt;
 }
 
-Token MacroScanner::PeekNextToken() {
+std::optional<Token> MacroScanner::PeekNextToken() {
   if (_cache_valid) {
     return _cached_token;
   }
@@ -75,16 +75,19 @@ Token MacroScanner::PeekNextToken() {
 
   if (curr_body_tok.type == TokenType::Sharp) {
     if (_idx + 1 >= _desc.macro->body.size()) {
-      _diagnostics.Fail(curr_body_tok.location, errs::ExpectedMacroParameter{});
+      _diagnostics.Error(curr_body_tok.location,
+                         errs::ExpectedMacroParameter{});
+      return std::nullopt;
     }
     Token next_tok = _desc.macro->body[_idx + 1];
 
     size_t param_idx =
         _desc.macro->GetParamIndex(_source_manager.GetText(next_tok));
     if (param_idx == (size_t)-1) {
-      _diagnostics.Fail(
+      _diagnostics.Error(
           next_tok.location,
           errs::UnknownMacroParameter{_source_manager.GetText(next_tok)});
+      return std::nullopt;
     }
 
     Token res{
@@ -103,12 +106,14 @@ Token MacroScanner::PeekNextToken() {
   if (auto pp = IsArgConcatPrefix(); pp.has_value()) {
     auto [param0_idx, param1_idx] = pp.value();
     if (!(param0_idx == (size_t)-1 || _args[param0_idx].size() == 1)) {
-      _diagnostics.Fail(_desc.macro->body[_idx + 0].location,
-                        errs::MacroConcatRequiresSingleToken{});
+      _diagnostics.Error(_desc.macro->body[_idx + 0].location,
+                         errs::MacroConcatRequiresSingleToken{});
+      return std::nullopt;
     }
     if (!(param1_idx == (size_t)-1 || _args[param1_idx].size() == 1)) {
-      _diagnostics.Fail(_desc.macro->body[_idx + 2].location,
-                        errs::MacroConcatRequiresSingleToken{});
+      _diagnostics.Error(_desc.macro->body[_idx + 2].location,
+                         errs::MacroConcatRequiresSingleToken{});
+      return std::nullopt;
     }
     Token arg0 = param0_idx == (size_t)-1 ? _desc.macro->body[_idx + 0]
                                           : _args[param0_idx][0];
@@ -117,8 +122,9 @@ Token MacroScanner::PeekNextToken() {
 
     if (!IsMacroArgConcatable(arg0, _source_manager) ||
         !IsMacroArgConcatable(arg1, _source_manager)) {
-      _diagnostics.Fail(curr_body_tok.location,
-                        errs::MacroConcatRequiresIdentifierOrKeyword{});
+      _diagnostics.Error(curr_body_tok.location,
+                         errs::MacroConcatRequiresIdentifierOrKeyword{});
+      return std::nullopt;
     }
 
     SourceLocation connected = _source_manager.AddSynthetic(std::format(

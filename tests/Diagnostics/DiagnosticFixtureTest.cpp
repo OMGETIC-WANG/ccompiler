@@ -186,23 +186,16 @@ int RunStructuredDiagnosticTest(const std::filesystem::path &source_path,
   TypeContext types;
   CompileContext context(types, sources, diagnostics);
 
-  try {
-    RegisterBuiltinIntrinsics();
-    RawLexer raw_lexer(source, macros, sources, context);
-    Lexer lexer(raw_lexer);
-    auto translation_unit =
-        ParseTranslationUnit(lexer, types, sources, diagnostics);
-    if (!diagnostics.HasErrors()) {
-      AnalyzeTranslationUnit(*translation_unit, types, diagnostics);
-    }
-    diagnostics.ThrowIfErrors();
-  } catch (const DiagnosticError &error) {
-    messages = error.Messages();
+  RegisterBuiltinIntrinsics();
+  RawLexer raw_lexer(source, macros, sources, context);
+  Lexer lexer(raw_lexer);
+  auto translation_unit =
+      ParseTranslationUnit(lexer, types, sources, diagnostics);
+  if (translation_unit && !diagnostics.HasErrors()) {
+    AnalyzeTranslationUnit(**translation_unit, types, diagnostics);
   }
 
-  if (messages.empty()) {
-    messages = diagnostics.Messages();
-  }
+  messages = diagnostics.Messages();
 
   YAML::Node expected = YAML::LoadFile(expected_path.string());
   if (!VerifyDiagnostics(messages, expected, normalized_source_path, sources)) {

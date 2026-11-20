@@ -20,21 +20,6 @@ struct DiagnosticMessage {
   std::string ToString() const;
 };
 
-class DiagnosticError : public Exception {
-public:
-  explicit DiagnosticError(std::vector<DiagnosticMessage> messages)
-      : Exception(messages.empty() ? "diagnostic error"
-                                   : messages.back().ToString()),
-        _messages(std::move(messages)) {}
-
-  const std::vector<DiagnosticMessage> &Messages() const { return _messages; }
-
-  std::string ToString(const SourceManager &source_manager) const;
-
-private:
-  std::vector<DiagnosticMessage> _messages;
-};
-
 class DriverError : public Exception {
 public:
   using Exception::Exception;
@@ -53,7 +38,7 @@ public:
     }
   }
 
-  // Record an error that a caller can recover from without unwinding.
+  // Record a structured error without imposing a control-flow policy.
   template <typename ErrorType>
     requires std::derived_from<std::remove_cvref_t<ErrorType>, IError>
   void Error(SourceLocation location, ErrorType &&error) {
@@ -68,21 +53,7 @@ public:
     });
   }
 
-  // Record a fatal error and unwind with all diagnostics collected so far.
-  template <typename ErrorType>
-    requires std::derived_from<std::remove_cvref_t<ErrorType>, IError>
-  [[noreturn]] void Fail(SourceLocation location, ErrorType &&error) {
-    Error(location, std::forward<ErrorType>(error));
-    throw DiagnosticError(_messages);
-  }
-
   bool HasErrors() const { return !_messages.empty(); }
-
-  void ThrowIfErrors() const {
-    if (HasErrors()) {
-      throw DiagnosticError(_messages);
-    }
-  }
 
   const std::vector<DiagnosticMessage> &Messages() const { return _messages; }
 

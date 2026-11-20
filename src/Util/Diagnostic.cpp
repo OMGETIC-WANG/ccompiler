@@ -2,10 +2,11 @@
 
 std::string DiagnosticMessage::ToString() const { return formatted_message; }
 
-std::string
-DiagnosticError::ToString(const SourceManager &source_manager) const {
+static std::string
+FormatMessages(const std::vector<DiagnosticMessage> &messages,
+               const SourceManager &source_manager) {
   std::string result;
-  for (const DiagnosticMessage &message : _messages) {
+  for (const DiagnosticMessage &message : messages) {
     if (!result.empty()) {
       result += '\n';
     }
@@ -22,8 +23,7 @@ DiagnosticError::ToString(const SourceManager &source_manager) const {
 
 std::string DiagnosticContext::Format(
     const std::vector<DiagnosticMessage> &messages) const {
-  DiagnosticError error(messages);
-  return error.ToString(_source_manager);
+  return FormatMessages(messages, _source_manager);
 }
 
 std::string DiagnosticContext::Format(const DiagnosticMessage &message) const {

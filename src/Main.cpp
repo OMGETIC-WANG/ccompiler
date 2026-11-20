@@ -21,6 +21,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -85,7 +86,12 @@ static int Run(int argc, char **argv, SourceManager &source_manager,
     RawLexer raw_lexer(source, macro_context, source_manager, compile_context);
     Lexer lexer(raw_lexer);
     while (true) {
-      Token tok = lexer.ConsumeNextToken();
+      std::optional<Token> token = lexer.ConsumeNextToken();
+      if (!token) {
+        std::cerr << diagnostics.Format(diagnostics.Messages()) << '\n';
+        return 1;
+      }
+      Token tok = *token;
       std::cout << EnumRefl<TokenType>::GetName(tok.type) << "]"
                 << source_manager.GetText(tok) << "\n";
       if (tok.type == TokenType::EndOfFile) {
@@ -107,18 +113,24 @@ static int Run(int argc, char **argv, SourceManager &source_manager,
   Lexer filtered_lexer(lexer);
   auto TU =
       ParseTranslationUnit(filtered_lexer, types, source_manager, diagnostics);
+  if (!TU) {
+    std::cerr << diagnostics.Format(diagnostics.Messages()) << '\n';
+    return 1;
+  }
 
   if (!diagnostics.HasErrors()) {
-    AnalyzeTranslationUnit(*TU, types, diagnostics);
+    if (!AnalyzeTranslationUnit(**TU, types, diagnostics)) {
+      std::cerr << diagnostics.Format(diagnostics.Messages()) << '\n';
+      return 1;
+    }
   }
 
   if (show_ast) {
-    TU->Print(std::cout, {.use_color = use_ast_color});
+    (*TU)->Print(std::cout, {.use_color = use_ast_color});
   }
 
   if (diagnostics.HasErrors()) {
-    std::cerr
-        << DiagnosticError(diagnostics.Messages()).ToString(source_manager);
+    std::cerr << diagnostics.Format(diagnostics.Messages());
     return 1;
   }
 
@@ -127,7 +139,8 @@ static int Run(int argc, char **argv, SourceManager &source_manager,
   }
 
   auto llvm_context = std::make_unique<llvm::LLVMContext>();
-  auto module = GenerateLLVMModule(TU.get(), types, *llvm_context, diagnostics);
+  auto module =
+      GenerateLLVMModule(TU->get(), types, *llvm_context, diagnostics);
   std::string ir = PrintModule(*module);
 
   std::string verification_error;
@@ -175,9 +188,6 @@ int main(int argc, char **argv) {
 
   try {
     return Run(argc, argv, source_manager, diagnostics);
-  } catch (const DiagnosticError &error) {
-    std::cerr << diagnostics.Format(error.Messages()) << '\n';
-    return 1;
   } catch (const DriverError &error) {
     std::cerr << "ccompiler: error: " << error.what() << '\n';
     return 1;

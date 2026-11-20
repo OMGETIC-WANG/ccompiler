@@ -4,6 +4,7 @@
 #include "../Util/EnumRefl.h"
 
 #include <cassert>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -31,7 +32,7 @@ struct IScanner {
 
   virtual ScannerType GetType() const = 0;
 
-  virtual Token PeekNextToken() = 0;
+  virtual std::optional<Token> PeekNextToken() = 0;
 
   virtual void ConsumeToken(Token token) = 0;
 
@@ -47,11 +48,11 @@ class Scanner : public IScanner {
 public:
   explicit Scanner(SourceHandle source, DiagnosticContext &diagnostics);
 
-  Token PeekNextToken() override;
+  std::optional<Token> PeekNextToken() override;
 
   // Peek next token in the line, return TokenType::NextLine if reach the end of
   // line
-  Token PeekNextTokenH();
+  std::optional<Token> PeekNextTokenH();
 
   void AdvancePos(size_t count) { _pos += count; }
   void AdvancePosTo(size_t pos) { _pos = pos; }

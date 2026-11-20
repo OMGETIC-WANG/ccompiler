@@ -5,6 +5,7 @@
 #include "ASTNode.h"
 #include "Context.h"
 #include "Type.h"
+#include <optional>
 #include <vector>
 
 enum class StorageClass { None, Static, Extern };
@@ -193,12 +194,12 @@ public:
 
 bool IsDeclarationSpecifier(Token tok, const CompileContext &context);
 
-DeclarationSpecifier ParseDeclarationSpecifier(Lexer &lexer,
-                                               CompileContext &context);
+std::optional<DeclarationSpecifier>
+ParseDeclarationSpecifier(Lexer &lexer, CompileContext &context);
 
-std::unique_ptr<ASTNode> ParseDeclaration(Lexer &lexer,
-                                          CompileContext &context);
+std::optional<std::unique_ptr<ASTNode>>
+ParseDeclaration(Lexer &lexer, CompileContext &context);
 
-TypeRef ParseTypeName(Lexer &lexer, CompileContext &context);
+std::optional<TypeRef> ParseTypeName(Lexer &lexer, CompileContext &context);
 
 bool IsConstantFoldable(const Initializer *initializer);

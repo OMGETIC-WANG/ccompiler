@@ -4,4 +4,7 @@
 #include "ASTNode.h"
 #include "Context.h"
 
-std::unique_ptr<ASTNode> ParseExpr(Lexer &lexer, CompileContext &context);
+#include <optional>
+
+std::optional<std::unique_ptr<ASTNode>> ParseExpr(Lexer &lexer,
+                                                  CompileContext &context);

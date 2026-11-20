@@ -365,7 +365,7 @@ void VerifyTokens(const std::vector<ExpectedToken> &expected,
   }
 }
 
-std::vector<std::pair<TokenType, std::string>>
+std::optional<std::vector<std::pair<TokenType, std::string>>>
 LexSource(const std::filesystem::path &source_path,
           std::span<const std::filesystem::path> include_paths) {
   SourceManager sources;
@@ -381,10 +381,14 @@ LexSource(const std::filesystem::path &source_path,
 
   std::vector<std::pair<TokenType, std::string>> tokens;
   while (true) {
-    const Token token = raw_lexer.EmitToken();
+    std::optional<Token> token_result = raw_lexer.EmitToken();
+    if (!token_result) {
+      std::cerr << diagnostics.Format(diagnostics.Messages()) << '\n';
+      return std::nullopt;
+    }
+    const Token token = *token_result;
     tokens.emplace_back(token.type, std::string(sources.GetText(token)));
     if (token.type == TokenType::EndOfFile) {
-      diagnostics.ThrowIfErrors();
       return tokens;
     }
   }
@@ -401,8 +405,12 @@ int RunLexerTest(const std::filesystem::path &source_path,
       lexer_test::LoadExpectedTokens(expected_path, aliases);
   const std::vector<std::filesystem::path> include_paths =
       lexer_test::ParseIncludePaths(args);
-  const auto actual = lexer_test::LexSource(source_path, include_paths);
-  lexer_test::VerifyTokens(expected, actual, expected_path);
+  std::optional<std::vector<std::pair<TokenType, std::string>>> actual =
+      lexer_test::LexSource(source_path, include_paths);
+  if (!actual) {
+    return 1;
+  }
+  lexer_test::VerifyTokens(expected, *actual, expected_path);
 
   std::cout << "PASS " << source_path << '\n';
   return 0;

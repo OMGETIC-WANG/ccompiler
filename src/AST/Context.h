@@ -7,8 +7,10 @@
 #include "TypeContext.h"
 
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 class EnumDecl;
@@ -85,6 +87,12 @@ public:
   DiagnosticContext &Diagnostics() { return _diagnostics; }
   const DiagnosticContext &Diagnostics() const { return _diagnostics; }
 
+  void RequestParserRecovery() { _parser_recovery_pending = true; }
+
+  bool ConsumeParserRecovery() {
+    return std::exchange(_parser_recovery_pending, false);
+  }
+
   ScopeId CurrentScopeId() { return _next_scope_id++; }
 
   FunctionDecl *FindFunction(std::string_view name) const;
@@ -106,7 +114,10 @@ public:
   ContextItemType GetTypeOf(std::string_view name) const;
   bool Is(std::string_view name, ContextItemType type) const;
 
-  TypeRef GetType(const TypeSpecifier &spec) const;
+  // nullopt means a diagnostic already stopped type resolution; a contained
+  // null TypeRef means the specifier could not be resolved and the caller must
+  // report it.
+  std::optional<TypeRef> GetType(const TypeSpecifier &spec) const;
 
 private:
   const CompileContextSymbol *FindOrdinary(std::string_view name) const;
@@ -116,6 +127,7 @@ private:
   SourceManager &_source_manager;
   DiagnosticContext &_diagnostics;
   ScopeId _next_scope_id;
+  bool _parser_recovery_pending = false;
   std::vector<std::unique_ptr<TypedefDecl>> _synthetic_typedefs;
 };
 

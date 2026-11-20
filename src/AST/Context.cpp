@@ -201,7 +201,8 @@ bool CompileContext::Is(std::string_view name, ContextItemType type) const {
   return false;
 }
 
-TypeRef CompileContext::GetType(const TypeSpecifier &spec) const {
+std::optional<TypeRef>
+CompileContext::GetType(const TypeSpecifier &spec) const {
   TypeRef result;
   if (spec.is_builtin) {
     result = Types().Builtin(spec.type_name);
@@ -232,7 +233,7 @@ TypeRef CompileContext::GetType(const TypeSpecifier &spec) const {
   }
 
   if (!result) {
-    return nullptr;
+    return TypeRef{};
   }
   if (spec.is_unsigned) {
     result = ApplyTypeTag(result, TypeTag::Unsigned);

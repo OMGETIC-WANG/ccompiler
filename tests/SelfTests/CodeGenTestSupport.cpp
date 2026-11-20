@@ -34,14 +34,23 @@ CodeGenTestModule::CodeGenTestModule(std::string_view source_text,
     Lexer lexer(raw_lexer);
     auto translation_unit =
         ParseTranslationUnit(lexer, types, sources, diagnostics);
-    diagnostics.ThrowIfErrors();
-    AnalyzeTranslationUnit(*translation_unit, types, diagnostics);
-    diagnostics.ThrowIfErrors();
+    if (!translation_unit || diagnostics.HasErrors()) {
+      error_ = diagnostics.Format(diagnostics.Messages());
+      return;
+    }
+    if (!AnalyzeTranslationUnit(**translation_unit, types, diagnostics) ||
+        diagnostics.HasErrors()) {
+      error_ = diagnostics.Format(diagnostics.Messages());
+      return;
+    }
 
     llvm_context_ = std::make_unique<llvm::LLVMContext>();
-    module_ = GenerateLLVMModule(translation_unit.get(), types, *llvm_context_,
-                                 diagnostics);
-    diagnostics.ThrowIfErrors();
+    module_ = GenerateLLVMModule((*translation_unit).get(), types,
+                                 *llvm_context_, diagnostics);
+    if (diagnostics.HasErrors()) {
+      error_ = diagnostics.Format(diagnostics.Messages());
+      return;
+    }
     if (!module_) {
       error_ = "code generation returned no module";
       return;
@@ -54,8 +63,6 @@ CodeGenTestModule::CodeGenTestModule(std::string_view source_text,
       error_ = "invalid LLVM module:\n" + verification_error;
       module_.reset();
     }
-  } catch (const DiagnosticError &error) {
-    error_ = diagnostics.Format(error.Messages());
   } catch (const std::exception &error) {
     error_ = error.what();
   }

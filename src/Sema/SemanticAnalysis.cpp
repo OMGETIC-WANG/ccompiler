@@ -7,6 +7,7 @@
 #include "../AST/TypeContext.h"
 #include "../Exception.h"
 #include "../Util/Diagnostic.h"
+#include "../Util/Util.h"
 #include "Diagnostics/Errors.generated.h"
 
 #include <cstdint>
@@ -216,13 +217,14 @@ public:
       : translation_unit(translation_unit), types(types),
         diagnostics(diagnostics) {}
 
-  void Run() {
+  std::optional<std::monostate> Run() {
     ASSERT(!translation_unit.is_semantically_analyzed,
            "Translation unit has already been analyzed");
     for (const auto &decl : translation_unit.decls) {
-      AnalyzeTopLevelDecl(decl.get());
+      TRY(AnalyzeTopLevelDecl(decl.get()));
     }
     translation_unit.is_semantically_analyzed = true;
+    return std::monostate{};
   }
 
 private:
@@ -267,9 +269,9 @@ private:
     return false;
   }
 
-  ExprInfo AnalyzeExpr(std::unique_ptr<ASTNode> &node) {
+  std::optional<ExprInfo> AnalyzeExpr(std::unique_ptr<ASTNode> &node) {
     ASSERT(node != nullptr, "Cannot analyze a null expression");
-    ExprInfo result = AnalyzeExprNode(node.get());
+    TRY_ASSIGN_NEW(result, AnalyzeExprNode(node.get()));
     Expr *expr = AsExpr(node.get());
     expr->type = result.type;
     expr->value_category = result.value_category;
@@ -280,20 +282,20 @@ private:
       ASSERT(IsBooleanType(result.type),
              "Logical operation did not produce a boolean result");
       InsertImplicitCast(node, types.getInt());
-      result = {types.getInt(), ValueCategory::RValue};
+      result = ExprInfo{types.getInt(), ValueCategory::RValue};
     }
     return result;
   }
 
-  ExprInfo AnalyzeExprNode(ASTNode *node) {
+  std::optional<ExprInfo> AnalyzeExprNode(ASTNode *node) {
     if (auto *literal = node->DynCast<LiteralNum>()) {
       literal->constant_value = literal->value;
-      return {literal->type, ValueCategory::RValue};
+      return ExprInfo{literal->type, ValueCategory::RValue};
     }
     if (auto *literal = node->DynCast<LiteralString>()) {
       TypeRef type =
           types.Array(types.getChar(), literal->value.view().size() + 1);
-      return {type, ValueCategory::LValue};
+      return ExprInfo{type, ValueCategory::LValue};
     }
     if (auto *var_ref = node->DynCast<VarRef>()) {
       return AnalyzeVarRef(var_ref);
@@ -305,7 +307,7 @@ private:
       return AnalyzeTypeCast(type_cast);
     }
     if (auto *implicit_cast = node->DynCast<ImplicitCast>()) {
-      return {implicit_cast->target_type, ValueCategory::RValue};
+      return ExprInfo{implicit_cast->target_type, ValueCategory::RValue};
     }
     if (auto *get_field = node->DynCast<GetField>()) {
       return AnalyzeGetField(get_field);
@@ -326,44 +328,48 @@ private:
       return AnalyzeConditional(conditional);
     }
     if (auto *sequence = node->DynCast<SequenceEval>()) {
-      diagnostics.Fail(sequence->location, errs::UnsupportedSequenceEval{});
+      diagnostics.Error(sequence->location, errs::UnsupportedSequenceEval{});
+      return std::nullopt;
     }
-    diagnostics.Fail(node->location,
-                     errs::UnsupportedExpressionASTNode{node->GetType()});
+    diagnostics.Error(node->location,
+                      errs::UnsupportedExpressionASTNode{node->GetType()});
+    return std::nullopt;
   }
 
-  ExprInfo AnalyzeVarRef(VarRef *var_ref) {
+  std::optional<ExprInfo> AnalyzeVarRef(VarRef *var_ref) {
     ValueDecl *decl = var_ref->decl;
     if (auto *var = decl->DynCast<VarDecl>()) {
-      return {var->type, ValueCategory::LValue};
+      return ExprInfo{var->type, ValueCategory::LValue};
     }
     if (auto *param = decl->DynCast<ParamDecl>()) {
-      return {AdjustedType(param->type, types), ValueCategory::LValue};
+      return ExprInfo{AdjustedType(param->type, types), ValueCategory::LValue};
     }
     if (auto *function = decl->DynCast<FunctionDecl>()) {
-      return {function->function_type, ValueCategory::FunctionDesignator};
+      return ExprInfo{function->function_type,
+                      ValueCategory::FunctionDesignator};
     }
     if (auto *enumerator = decl->DynCast<EnumElemDecl>()) {
       ASSERT(enumerator->type != nullptr,
              "Enum constant is missing its type after analysis");
-      return {enumerator->type, ValueCategory::RValue};
+      return ExprInfo{enumerator->type, ValueCategory::RValue};
     }
-    diagnostics.Fail(var_ref->location,
-                     errs::DeclarationHasNoGeneratedValue{decl->name});
+    diagnostics.Error(var_ref->location,
+                      errs::DeclarationHasNoGeneratedValue{decl->name});
+    return std::nullopt;
   }
 
   ExprInfo Decay(std::unique_ptr<ASTNode> &node, ExprInfo info) {
     if (auto *array = info.type->DynCast<ArrayType>()) {
       TypeRef pointer = types.Pointer(array->element_type);
       InsertImplicitCast(node, pointer);
-      return {pointer, ValueCategory::RValue};
+      return ExprInfo{pointer, ValueCategory::RValue};
     }
     if (info.type->Is<FunctionType>()) {
       TypeRef pointer = types.Pointer(info.type);
       InsertImplicitCast(node, pointer);
-      return {pointer, ValueCategory::RValue};
+      return ExprInfo{pointer, ValueCategory::RValue};
     }
-    return {Unqualified(info.type), ValueCategory::RValue};
+    return ExprInfo{Unqualified(info.type), ValueCategory::RValue};
   }
 
   void InsertImplicitCast(std::unique_ptr<ASTNode> &node, TypeRef target_type) {
@@ -378,109 +384,123 @@ private:
     }
   }
 
-  ExprInfo ConvertExpr(std::unique_ptr<ASTNode> &node, ExprInfo info,
-                       TypeRef target_type, SourceLocation location) {
+  std::optional<ExprInfo> ConvertExpr(std::unique_ptr<ASTNode> &node,
+                                      ExprInfo info, TypeRef target_type,
+                                      SourceLocation location) {
     info = Decay(node, info);
     info.type = Unqualified(info.type);
     target_type = Unqualified(target_type);
     if (info.type == target_type) {
-      return {target_type, ValueCategory::RValue};
+      return ExprInfo{target_type, ValueCategory::RValue};
     }
     if (IsBooleanType(target_type)) {
       if (!IsScalar(info.type)) {
-        diagnostics.Fail(location, errs::BooleanConversionRequiresScalar{});
+        diagnostics.Error(location, errs::BooleanConversionRequiresScalar{});
+        return std::nullopt;
       }
       InsertImplicitCast(node, target_type);
-      return {target_type, ValueCategory::RValue};
+      return ExprInfo{target_type, ValueCategory::RValue};
     }
     if (info.type->Is<PointerType>() && target_type->Is<PointerType>()) {
       if (LosesPointerQualifiers(info.type, target_type)) {
-        diagnostics.Fail(location, errs::PointerAssignmentDiscardsQualifiers{});
+        diagnostics.Error(location,
+                          errs::PointerAssignmentDiscardsQualifiers{});
+        return std::nullopt;
       }
       InsertImplicitCast(node, target_type);
-      return {target_type, ValueCategory::RValue};
+      return ExprInfo{target_type, ValueCategory::RValue};
     }
     if (IsNumericType(info.type) && IsNumericType(target_type)) {
       InsertImplicitCast(node, target_type);
-      return {target_type, ValueCategory::RValue};
+      return ExprInfo{target_type, ValueCategory::RValue};
     }
     if (HaveSameRepresentation(info.type, target_type)) {
       InsertImplicitCast(node, target_type);
-      return {target_type, ValueCategory::RValue};
+      return ExprInfo{target_type, ValueCategory::RValue};
     }
-    diagnostics.Fail(location, errs::TypeMismatch{
-                                   target_type,
-                                   info.type,
-                               });
+    diagnostics.Error(location, errs::TypeMismatch{
+                                    target_type,
+                                    info.type,
+                                });
+    return std::nullopt;
   }
 
   template <typename Error>
-  ExprInfo ConvertToBool(std::unique_ptr<ASTNode> &node, ExprInfo info,
-                         SourceLocation location, Error error) {
+  std::optional<ExprInfo> ConvertToBool(std::unique_ptr<ASTNode> &node,
+                                        ExprInfo info, SourceLocation location,
+                                        Error error) {
     info = Decay(node, info);
     if (!IsScalar(info.type)) {
-      diagnostics.Fail(location, std::move(error));
+      diagnostics.Error(location, std::move(error));
+      return std::nullopt;
     }
     TypeRef bool_type = BooleanType();
     if (info.type != bool_type) {
       InsertImplicitCast(node, bool_type);
     }
-    return {bool_type, ValueCategory::RValue};
+    return ExprInfo{bool_type, ValueCategory::RValue};
   }
 
-  ExprInfo AnalyzeBinary(BinaryOp *binary) {
+  std::optional<ExprInfo> AnalyzeBinary(BinaryOp *binary) {
     BinaryOpType op = binary->op_type;
     ASSERT(!binary->compound_op || op == BinaryOpType::Assignment,
            "Compound operation attached to a non-assignment expression");
     if (op == BinaryOpType::Assignment && !binary->compound_op) {
-      ExprInfo left_info = AnalyzeExpr(binary->left);
+      TRY_ASSIGN_NEW(left_info, AnalyzeExpr(binary->left));
       if (left_info.value_category != ValueCategory::LValue) {
-        diagnostics.Fail(binary->location, errs::AssignmentRequiresLValue{});
+        diagnostics.Error(binary->location, errs::AssignmentRequiresLValue{});
+        return std::nullopt;
       }
       if (HasTypeTag(left_info.type, TypeTag::Const)) {
-        diagnostics.Fail(binary->location, errs::AssignmentToConst{});
+        diagnostics.Error(binary->location, errs::AssignmentToConst{});
+        return std::nullopt;
       }
-      ExprInfo right_info = AnalyzeExpr(binary->right);
-      ConvertExpr(binary->right, right_info, left_info.type, binary->location);
-      return {Unqualified(left_info.type), ValueCategory::RValue};
+      TRY_ASSIGN_NEW(right_info, AnalyzeExpr(binary->right));
+      TRY(ConvertExpr(binary->right, right_info, left_info.type,
+                      binary->location));
+      return ExprInfo{Unqualified(left_info.type), ValueCategory::RValue};
     }
 
     if (op == BinaryOpType::Subscript) {
-      ExprInfo left_info = AnalyzeExpr(binary->left);
+      TRY_ASSIGN_NEW(left_info, AnalyzeExpr(binary->left));
       left_info = Decay(binary->left, left_info);
-      ExprInfo right_info = AnalyzeExpr(binary->right);
+      TRY_ASSIGN_NEW(right_info, AnalyzeExpr(binary->right));
       right_info = Decay(binary->right, right_info);
       if (!IsIntegerType(right_info.type)) {
-        diagnostics.Fail(binary->location,
-                         errs::SubscriptRequiresIntegerIndex{});
+        diagnostics.Error(binary->location,
+                          errs::SubscriptRequiresIntegerIndex{});
+        return std::nullopt;
       }
       if (auto *pointer = left_info.type->DynCast<PointerType>()) {
-        return {pointer->pointee_type, ValueCategory::LValue};
+        return ExprInfo{pointer->pointee_type, ValueCategory::LValue};
       }
-      diagnostics.Fail(binary->location,
-                       errs::SubscriptRequiresArrayOrPointer{});
+      diagnostics.Error(binary->location,
+                        errs::SubscriptRequiresArrayOrPointer{});
+      return std::nullopt;
     }
 
     if (op == BinaryOpType::And || op == BinaryOpType::Or) {
-      ExprInfo left_info = AnalyzeExpr(binary->left);
-      ExprInfo right_info = AnalyzeExpr(binary->right);
-      left_info = ConvertToBool(binary->left, left_info, binary->location,
-                                errs::LogicalOperationsRequireScalars{});
-      right_info = ConvertToBool(binary->right, right_info, binary->location,
-                                 errs::LogicalOperationsRequireScalars{});
+      TRY_ASSIGN_NEW(left_info, AnalyzeExpr(binary->left));
+      TRY_ASSIGN_NEW(right_info, AnalyzeExpr(binary->right));
+      TRY(ConvertToBool(binary->left, left_info, binary->location,
+                        errs::LogicalOperationsRequireScalars{}));
+      TRY(ConvertToBool(binary->right, right_info, binary->location,
+                        errs::LogicalOperationsRequireScalars{}));
       binary->operation_type = BooleanType();
-      return {BooleanType(), ValueCategory::RValue};
+      return ExprInfo{BooleanType(), ValueCategory::RValue};
     }
 
     const bool is_compound = binary->compound_op.has_value();
     TypeRef compound_left_type = nullptr;
-    ExprInfo left_info = AnalyzeExpr(binary->left);
+    TRY_ASSIGN_NEW(left_info, AnalyzeExpr(binary->left));
     if (is_compound) {
       if (left_info.value_category != ValueCategory::LValue) {
-        diagnostics.Fail(binary->location, errs::AssignmentRequiresLValue{});
+        diagnostics.Error(binary->location, errs::AssignmentRequiresLValue{});
+        return std::nullopt;
       }
       if (HasTypeTag(left_info.type, TypeTag::Const)) {
-        diagnostics.Fail(binary->location, errs::ModifyConst{});
+        diagnostics.Error(binary->location, errs::ModifyConst{});
+        return std::nullopt;
       }
       left_info.type = Unqualified(left_info.type);
       compound_left_type = left_info.type;
@@ -488,7 +508,7 @@ private:
       left_info = Decay(binary->left, left_info);
     }
 
-    ExprInfo right_info = AnalyzeExpr(binary->right);
+    TRY_ASSIGN_NEW(right_info, AnalyzeExpr(binary->right));
     if (!is_compound) {
       right_info = Decay(binary->right, right_info);
     }
@@ -498,57 +518,65 @@ private:
         (base_op == BinaryOpType::BitAnd || base_op == BinaryOpType::BitOr ||
          base_op == BinaryOpType::BitXor)) {
       if (!IsIntegerType(left_info.type)) {
-        diagnostics.Fail(binary->location, errs::BitwiseRequiresIntegerLeft{});
+        diagnostics.Error(binary->location, errs::BitwiseRequiresIntegerLeft{});
+        return std::nullopt;
       }
       if (!IsIntegerType(right_info.type)) {
-        diagnostics.Fail(binary->location, errs::BitwiseRequiresIntegerRight{});
+        diagnostics.Error(binary->location,
+                          errs::BitwiseRequiresIntegerRight{});
+        return std::nullopt;
       }
       TypeRef common =
           UsualArithmeticType(left_info.type, right_info.type, types);
-      ConvertExpr(binary->left, left_info, common, binary->location);
-      ConvertExpr(binary->right, right_info, common, binary->location);
+      TRY(ConvertExpr(binary->left, left_info, common, binary->location));
+      TRY(ConvertExpr(binary->right, right_info, common, binary->location));
       binary->operation_type = common;
-      return {common, ValueCategory::RValue};
+      return ExprInfo{common, ValueCategory::RValue};
     }
 
     if (!is_compound &&
         (base_op == BinaryOpType::LShift || base_op == BinaryOpType::RShift)) {
       if (!IsIntegerType(left_info.type)) {
-        diagnostics.Fail(binary->location, errs::ShiftRequiresIntegerLeft{});
+        diagnostics.Error(binary->location, errs::ShiftRequiresIntegerLeft{});
+        return std::nullopt;
       }
       if (!IsIntegerType(right_info.type)) {
-        diagnostics.Fail(binary->location, errs::ShiftRequiresIntegerRight{});
+        diagnostics.Error(binary->location, errs::ShiftRequiresIntegerRight{});
+        return std::nullopt;
       }
       TypeRef promoted = PromoteInteger(left_info.type, types);
-      ConvertExpr(binary->left, left_info, promoted, binary->location);
-      ConvertExpr(binary->right, right_info, promoted, binary->location);
+      TRY(ConvertExpr(binary->left, left_info, promoted, binary->location));
+      TRY(ConvertExpr(binary->right, right_info, promoted, binary->location));
       binary->operation_type = promoted;
-      return {promoted, ValueCategory::RValue};
+      return ExprInfo{promoted, ValueCategory::RValue};
     }
 
     if (!is_compound && left_info.type->Is<PointerType>()) {
       if (!IsIntegerType(right_info.type)) {
-        diagnostics.Fail(binary->location,
-                         errs::PointerArithmeticRequiresIntegerOffset{});
+        diagnostics.Error(binary->location,
+                          errs::PointerArithmeticRequiresIntegerOffset{});
+        return std::nullopt;
       }
       if (base_op != BinaryOpType::Add && base_op != BinaryOpType::Sub) {
-        diagnostics.Fail(binary->location,
-                         errs::PointerArithmeticRequiresAddSub{});
+        diagnostics.Error(binary->location,
+                          errs::PointerArithmeticRequiresAddSub{});
+        return std::nullopt;
       }
       binary->operation_type = left_info.type;
-      return {left_info.type, ValueCategory::RValue};
+      return ExprInfo{left_info.type, ValueCategory::RValue};
     }
 
     if (!IsNumericType(left_info.type) || !IsNumericType(right_info.type)) {
-      diagnostics.Fail(binary->location,
-                       errs::ArithmeticRequiresNumericOperands{});
+      diagnostics.Error(binary->location,
+                        errs::ArithmeticRequiresNumericOperands{});
+      return std::nullopt;
     }
     TypeRef common =
         UsualArithmeticType(left_info.type, right_info.type, types);
     if (!is_compound) {
-      ConvertExpr(binary->left, left_info, common, binary->location);
+      TRY(ConvertExpr(binary->left, left_info, common, binary->location));
     }
-    ConvertExpr(binary->right, right_info, common, binary->location);
+    TRY(ConvertExpr(binary->right, right_info, common, binary->location));
     binary->operation_type = common;
     if (is_compound) {
       if (left_info.type != common) {
@@ -566,40 +594,45 @@ private:
     if (is_compound) {
       result_type = compound_left_type;
     }
-    return {result_type, ValueCategory::RValue};
+    return ExprInfo{result_type, ValueCategory::RValue};
   }
 
-  ExprInfo AnalyzeUnary(UnaryOp *unary) {
-    ExprInfo operand = AnalyzeExpr(unary->operand);
+  std::optional<ExprInfo> AnalyzeUnary(UnaryOp *unary) {
+    TRY_ASSIGN_NEW(operand, AnalyzeExpr(unary->operand));
     switch (unary->op_type) {
     case UnaryOpType::GetAddress: {
       if (operand.value_category != ValueCategory::LValue &&
           operand.value_category != ValueCategory::FunctionDesignator) {
-        diagnostics.Fail(unary->location, errs::AddressOfRequiresLValue{});
+        diagnostics.Error(unary->location, errs::AddressOfRequiresLValue{});
+        return std::nullopt;
       }
-      return {types.Pointer(operand.type), ValueCategory::RValue};
+      return ExprInfo{types.Pointer(operand.type), ValueCategory::RValue};
     }
     case UnaryOpType::Deref: {
       operand = Decay(unary->operand, operand);
       if (auto *pointer = operand.type->DynCast<PointerType>()) {
-        return {pointer->pointee_type, ValueCategory::LValue};
+        return ExprInfo{pointer->pointee_type, ValueCategory::LValue};
       }
-      diagnostics.Fail(unary->location, errs::DereferenceRequiresPointer{});
+      diagnostics.Error(unary->location, errs::DereferenceRequiresPointer{});
+      return std::nullopt;
     }
     case UnaryOpType::IncBeforeUse:
     case UnaryOpType::IncAfterUse:
     case UnaryOpType::DecBeforeUse:
     case UnaryOpType::DecAfterUse: {
       if (operand.value_category != ValueCategory::LValue) {
-        diagnostics.Fail(unary->location, errs::IncrementRequiresLValue{});
+        diagnostics.Error(unary->location, errs::IncrementRequiresLValue{});
+        return std::nullopt;
       }
       if (HasTypeTag(operand.type, TypeTag::Const)) {
-        diagnostics.Fail(unary->location, errs::ModifyConst{});
+        diagnostics.Error(unary->location, errs::ModifyConst{});
+        return std::nullopt;
       }
       if (!IsNumericType(operand.type) && !operand.type->Is<PointerType>()) {
-        diagnostics.Fail(unary->location, errs::IncrementRequiresScalar{});
+        diagnostics.Error(unary->location, errs::IncrementRequiresScalar{});
+        return std::nullopt;
       }
-      return {Unqualified(operand.type), ValueCategory::RValue};
+      return ExprInfo{Unqualified(operand.type), ValueCategory::RValue};
     }
     case UnaryOpType::UnaryPlus:
     case UnaryOpType::UnaryMinus:
@@ -607,138 +640,153 @@ private:
       operand = Decay(unary->operand, operand);
       if (unary->op_type == UnaryOpType::BitNot) {
         if (!IsIntegerType(operand.type)) {
-          diagnostics.Fail(unary->location, errs::BitNotRequiresInteger{});
+          diagnostics.Error(unary->location, errs::BitNotRequiresInteger{});
+          return std::nullopt;
         }
       } else if (!IsNumericType(operand.type)) {
-        diagnostics.Fail(unary->location,
-                         errs::UnaryArithmeticRequiresNumeric{});
+        diagnostics.Error(unary->location,
+                          errs::UnaryArithmeticRequiresNumeric{});
+        return std::nullopt;
       }
       TypeRef result_type = operand.type;
       if (IsIntegerType(operand.type)) {
         result_type = PromoteInteger(operand.type, types);
       }
-      ConvertExpr(unary->operand, operand, result_type, unary->location);
-      return {result_type, ValueCategory::RValue};
+      TRY(ConvertExpr(unary->operand, operand, result_type, unary->location));
+      return ExprInfo{result_type, ValueCategory::RValue};
     }
     case UnaryOpType::Not: {
-      ConvertToBool(unary->operand, operand, unary->location,
-                    errs::LogicalNotRequiresScalar{});
-      return {BooleanType(), ValueCategory::RValue};
+      TRY(ConvertToBool(unary->operand, operand, unary->location,
+                        errs::LogicalNotRequiresScalar{}));
+      return ExprInfo{BooleanType(), ValueCategory::RValue};
     }
     default:
-      diagnostics.Fail(unary->location,
-                       errs::UnsupportedUnaryOperation{unary->op_type});
+      diagnostics.Error(unary->location,
+                        errs::UnsupportedUnaryOperation{unary->op_type});
+      return std::nullopt;
     }
   }
 
-  ExprInfo AnalyzeTypeCast(TypeCast *type_cast) {
-    ExprInfo operand = AnalyzeExpr(type_cast->operand);
+  std::optional<ExprInfo> AnalyzeTypeCast(TypeCast *type_cast) {
+    TRY_ASSIGN_NEW(operand, AnalyzeExpr(type_cast->operand));
     operand = Decay(type_cast->operand, operand);
     TypeRef target = type_cast->target_type;
     if (operand.type != target) {
       if (operand.type->Is<PointerType>() && target->Is<PointerType>()) {
         if (LosesPointerQualifiers(operand.type, target)) {
-          diagnostics.Fail(type_cast->location,
-                           errs::PointerCastDiscardsQualifiers{});
+          diagnostics.Error(type_cast->location,
+                            errs::PointerCastDiscardsQualifiers{});
+          return std::nullopt;
         }
       } else if (!IsNumericType(operand.type) || !IsNumericType(target)) {
-        diagnostics.Fail(type_cast->location,
-                         errs::UnsupportedTypeCast{operand.type, target});
+        diagnostics.Error(type_cast->location,
+                          errs::UnsupportedTypeCast{operand.type, target});
+        return std::nullopt;
       }
     }
-    return {target, ValueCategory::RValue};
+    return ExprInfo{target, ValueCategory::RValue};
   }
 
-  TypeRef GetFieldType(TypeRef type, std::string_view field_name,
-                       SourceLocation location) {
+  std::optional<TypeRef> GetFieldType(TypeRef type, std::string_view field_name,
+                                      SourceLocation location) {
     if (auto *struct_type = type->DynCast<StructType>()) {
       auto field = struct_type->GetField(field_name);
       if (!field) {
-        diagnostics.Fail(location, errs::UnknownStructField{field_name});
+        diagnostics.Error(location, errs::UnknownStructField{field_name});
+        return std::nullopt;
       }
       return ApplyAggregateMemberQualifiers(field->type, type, types);
     }
     if (auto *union_type = type->DynCast<UnionType>()) {
       auto field = union_type->GetField(field_name);
       if (!field) {
-        diagnostics.Fail(location, errs::UnknownUnionField{field_name});
+        diagnostics.Error(location, errs::UnknownUnionField{field_name});
+        return std::nullopt;
       }
       return ApplyAggregateMemberQualifiers(field->type, type, types);
     }
-    diagnostics.Fail(location, errs::FieldAccessRequiresAggregate{});
+    diagnostics.Error(location, errs::FieldAccessRequiresAggregate{});
+    return std::nullopt;
   }
 
-  ExprInfo AnalyzeGetField(GetField *get_field) {
-    ExprInfo operand = AnalyzeExpr(get_field->operand);
-    ExprInfo result{
-        GetFieldType(operand.type, get_field->field_name, get_field->location),
+  std::optional<ExprInfo> AnalyzeGetField(GetField *get_field) {
+    TRY_ASSIGN_NEW(operand, AnalyzeExpr(get_field->operand));
+    TRY_ASSIGN_NEW(field, GetFieldType(operand.type, get_field->field_name,
+                                       get_field->location));
+    return ExprInfo{
+        field,
         operand.value_category == ValueCategory::LValue ? ValueCategory::LValue
                                                         : ValueCategory::RValue,
     };
-    return result;
   }
 
-  ExprInfo AnalyzePtrGetField(PtrGetField *ptr_get_field) {
-    ExprInfo operand = AnalyzeExpr(ptr_get_field->operand);
+  std::optional<ExprInfo> AnalyzePtrGetField(PtrGetField *ptr_get_field) {
+    TRY_ASSIGN_NEW(operand, AnalyzeExpr(ptr_get_field->operand));
     operand = Decay(ptr_get_field->operand, operand);
     if (auto *pointer = operand.type->DynCast<PointerType>()) {
-      return {GetFieldType(pointer->pointee_type, ptr_get_field->field_name,
-                           ptr_get_field->location),
-              ValueCategory::LValue};
+      TRY_ASSIGN_NEW(field, GetFieldType(pointer->pointee_type,
+                                         ptr_get_field->field_name,
+                                         ptr_get_field->location));
+      return ExprInfo{field, ValueCategory::LValue};
     }
-    diagnostics.Fail(ptr_get_field->location,
-                     errs::PointerFieldAccessRequiresPointer{});
+    diagnostics.Error(ptr_get_field->location,
+                      errs::PointerFieldAccessRequiresPointer{});
+    return std::nullopt;
   }
 
-  ExprInfo AnalyzeFunctionInvocation(FunctionInvocation *call) {
-    ExprInfo function = AnalyzeExpr(call->function);
+  std::optional<ExprInfo> AnalyzeFunctionInvocation(FunctionInvocation *call) {
+    TRY_ASSIGN_NEW(function, AnalyzeExpr(call->function));
     function = Decay(call->function, function);
     TypeRef function_type = function.type;
     if (auto *pointer = function_type->DynCast<PointerType>()) {
       function_type = pointer->pointee_type;
     }
     if (!function_type->Is<FunctionType>()) {
-      diagnostics.Fail(call->location, errs::InvocationRequiresFunction{});
+      diagnostics.Error(call->location, errs::InvocationRequiresFunction{});
+      return std::nullopt;
     }
 
     const auto *signature = function_type->As<FunctionType>();
     if (signature->has_va_args) {
       if (call->arguments.size() < signature->parameters.size()) {
-        diagnostics.Fail(call->location, errs::VariadicArgumentCountMismatch{
-                                             signature->parameters.size()});
+        diagnostics.Error(call->location, errs::VariadicArgumentCountMismatch{
+                                              signature->parameters.size()});
+        return std::nullopt;
       }
     } else if (call->arguments.size() != signature->parameters.size()) {
-      diagnostics.Fail(call->location, errs::ArgumentCountMismatch{
-                                           signature->parameters.size()});
+      diagnostics.Error(call->location, errs::ArgumentCountMismatch{
+                                            signature->parameters.size()});
+      return std::nullopt;
     }
 
     for (size_t i = 0; i < call->arguments.size(); ++i) {
-      ExprInfo argument = AnalyzeExpr(call->arguments[i]);
+      TRY_ASSIGN_NEW(argument, AnalyzeExpr(call->arguments[i]));
       if (i < signature->parameters.size()) {
         TypeRef parameter_type = AdjustedType(signature->parameters[i], types);
-        ConvertExpr(call->arguments[i], argument, parameter_type,
-                    call->location);
+        TRY(ConvertExpr(call->arguments[i], argument, parameter_type,
+                        call->location));
       } else {
         argument = Decay(call->arguments[i], argument);
         if (IsIntegerType(argument.type)) {
           TypeRef promoted = PromoteInteger(argument.type, types);
-          ConvertExpr(call->arguments[i], argument, promoted, call->location);
+          TRY(ConvertExpr(call->arguments[i], argument, promoted,
+                          call->location));
         } else if (IsFloatingType(argument.type) &&
                    argument.type->As<BuiltinType>()->Kind() ==
                        BuiltinKind::Float) {
-          ConvertExpr(call->arguments[i], argument, types.getDouble(),
-                      call->location);
+          TRY(ConvertExpr(call->arguments[i], argument, types.getDouble(),
+                          call->location));
         }
       }
     }
-    return {signature->return_type, ValueCategory::RValue};
+    return ExprInfo{signature->return_type, ValueCategory::RValue};
   }
 
-  ExprInfo AnalyzeIntrinsic(IntrinsicCall *call) {
+  std::optional<ExprInfo> AnalyzeIntrinsic(IntrinsicCall *call) {
     ASSERT(call->desc != nullptr, "Intrinsic call is missing its descriptor");
     for (auto &arg : call->args) {
       if (auto *expression = std::get_if<std::unique_ptr<ASTNode>>(&arg)) {
-        AnalyzeExpr(*expression);
+        TRY(AnalyzeExpr(*expression));
       }
     }
     ASSERT(call->desc->type_evaluator != nullptr,
@@ -767,66 +815,66 @@ private:
         complete = false;
       }
       if (!complete) {
-        diagnostics.Fail(call->location, errs::SizeofRequiresCompleteObject{});
+        diagnostics.Error(call->location, errs::SizeofRequiresCompleteObject{});
+        return std::nullopt;
       }
     }
-    return {result, ValueCategory::RValue};
+    return ExprInfo{result, ValueCategory::RValue};
   }
 
-  ExprInfo AnalyzeConditional(ConditionalExpr *conditional) {
-    ExprInfo condition = AnalyzeExpr(conditional->condition);
-    ConvertToBool(conditional->condition, condition, conditional->location,
-                  errs::ConditionalRequiresScalarCondition{});
+  std::optional<ExprInfo> AnalyzeConditional(ConditionalExpr *conditional) {
+    TRY_ASSIGN_NEW(condition, AnalyzeExpr(conditional->condition));
+    TRY(ConvertToBool(conditional->condition, condition, conditional->location,
+                      errs::ConditionalRequiresScalarCondition{}));
 
-    ExprInfo true_info = AnalyzeExpr(conditional->true_expr);
-    ExprInfo false_info = AnalyzeExpr(conditional->false_expr);
+    TRY_ASSIGN_NEW(true_info, AnalyzeExpr(conditional->true_expr));
+    TRY_ASSIGN_NEW(false_info, AnalyzeExpr(conditional->false_expr));
     true_info = Decay(conditional->true_expr, true_info);
     false_info = Decay(conditional->false_expr, false_info);
     if (!IsNumericType(true_info.type) || !IsNumericType(false_info.type)) {
-      diagnostics.Fail(conditional->location,
-                       errs::ConditionalRequiresNumericOperands{});
+      diagnostics.Error(conditional->location,
+                        errs::ConditionalRequiresNumericOperands{});
+      return std::nullopt;
     }
     TypeRef common =
         UsualArithmeticType(true_info.type, false_info.type, types);
-    ConvertExpr(conditional->true_expr, true_info, common,
-                conditional->location);
-    ConvertExpr(conditional->false_expr, false_info, common,
-                conditional->location);
-    return {common, ValueCategory::RValue};
+    TRY(ConvertExpr(conditional->true_expr, true_info, common,
+                    conditional->location));
+    TRY(ConvertExpr(conditional->false_expr, false_info, common,
+                    conditional->location));
+    return ExprInfo{common, ValueCategory::RValue};
   }
 
-  void AnalyzeDeclStmt(DeclStmt *stmt, bool global) {
+  std::optional<std::monostate> AnalyzeDeclStmt(DeclStmt *stmt, bool global) {
     for (const auto &decl : stmt->decls) {
-      AnalyzeDeclaration(decl.get(), global);
+      TRY(AnalyzeDeclaration(decl.get(), global));
     }
+    return std::monostate{};
   }
 
-  void AnalyzeDeclaration(ASTNode *node, bool global) {
+  std::optional<std::monostate> AnalyzeDeclaration(ASTNode *node, bool global) {
     if (auto *var = node->DynCast<VarDecl>()) {
-      AnalyzeVarDecl(var, global);
-      return;
+      return AnalyzeVarDecl(var, global);
     }
     if (auto *function = node->DynCast<FunctionDecl>()) {
-      AnalyzeFunctionDecl(function, global);
-      return;
+      return AnalyzeFunctionDecl(function, global);
     }
     if (auto *enum_decl = node->DynCast<EnumDecl>()) {
-      AnalyzeEnumDecl(enum_decl);
-      return;
+      return AnalyzeEnumDecl(enum_decl);
     }
     if (node->Is<StructDecl>() || node->Is<UnionDecl>() ||
         node->Is<TypedefDecl>() || node->Is<ParamDecl>()) {
-      return;
+      return std::monostate{};
     }
     if (auto *stmt = node->DynCast<DeclStmt>()) {
-      AnalyzeDeclStmt(stmt, global);
-      return;
+      return AnalyzeDeclStmt(stmt, global);
     }
-    diagnostics.Fail(node->location,
-                     errs::UnsupportedDeclarationASTNode{node->GetType()});
+    diagnostics.Error(node->location,
+                      errs::UnsupportedDeclarationASTNode{node->GetType()});
+    return std::nullopt;
   }
 
-  void AnalyzeTopLevelDecl(ASTNode *node) {
+  std::optional<std::monostate> AnalyzeTopLevelDecl(ASTNode *node) {
     switch (node->GetType()) {
     case ASTNodeType::FunctionDecl:
     case ASTNodeType::VarDecl:
@@ -835,39 +883,45 @@ private:
     case ASTNodeType::EnumDecl:
     case ASTNodeType::TypedefDecl:
     case ASTNodeType::DeclStmt:
-      AnalyzeDeclaration(node, true);
-      return;
+      return AnalyzeDeclaration(node, true);
     default:
-      diagnostics.Fail(node->location,
-                       errs::UnsupportedTopLevelASTNode{node->GetType()});
+      diagnostics.Error(node->location,
+                        errs::UnsupportedTopLevelASTNode{node->GetType()});
+      return std::nullopt;
     }
   }
 
-  void CheckLinkageEntityKind(std::string_view name, LinkageEntityKind kind,
-                              SourceLocation location) {
+  std::optional<std::monostate>
+  CheckLinkageEntityKind(std::string_view name, LinkageEntityKind kind,
+                         SourceLocation location) {
     auto [found, inserted] = linkage_kinds.try_emplace(name, kind);
     if (!inserted && found->second != kind) {
-      diagnostics.Fail(location,
-                       errs::ConflictingObjectAndFunctionDeclaration{name});
+      diagnostics.Error(location,
+                        errs::ConflictingObjectAndFunctionDeclaration{name});
+      return std::nullopt;
     }
+    return std::monostate{};
   }
 
-  void AnalyzeFunctionDecl(FunctionDecl *function, bool global) {
+  std::optional<std::monostate> AnalyzeFunctionDecl(FunctionDecl *function,
+                                                    bool global) {
     if (!global && function->storage_class == StorageClass::Static) {
-      diagnostics.Fail(function->location,
-                       errs::StaticBlockFunctionForbidden{});
+      diagnostics.Error(function->location,
+                        errs::StaticBlockFunctionForbidden{});
+      return std::nullopt;
     }
     if (!global && function->body) {
-      diagnostics.Fail(function->location,
-                       errs::FunctionDefinitionRequiresFileScope{});
+      diagnostics.Error(function->location,
+                        errs::FunctionDefinitionRequiresFileScope{});
+      return std::nullopt;
     }
     ASSERT(function->function_type != nullptr,
            "Function declaration is missing its type");
     ASSERT(function->function_type->Is<FunctionType>(),
            "Function declaration has a non-function type");
 
-    CheckLinkageEntityKind(function->name, LinkageEntityKind::Function,
-                           function->location);
+    TRY(CheckLinkageEntityKind(function->name, LinkageEntityKind::Function,
+                               function->location));
     auto found = functions.find(function->name);
     const Linkage requested_linkage =
         function->storage_class == StorageClass::Static ? Linkage::Internal
@@ -876,19 +930,22 @@ private:
       FunctionInfo &previous = found->second;
       if (!CompatibleFunctionTypes(function->function_type, previous.type,
                                    types)) {
-        diagnostics.Fail(function->location,
-                         errs::ConflictingFunctionDeclaration{function->name});
+        diagnostics.Error(function->location,
+                          errs::ConflictingFunctionDeclaration{function->name});
+        return std::nullopt;
       }
       if (function->storage_class == StorageClass::Static &&
           previous.linkage == Linkage::External) {
-        diagnostics.Fail(function->location,
-                         errs::StaticFunctionFollowsExternal{function->name});
+        diagnostics.Error(function->location,
+                          errs::StaticFunctionFollowsExternal{function->name});
+        return std::nullopt;
       }
       if (previous.linkage == Linkage::Internal &&
           function->storage_class != StorageClass::Extern) {
-        diagnostics.Fail(
+        diagnostics.Error(
             function->location,
             errs::FunctionFollowsStaticWithoutExtern{function->name});
+        return std::nullopt;
       }
     } else {
       functions.emplace(function->name, FunctionInfo{
@@ -899,30 +956,35 @@ private:
     }
 
     if (!function->body) {
-      return;
+      return std::monostate{};
     }
     FunctionInfo &info = functions.at(function->name);
     if (info.has_definition) {
-      diagnostics.Fail(function->location,
-                       errs::MultipleFunctionDefinitions{function->name});
+      diagnostics.Error(function->location,
+                        errs::MultipleFunctionDefinitions{function->name});
+      return std::nullopt;
     }
     info.has_definition = true;
 
     FunctionDecl *previous_function = current_function;
     current_function = function;
     for (auto &statement : function->body->statements) {
-      AnalyzeStatement(statement);
+      if (!AnalyzeStatement(statement)) {
+        current_function = previous_function;
+        return std::nullopt;
+      }
     }
     current_function = previous_function;
+    return std::monostate{};
   }
 
-  void AnalyzeEnumDecl(EnumDecl *decl) {
+  std::optional<std::monostate> AnalyzeEnumDecl(EnumDecl *decl) {
     if (!decl->is_definition) {
-      return;
+      return std::monostate{};
     }
     auto *enum_type = decl->type->As<EnumType>();
     if (enum_type->is_complete) {
-      return;
+      return std::monostate{};
     }
 
     std::vector<EnumValue> values;
@@ -932,16 +994,18 @@ private:
       element->type = decl->type;
       NumericValue value;
       if (element->value) {
-        AnalyzeExpr(element->value);
+        TRY(AnalyzeExpr(element->value));
         Expr *expression = AsExpr(element->value.get());
         if (!expression->constant_value) {
-          diagnostics.Fail(element->location,
-                           errs::EnumValueRequiresConstant{});
+          diagnostics.Error(element->location,
+                            errs::EnumValueRequiresConstant{});
+          return std::nullopt;
         }
         value =
             ConvertConstant(*expression->constant_value, decl->underlying_type);
         if (std::holds_alternative<long double>(value)) {
-          diagnostics.Fail(element->location, errs::EnumValueCannotBeFloat{});
+          diagnostics.Error(element->location, errs::EnumValueCannotBeFloat{});
+          return std::nullopt;
         }
       } else if (i == 0) {
         value = int64_t{0};
@@ -965,27 +1029,33 @@ private:
           {.name = std::string(element->name), .value = enum_value});
     }
     types.CompleteEnum(decl->type, decl->underlying_type, values);
+    return std::monostate{};
   }
 
-  void AnalyzeLinkedObject(VarDecl *var, TypeRef type, bool global) {
-    CheckLinkageEntityKind(var->name, LinkageEntityKind::Object, var->location);
+  std::optional<std::monostate> AnalyzeLinkedObject(VarDecl *var, TypeRef type,
+                                                    bool global) {
+    TRY(CheckLinkageEntityKind(var->name, LinkageEntityKind::Object,
+                               var->location));
 
     auto found = objects.find(var->name);
     if (found != objects.end()) {
       ObjectInfo &previous = found->second;
       if (previous.type != type) {
-        diagnostics.Fail(var->location,
-                         errs::ConflictingVariableDeclaration{var->name});
+        diagnostics.Error(var->location,
+                          errs::ConflictingVariableDeclaration{var->name});
+        return std::nullopt;
       }
       if (var->storage_class == StorageClass::Static &&
           previous.linkage == Linkage::External) {
-        diagnostics.Fail(var->location,
-                         errs::StaticVariableFollowsExternal{var->name});
+        diagnostics.Error(var->location,
+                          errs::StaticVariableFollowsExternal{var->name});
+        return std::nullopt;
       }
       if (previous.linkage == Linkage::Internal &&
           var->storage_class != StorageClass::Extern) {
-        diagnostics.Fail(var->location,
-                         errs::VariableFollowsStaticWithoutExtern{var->name});
+        diagnostics.Error(var->location,
+                          errs::VariableFollowsStaticWithoutExtern{var->name});
+        return std::nullopt;
       }
     } else {
       const Linkage linkage = var->storage_class == StorageClass::Static
@@ -1001,25 +1071,30 @@ private:
     }
 
     if (!global) {
-      return;
+      return std::monostate{};
     }
 
     ObjectInfo &info = found->second;
     const bool has_initialized_definition = var->initializer != nullptr;
     if (has_initialized_definition && info.has_initialized_definition) {
-      diagnostics.Fail(var->location,
-                       errs::MultipleVariableDefinitions{var->name});
+      diagnostics.Error(var->location,
+                        errs::MultipleVariableDefinitions{var->name});
+      return std::nullopt;
     }
     info.has_initialized_definition |= has_initialized_definition;
+    return std::monostate{};
   }
 
-  void AnalyzeVarDecl(VarDecl *var, bool global) {
+  std::optional<std::monostate> AnalyzeVarDecl(VarDecl *var, bool global) {
     if (!global && var->storage_class == StorageClass::Static) {
-      diagnostics.Fail(var->location, errs::LocalStaticUnsupported{});
+      diagnostics.Error(var->location, errs::LocalStaticUnsupported{});
+      return std::nullopt;
     }
     if (!global && var->storage_class == StorageClass::Extern &&
         var->initializer) {
-      diagnostics.Fail(var->location, errs::BlockExternCannotHaveInitializer{});
+      diagnostics.Error(var->location,
+                        errs::BlockExternCannotHaveInitializer{});
+      return std::nullopt;
     }
     TypeRef type = var->type;
     if (auto *array = type->DynCast<ArrayType>();
@@ -1027,10 +1102,12 @@ private:
       std::optional<size_t> inferred_size;
       if (!var->initializer) {
         if (global) {
-          diagnostics.Fail(var->location,
-                           errs::GlobalArraySizeNeedsInitializer{var->name});
+          diagnostics.Error(var->location,
+                            errs::GlobalArraySizeNeedsInitializer{var->name});
+          return std::nullopt;
         }
-        diagnostics.Fail(var->location, errs::ArraySizeNeedsInitializer{});
+        diagnostics.Error(var->location, errs::ArraySizeNeedsInitializer{});
+        return std::nullopt;
       }
       if (auto *array_init = var->initializer->DynCast<ArrayInitializer>()) {
         inferred_size = array_init->initializers.size();
@@ -1040,18 +1117,21 @@ private:
           if (!array->element_type->Is<BuiltinType>() ||
               array->element_type->As<BuiltinType>()->Kind() !=
                   BuiltinKind::Char) {
-            diagnostics.Fail(var->location, errs::StringArrayRequiresChar{});
+            diagnostics.Error(var->location, errs::StringArrayRequiresChar{});
+            return std::nullopt;
           }
           inferred_size = literal->value.view().size() + 1;
         }
       }
       if (!inferred_size) {
         if (global) {
-          diagnostics.Fail(var->location,
-                           errs::GlobalArraySizeNeedsInitializer{var->name});
+          diagnostics.Error(var->location,
+                            errs::GlobalArraySizeNeedsInitializer{var->name});
+          return std::nullopt;
         }
-        diagnostics.Fail(var->initializer->location,
-                         errs::ArrayInitializerRequiresListOrString{});
+        diagnostics.Error(var->initializer->location,
+                          errs::ArrayInitializerRequiresListOrString{});
+        return std::nullopt;
       }
       TypeRef completed = types.Array(array->element_type, *inferred_size);
       completed.set_tag(type.get_tag());
@@ -1060,32 +1140,37 @@ private:
     }
 
     if (global || var->storage_class == StorageClass::Extern) {
-      AnalyzeLinkedObject(var, type, global);
+      TRY(AnalyzeLinkedObject(var, type, global));
     }
     if (var->initializer) {
-      AnalyzeInitializer(var->initializer.get(), type, var->location, global);
+      TRY(AnalyzeInitializer(var->initializer.get(), type, var->location,
+                             global));
       if (global && !IsConstantFoldable(var->initializer.get())) {
-        diagnostics.Fail(var->location,
-                         errs::GlobalInitializerRequiresConstant{});
+        diagnostics.Error(var->location,
+                          errs::GlobalInitializerRequiresConstant{});
+        return std::nullopt;
       }
     }
+    return std::monostate{};
   }
 
-  void AnalyzeInitializer(Initializer *initializer, TypeRef type,
-                          SourceLocation declaration_location, bool global) {
+  std::optional<std::monostate>
+  AnalyzeInitializer(Initializer *initializer, TypeRef type,
+                     SourceLocation declaration_location, bool global) {
     if (auto *array_type = type->DynCast<ArrayType>()) {
       if (auto *array_init = initializer->DynCast<ArrayInitializer>()) {
         size_t size =
             array_type->size.value_or(array_init->initializers.size());
         if (array_init->initializers.size() > size) {
-          diagnostics.Fail(array_init->location,
-                           errs::TooManyArrayInitializers{});
+          diagnostics.Error(array_init->location,
+                            errs::TooManyArrayInitializers{});
+          return std::nullopt;
         }
         for (const auto &element : array_init->initializers) {
-          AnalyzeInitializer(element.get(), array_type->element_type,
-                             declaration_location, global);
+          TRY(AnalyzeInitializer(element.get(), array_type->element_type,
+                                 declaration_location, global));
         }
-        return;
+        return std::monostate{};
       }
       if (auto *value_init = initializer->DynCast<ValueInitializer>()) {
         if (auto *literal = value_init->value->DynCast<LiteralString>();
@@ -1093,14 +1178,16 @@ private:
             array_type->element_type->As<BuiltinType>()->Kind() ==
                 BuiltinKind::Char) {
           if (array_type->size.value() < literal->value.view().size() + 1) {
-            diagnostics.Fail(literal->location,
-                             errs::StringLiteralExceedsArraySize{});
+            diagnostics.Error(literal->location,
+                              errs::StringLiteralExceedsArraySize{});
+            return std::nullopt;
           }
-          AnalyzeExpr(value_init->value);
-          return;
+          TRY(AnalyzeExpr(value_init->value));
+          return std::monostate{};
         }
       }
-      diagnostics.Fail(initializer->location, errs::UnexpectedInitializer{});
+      diagnostics.Error(initializer->location, errs::UnexpectedInitializer{});
+      return std::nullopt;
     }
 
     if (auto *struct_type = type->DynCast<StructType>()) {
@@ -1108,238 +1195,271 @@ private:
         for (auto &[name, field_initializer] : field_init->field_initializers) {
           auto field = struct_type->GetField(name);
           if (!field) {
-            diagnostics.Fail(field_init->location,
-                             errs::UnknownInitializerField{name});
+            diagnostics.Error(field_init->location,
+                              errs::UnknownInitializerField{name});
+            return std::nullopt;
           }
-          AnalyzeInitializer(field_initializer.get(), field->type,
-                             declaration_location, global);
+          TRY(AnalyzeInitializer(field_initializer.get(), field->type,
+                                 declaration_location, global));
         }
-        return;
+        return std::monostate{};
       }
       if (auto *array_init = initializer->DynCast<ArrayInitializer>()) {
         if (array_init->initializers.size() > struct_type->fields.size()) {
-          diagnostics.Fail(array_init->location,
-                           errs::TooManyStructInitializers{});
+          diagnostics.Error(array_init->location,
+                            errs::TooManyStructInitializers{});
+          return std::nullopt;
         }
         for (size_t i = 0; i < array_init->initializers.size(); ++i) {
-          AnalyzeInitializer(array_init->initializers[i].get(),
-                             struct_type->fields[i].type, declaration_location,
-                             global);
+          TRY(AnalyzeInitializer(array_init->initializers[i].get(),
+                                 struct_type->fields[i].type,
+                                 declaration_location, global));
         }
-        return;
+        return std::monostate{};
       }
       if (auto *value_init = initializer->DynCast<ValueInitializer>()) {
-        ExprInfo value = AnalyzeExpr(value_init->value);
-        ConvertExpr(value_init->value, value, type, value_init->location);
-        return;
+        TRY_ASSIGN_NEW(value, AnalyzeExpr(value_init->value));
+        TRY(ConvertExpr(value_init->value, value, type, value_init->location));
+        return std::monostate{};
       }
     }
 
     if (type->Is<BuiltinType>()) {
       auto *value_init = initializer->DynCast<ValueInitializer>();
       if (!value_init) {
-        diagnostics.Fail(initializer->location,
-                         errs::BuiltinInitializerRequiresValue{});
+        diagnostics.Error(initializer->location,
+                          errs::BuiltinInitializerRequiresValue{});
+        return std::nullopt;
       }
-      ExprInfo value = AnalyzeExpr(value_init->value);
-      ConvertExpr(value_init->value, value, type, value_init->location);
-      return;
+      TRY_ASSIGN_NEW(value, AnalyzeExpr(value_init->value));
+      TRY(ConvertExpr(value_init->value, value, type, value_init->location));
+      return std::monostate{};
     }
 
     if (auto *pointer = type->DynCast<PointerType>()) {
       auto *value_init = initializer->DynCast<ValueInitializer>();
       if (!value_init) {
-        diagnostics.Fail(initializer->location,
-                         errs::PointerInitializerRequiresValue{});
+        diagnostics.Error(initializer->location,
+                          errs::PointerInitializerRequiresValue{});
+        return std::nullopt;
       }
-      ExprInfo value = AnalyzeExpr(value_init->value);
+      TRY_ASSIGN_NEW(value, AnalyzeExpr(value_init->value));
       value = Decay(value_init->value, value);
       if (global) {
         if (!AsExpr(value_init->value.get())->constant_value) {
-          diagnostics.Fail(value_init->location,
-                           errs::GlobalPointerRequiresConstant{});
+          diagnostics.Error(value_init->location,
+                            errs::GlobalPointerRequiresConstant{});
+          return std::nullopt;
         }
         if (!value.type->Is<PointerType>()) {
           if (!IsIntegerType(value.type) && !value.type->Is<EnumType>()) {
-            diagnostics.Fail(value_init->location, errs::TypeMismatch{
-                                                       pointer,
-                                                       value.type,
-                                                   });
+            diagnostics.Error(value_init->location,
+                              errs::TypeMismatch{pointer, value.type});
+            return std::nullopt;
           }
           InsertImplicitCast(value_init->value, pointer);
         }
       } else {
-        ConvertExpr(value_init->value, value, pointer, value_init->location);
+        TRY(ConvertExpr(value_init->value, value, pointer,
+                        value_init->location));
       }
-      return;
+      return std::monostate{};
     }
 
     if (!global && (type->Is<EnumType>() || type->Is<UnionType>())) {
       auto *value_init = initializer->DynCast<ValueInitializer>();
       if (!value_init) {
-        diagnostics.Fail(initializer->location, errs::UnexpectedInitializer{});
+        diagnostics.Error(initializer->location, errs::UnexpectedInitializer{});
+        return std::nullopt;
       }
-      ExprInfo value = AnalyzeExpr(value_init->value);
-      ConvertExpr(value_init->value, value, type, value_init->location);
-      return;
+      TRY_ASSIGN_NEW(value, AnalyzeExpr(value_init->value));
+      TRY(ConvertExpr(value_init->value, value, type, value_init->location));
+      return std::monostate{};
     }
 
-    diagnostics.Fail(initializer->location, errs::UnexpectedInitializer{});
+    diagnostics.Error(initializer->location, errs::UnexpectedInitializer{});
+    return std::nullopt;
   }
 
-  void AnalyzeStatement(std::unique_ptr<ASTNode> &node) {
+  std::optional<std::monostate>
+  AnalyzeStatement(std::unique_ptr<ASTNode> &node) {
     if (!node) {
-      return;
+      return std::monostate{};
     }
     ASTNode *current = node.get();
     if (current->Is<EmptyStmt>() || current->Is<LabelStmt>() ||
         current->Is<GotoStmt>() || current->Is<TypedefDecl>()) {
-      return;
+      return std::monostate{};
     }
     if (auto *decl_stmt = current->DynCast<DeclStmt>()) {
-      AnalyzeDeclStmt(decl_stmt, false);
-      return;
+      return AnalyzeDeclStmt(decl_stmt, false);
     }
     if (auto *var = current->DynCast<VarDecl>()) {
-      AnalyzeVarDecl(var, false);
-      return;
+      return AnalyzeVarDecl(var, false);
     }
     if (auto *function = current->DynCast<FunctionDecl>()) {
-      AnalyzeFunctionDecl(function, false);
-      return;
+      return AnalyzeFunctionDecl(function, false);
     }
     if (auto *struct_decl = current->DynCast<StructDecl>()) {
       (void)struct_decl;
-      return;
+      return std::monostate{};
     }
     if (auto *union_decl = current->DynCast<UnionDecl>()) {
       (void)union_decl;
-      return;
+      return std::monostate{};
     }
     if (auto *enum_decl = current->DynCast<EnumDecl>()) {
-      AnalyzeEnumDecl(enum_decl);
-      return;
+      return AnalyzeEnumDecl(enum_decl);
     }
     if (auto *compound = current->DynCast<CompoundStmt>()) {
       for (auto &statement : compound->statements) {
-        AnalyzeStatement(statement);
+        TRY(AnalyzeStatement(statement));
       }
-      return;
+      return std::monostate{};
     }
     if (auto *if_stmt = current->DynCast<IfStmt>()) {
-      AnalyzeCondition(if_stmt->condition);
-      AnalyzeStatement(if_stmt->then_branch);
-      AnalyzeStatement(if_stmt->else_branch);
-      return;
+      TRY(AnalyzeCondition(if_stmt->condition));
+      TRY(AnalyzeStatement(if_stmt->then_branch));
+      TRY(AnalyzeStatement(if_stmt->else_branch));
+      return std::monostate{};
     }
     if (auto *while_stmt = current->DynCast<WhileStmt>()) {
-      AnalyzeCondition(while_stmt->condition);
+      TRY(AnalyzeCondition(while_stmt->condition));
       flow_contexts.push_back({.allows_break = true, .allows_continue = true});
-      AnalyzeStatement(while_stmt->body);
+      std::optional<std::monostate> body_status =
+          AnalyzeStatement(while_stmt->body);
       flow_contexts.pop_back();
-      return;
+      return body_status;
     }
     if (auto *do_while = current->DynCast<DoWhileStmt>()) {
       flow_contexts.push_back({.allows_break = true, .allows_continue = true});
-      AnalyzeStatement(do_while->body);
+      std::optional<std::monostate> body_status =
+          AnalyzeStatement(do_while->body);
       flow_contexts.pop_back();
-      AnalyzeCondition(do_while->condition);
-      return;
+      if (!body_status || !AnalyzeCondition(do_while->condition)) {
+        return std::nullopt;
+      }
+      return std::monostate{};
     }
     if (auto *for_stmt = current->DynCast<ForStmt>()) {
-      AnalyzeStatement(for_stmt->init);
-      AnalyzeCondition(for_stmt->condition);
-      AnalyzeStatement(for_stmt->increment);
+      TRY(AnalyzeStatement(for_stmt->init));
+      TRY(AnalyzeCondition(for_stmt->condition));
+      TRY(AnalyzeStatement(for_stmt->increment));
       flow_contexts.push_back({.allows_break = true, .allows_continue = true});
-      AnalyzeStatement(for_stmt->body);
+      std::optional<std::monostate> body_status =
+          AnalyzeStatement(for_stmt->body);
       flow_contexts.pop_back();
-      return;
+      return body_status;
     }
     if (auto *switch_stmt = current->DynCast<SwitchStmt>()) {
-      AnalyzeSwitch(switch_stmt);
-      return;
+      return AnalyzeSwitch(switch_stmt);
     }
     if (current->Is<BreakStmt>()) {
       if (flow_contexts.empty() || !flow_contexts.back().allows_break) {
-        diagnostics.Fail(current->location, errs::BreakOutsideLoopOrSwitch{});
+        diagnostics.Error(current->location, errs::BreakOutsideLoopOrSwitch{});
+        return std::nullopt;
       }
-      return;
+      return std::monostate{};
     }
     if (current->Is<ContinueStmt>()) {
       if (flow_contexts.empty() || !flow_contexts.back().allows_continue) {
-        diagnostics.Fail(current->location, errs::ContinueOutsideLoop{});
+        diagnostics.Error(current->location, errs::ContinueOutsideLoop{});
+        return std::nullopt;
       }
-      return;
+      return std::monostate{};
     }
     if (auto *return_stmt = current->DynCast<ReturnStmt>()) {
-      AnalyzeReturn(return_stmt);
-      return;
+      return AnalyzeReturn(return_stmt);
     }
     if (current->Is<Expr>()) {
-      AnalyzeExpr(node);
-      return;
+      TRY(AnalyzeExpr(node));
+      return std::monostate{};
     }
-    diagnostics.Fail(current->location,
-                     errs::UnsupportedStatementASTNode{current->GetType()});
+    diagnostics.Error(current->location,
+                      errs::UnsupportedStatementASTNode{current->GetType()});
+    return std::nullopt;
   }
 
-  void AnalyzeCondition(std::unique_ptr<ASTNode> &condition) {
+  std::optional<std::monostate>
+  AnalyzeCondition(std::unique_ptr<ASTNode> &condition) {
     if (!condition) {
-      return;
+      return std::monostate{};
     }
-    ExprInfo info = AnalyzeExpr(condition);
-    ConvertToBool(condition, info, condition->location,
-                  errs::ConditionRequiresScalar{});
+    TRY_ASSIGN_NEW(info, AnalyzeExpr(condition));
+    TRY(ConvertToBool(condition, info, condition->location,
+                      errs::ConditionRequiresScalar{}));
+    return std::monostate{};
   }
 
-  void AnalyzeSwitch(SwitchStmt *switch_stmt) {
-    ExprInfo switch_info = AnalyzeExpr(switch_stmt->value);
+  std::optional<std::monostate> AnalyzeSwitch(SwitchStmt *switch_stmt) {
+    TRY_ASSIGN_NEW(switch_info, AnalyzeExpr(switch_stmt->value));
     switch_info = Decay(switch_stmt->value, switch_info);
     TypeRef switch_type = switch_info.type;
     if (!IsIntegerOrEnum(switch_type)) {
-      diagnostics.Fail(switch_stmt->value->location,
-                       errs::SwitchRequiresIntegerOrEnum{});
+      diagnostics.Error(switch_stmt->value->location,
+                        errs::SwitchRequiresIntegerOrEnum{});
+      return std::nullopt;
     }
 
     flow_contexts.push_back({.allows_break = true, .allows_continue = false});
     for (const auto &case_node : switch_stmt->cases) {
       if (auto *case_stmt = case_node->DynCast<CaseStmt>()) {
         for (auto &value : case_stmt->case_vals) {
-          ExprInfo value_info = AnalyzeExpr(value);
+          std::optional<ExprInfo> value_info = AnalyzeExpr(value);
+          if (!value_info) {
+            flow_contexts.pop_back();
+            return std::nullopt;
+          }
           if (!AsExpr(value.get())->constant_value) {
-            diagnostics.Fail(value->location,
-                             errs::CaseValueRequiresConstant{});
+            diagnostics.Error(value->location,
+                              errs::CaseValueRequiresConstant{});
+            flow_contexts.pop_back();
+            return std::nullopt;
           }
           if (!IsIntegerOrEnum(AsExpr(value.get())->type)) {
-            diagnostics.Fail(value->location,
-                             errs::IntegerInitializerTypeMismatch{});
+            diagnostics.Error(value->location,
+                              errs::IntegerInitializerTypeMismatch{});
+            flow_contexts.pop_back();
+            return std::nullopt;
           }
-          ConvertExpr(value, value_info, switch_type, value->location);
+          if (!ConvertExpr(value, *value_info, switch_type, value->location)) {
+            flow_contexts.pop_back();
+            return std::nullopt;
+          }
         }
         for (auto &statement : case_stmt->body) {
-          AnalyzeStatement(statement);
+          if (!AnalyzeStatement(statement)) {
+            flow_contexts.pop_back();
+            return std::nullopt;
+          }
         }
       } else if (auto *default_stmt = case_node->DynCast<DefaultStmt>()) {
         for (auto &statement : default_stmt->body) {
-          AnalyzeStatement(statement);
+          if (!AnalyzeStatement(statement)) {
+            flow_contexts.pop_back();
+            return std::nullopt;
+          }
         }
       }
     }
     flow_contexts.pop_back();
+    return std::monostate{};
   }
 
-  void AnalyzeReturn(ReturnStmt *return_stmt) {
+  std::optional<std::monostate> AnalyzeReturn(ReturnStmt *return_stmt) {
     if (!current_function) {
-      diagnostics.Fail(return_stmt->location, errs::ReturnOutsideFunction{});
+      diagnostics.Error(return_stmt->location, errs::ReturnOutsideFunction{});
+      return std::nullopt;
     }
     TypeRef return_type =
         current_function->function_type->As<FunctionType>()->return_type;
     if (!return_stmt->ret_value) {
-      return;
+      return std::monostate{};
     }
-    ExprInfo value = AnalyzeExpr(return_stmt->ret_value);
-    ConvertExpr(return_stmt->ret_value, value, return_type,
-                return_stmt->location);
+    TRY_ASSIGN_NEW(value, AnalyzeExpr(return_stmt->ret_value));
+    TRY(ConvertExpr(return_stmt->ret_value, value, return_type,
+                    return_stmt->location));
+    return std::monostate{};
   }
 
   std::optional<NumericValue> EvaluateConstant(Expr *expr) {
@@ -1589,8 +1709,8 @@ private:
 
 } // namespace
 
-void AnalyzeTranslationUnit(TranslationUnit &translation_unit,
-                            TypeContext &types,
-                            DiagnosticContext &diagnostics) {
-  SemanticAnalyzer(translation_unit, types, diagnostics).Run();
+std::optional<std::monostate>
+AnalyzeTranslationUnit(TranslationUnit &translation_unit, TypeContext &types,
+                       DiagnosticContext &diagnostics) {
+  return SemanticAnalyzer(translation_unit, types, diagnostics).Run();
 }

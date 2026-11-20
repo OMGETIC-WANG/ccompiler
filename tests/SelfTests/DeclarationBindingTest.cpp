@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -51,13 +52,15 @@ protected:
     translation_unit = ParseTranslationUnit(lexer, types, sources, diagnostics);
 
     ASSERT_FALSE(diagnostics.HasErrors());
-    ASSERT_NE(translation_unit, nullptr);
-    ASSERT_EQ(translation_unit->decls.size(), 4);
+    ASSERT_TRUE(translation_unit.has_value());
+    ASSERT_NE(*translation_unit, nullptr);
+    TranslationUnit &unit = **translation_unit;
+    ASSERT_EQ(unit.decls.size(), 4);
 
-    global = translation_unit->decls[0]->DynCast<VarDecl>();
-    color = translation_unit->decls[1]->DynCast<EnumDecl>();
-    pick = translation_unit->decls[2]->DynCast<FunctionDecl>();
-    main = translation_unit->decls[3]->DynCast<FunctionDecl>();
+    global = unit.decls[0]->DynCast<VarDecl>();
+    color = unit.decls[1]->DynCast<EnumDecl>();
+    pick = unit.decls[2]->DynCast<FunctionDecl>();
+    main = unit.decls[3]->DynCast<FunctionDecl>();
     ASSERT_NE(global, nullptr);
     ASSERT_NE(color, nullptr);
     ASSERT_NE(pick, nullptr);
@@ -117,7 +120,7 @@ protected:
   DiagnosticContext diagnostics{sources};
   MacroContext macros;
   TypeContext types;
-  std::unique_ptr<TranslationUnit> translation_unit;
+  std::optional<std::unique_ptr<TranslationUnit>> translation_unit;
 
   VarDecl *global = nullptr;
   EnumDecl *color = nullptr;

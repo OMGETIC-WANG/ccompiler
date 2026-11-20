@@ -4,6 +4,7 @@
 #include "TypeContext.h"
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 class TranslationUnit : public ASTNode {
@@ -16,9 +17,9 @@ public:
   bool is_semantically_analyzed = false;
 };
 
-std::unique_ptr<CompoundStmt> ParseCompoundStmt(Lexer &lexer,
-                                                CompileContext &context);
+std::optional<std::unique_ptr<CompoundStmt>>
+ParseCompoundStmt(Lexer &lexer, CompileContext &context);
 
-std::unique_ptr<TranslationUnit>
+std::optional<std::unique_ptr<TranslationUnit>>
 ParseTranslationUnit(Lexer &lexer, TypeContext &types, SourceManager &sources,
                      DiagnosticContext &diagnostics);

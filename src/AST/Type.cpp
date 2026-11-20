@@ -1,5 +1,6 @@
 #include "Type.h"
 #include "../Exception.h"
+#include "../Util/Util.h"
 #include "AST.h"
 #include "Context.h"
 #include "Declaration.h"
@@ -16,8 +17,8 @@ TypeRef ApplyCVQualifier(TypeRef type, TypeTag qualifier, TypeContext &types) {
   return ApplyTypeTag(type, qualifier);
 }
 
-TypeRef GetOrCreateBaseType(const TypeSpecifier &specifier,
-                            CompileContext &context) {
+std::optional<TypeRef> GetOrCreateBaseType(const TypeSpecifier &specifier,
+                                           CompileContext &context) {
   TypeContext &types = context.Types();
   TypeRef type;
   if (specifier.is_builtin) {
@@ -25,52 +26,59 @@ TypeRef GetOrCreateBaseType(const TypeSpecifier &specifier,
     if (specifier.is_unsigned) {
       const auto *builtin = type->As<BuiltinType>();
       if (!IsIntegerKind(builtin->Kind())) {
-        context.Diagnostics().Fail(specifier.location,
-                                   errs::UnsignedRequiresIntegerType{});
+        context.Diagnostics().Error(specifier.location,
+                                    errs::UnsignedRequiresIntegerType{});
+        return std::nullopt;
       }
       type = ApplyTypeTag(type, TypeTag::Unsigned);
     }
   } else if (specifier.is_struct) {
     if (specifier.is_unsigned) {
-      context.Diagnostics().Fail(specifier.location,
-                                 errs::UnsignedCannotQualifyStruct{});
+      context.Diagnostics().Error(specifier.location,
+                                  errs::UnsignedCannotQualifyStruct{});
+      return std::nullopt;
     }
     type = types.GetOrCreateStruct(specifier.scope_id, specifier.type_name);
   } else if (specifier.is_union) {
     if (specifier.is_unsigned) {
-      context.Diagnostics().Fail(specifier.location,
-                                 errs::UnsignedCannotQualifyUnion{});
+      context.Diagnostics().Error(specifier.location,
+                                  errs::UnsignedCannotQualifyUnion{});
+      return std::nullopt;
     }
     type = types.GetOrCreateUnion(specifier.scope_id, specifier.type_name);
   } else if (specifier.is_enum) {
     if (specifier.is_unsigned) {
-      context.Diagnostics().Fail(specifier.location,
-                                 errs::UnsignedCannotQualifyEnum{});
+      context.Diagnostics().Error(specifier.location,
+                                  errs::UnsignedCannotQualifyEnum{});
+      return std::nullopt;
     }
     type = types.GetOrCreateEnum(specifier.scope_id, specifier.type_name);
   } else if (specifier.is_named_type) {
     if (specifier.is_unsigned) {
-      context.Diagnostics().Fail(specifier.location,
-                                 errs::UnsignedCannotQualifyTypedef{});
+      context.Diagnostics().Error(specifier.location,
+                                  errs::UnsignedCannotQualifyTypedef{});
+      return std::nullopt;
     }
     if (auto *decl = context.FindTypedef(specifier.type_name)) {
       type = decl->type;
     } else if (auto *decl = context.FindEnum(specifier.type_name)) {
       type = decl->type;
     } else {
-      context.Diagnostics().Fail(specifier.location,
-                                 errs::UnknownTypeName{specifier.type_name});
+      context.Diagnostics().Error(specifier.location,
+                                  errs::UnknownTypeName{specifier.type_name});
+      return std::nullopt;
     }
   } else {
-    context.Diagnostics().Fail(
+    context.Diagnostics().Error(
         specifier.location, errs::UnableToResolveTypeName{specifier.type_name});
+    return std::nullopt;
   }
 
   return ApplyTypeSpecifierQualifiers(type, specifier, types,
                                       context.Diagnostics());
 }
 
-static ParsedType
+static std::optional<ParsedType>
 ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
                 CompileContext &context,
                 std::vector<ParsedParameter> function_parameters = {}) {
@@ -80,19 +88,19 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
     for (const Declarator::PointerQualifier &pointer : declarator->pointers) {
       curr_type = types.Pointer(curr_type);
       if (pointer.is_const) {
-        curr_type =
-            ApplyTypeQualifier(curr_type, TypeTag::Const, types,
-                               context.Diagnostics(), declarator->location);
+        TRY_ASSIGN(curr_type, ApplyTypeQualifier(curr_type, TypeTag::Const,
+                                                 types, context.Diagnostics(),
+                                                 declarator->location));
       }
       if (pointer.is_volatile) {
-        curr_type =
-            ApplyTypeQualifier(curr_type, TypeTag::Volatile, types,
-                               context.Diagnostics(), declarator->location);
+        TRY_ASSIGN(curr_type, ApplyTypeQualifier(curr_type, TypeTag::Volatile,
+                                                 types, context.Diagnostics(),
+                                                 declarator->location));
       }
       if (pointer.is_restrict) {
-        curr_type =
-            ApplyTypeQualifier(curr_type, TypeTag::Restrict, types,
-                               context.Diagnostics(), declarator->location);
+        TRY_ASSIGN(curr_type, ApplyTypeQualifier(curr_type, TypeTag::Restrict,
+                                                 types, context.Diagnostics(),
+                                                 declarator->location));
       }
     }
     function_parameters.clear();
@@ -100,7 +108,7 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
 
   const DirectDeclarator *direct = declarator->direct_declarator.get();
   if (!direct) {
-    return {
+    return ParsedType{
         .type = curr_type,
         .location = declarator->location,
         .declarator_name = {},
@@ -120,11 +128,12 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
       parameters.reserve(param_list->params.size());
 
       for (const auto &param : param_list->params) {
-        TypeRef param_type = context.GetType(param.specifier.type_spec);
+        TRY_ASSIGN_NEW(param_type, context.GetType(param.specifier.type_spec));
         if (!param_type) {
-          context.Diagnostics().Fail(
+          context.Diagnostics().Error(
               param.specifier.type_spec.location,
               errs::UnknownTagName{param.specifier.type_spec.type_name});
+          return std::nullopt;
         }
         if (!param.declarator) {
           parameter_types.push_back(param_type);
@@ -136,8 +145,9 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
           continue;
         }
 
-        ParsedType parsed_param =
-            ParseDeclarator(param_type, param.declarator.get(), context);
+        TRY_ASSIGN_NEW(
+            parsed_param,
+            ParseDeclarator(param_type, param.declarator.get(), context));
         parameter_types.push_back(parsed_param.type);
         parameters.push_back({
             .type = parsed_param.type,
@@ -168,7 +178,7 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
 
   const DeclBase *direct_declarator = direct->declarator.get();
   if (!direct_declarator) {
-    return {
+    return ParsedType{
         .type = curr_type,
         .location = declarator->location,
         .declarator_name = {},
@@ -177,7 +187,7 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
   }
   if (direct_declarator->GetType() == DeclType::IdentifierDeclarator) {
     const auto *identifier = direct_declarator->As<IdentifierDeclarator>();
-    return {
+    return ParsedType{
         .type = curr_type,
         .location = declarator->location,
         .declarator_name = identifier->identifier,
@@ -195,9 +205,10 @@ ParseDeclarator(TypeRef curr_type, const Declarator *declarator,
 
 } // namespace
 
-TypeRef ApplyTypeQualifier(TypeRef type, TypeTag qualifier, TypeContext &types,
-                           DiagnosticContext &diagnostics,
-                           SourceLocation location) {
+std::optional<TypeRef> ApplyTypeQualifier(TypeRef type, TypeTag qualifier,
+                                          TypeContext &types,
+                                          DiagnosticContext &diagnostics,
+                                          SourceLocation location) {
   if (qualifier == TypeTag::Const || qualifier == TypeTag::Volatile) {
     return ApplyCVQualifier(type, qualifier, types);
   }
@@ -206,26 +217,27 @@ TypeRef ApplyTypeQualifier(TypeRef type, TypeTag qualifier, TypeContext &types,
   }
   if (!type->Is<PointerType>() ||
       type->As<PointerType>()->pointee_type->Is<FunctionType>()) {
-    diagnostics.Fail(location, errs::RestrictRequiresObjectPointer{});
+    diagnostics.Error(location, errs::RestrictRequiresObjectPointer{});
+    return std::nullopt;
   }
   return ApplyTypeTag(type, TypeTag::Restrict);
 }
 
-TypeRef ApplyTypeSpecifierQualifiers(TypeRef type,
-                                     const TypeSpecifier &specifier,
-                                     TypeContext &types,
-                                     DiagnosticContext &diagnostics) {
+std::optional<TypeRef>
+ApplyTypeSpecifierQualifiers(TypeRef type, const TypeSpecifier &specifier,
+                             TypeContext &types,
+                             DiagnosticContext &diagnostics) {
   if (specifier.is_const) {
-    type = ApplyTypeQualifier(type, TypeTag::Const, types, diagnostics,
-                              specifier.location);
+    TRY_ASSIGN(type, ApplyTypeQualifier(type, TypeTag::Const, types,
+                                        diagnostics, specifier.location));
   }
   if (specifier.is_volatile) {
-    type = ApplyTypeQualifier(type, TypeTag::Volatile, types, diagnostics,
-                              specifier.location);
+    TRY_ASSIGN(type, ApplyTypeQualifier(type, TypeTag::Volatile, types,
+                                        diagnostics, specifier.location));
   }
   if (specifier.is_restrict) {
-    type = ApplyTypeQualifier(type, TypeTag::Restrict, types, diagnostics,
-                              specifier.location);
+    TRY_ASSIGN(type, ApplyTypeQualifier(type, TypeTag::Restrict, types,
+                                        diagnostics, specifier.location));
   }
   return type;
 }
@@ -351,21 +363,22 @@ TypeRef UsualArithmeticType(TypeRef left, TypeRef right, TypeContext &types) {
                       TypeTag::Unsigned);
 }
 
-TypeRef ResolveTypeSpecifier(const TypeSpecifier &specifier,
-                             CompileContext &context) {
+std::optional<TypeRef> ResolveTypeSpecifier(const TypeSpecifier &specifier,
+                                            CompileContext &context) {
   return GetOrCreateBaseType(specifier, context);
 }
 
-ParsedType ParseDeclaratorType(const TypeSpecifier &spec,
-                               const Declarator &declarator,
-                               CompileContext &context) {
-  const TypeRef base_type = context.GetType(spec);
+std::optional<ParsedType> ParseDeclaratorType(const TypeSpecifier &spec,
+                                              const Declarator &declarator,
+                                              CompileContext &context) {
+  TRY_ASSIGN_NEW(base_type, context.GetType(spec));
   if (!base_type) {
-    context.Diagnostics().Fail(spec.location,
-                               errs::UnknownTagName{spec.type_name});
+    context.Diagnostics().Error(spec.location,
+                                errs::UnknownTagName{spec.type_name});
+    return std::nullopt;
   }
 
-  ParsedType parsed = ParseDeclarator(base_type, &declarator, context);
+  TRY_ASSIGN_NEW(parsed, ParseDeclarator(base_type, &declarator, context));
   parsed.location = CombineLocation(spec.location, declarator.location);
   return parsed;
 }

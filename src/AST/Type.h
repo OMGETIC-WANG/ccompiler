@@ -551,22 +551,23 @@ struct ParsedType {
 
 class CompileContext;
 
-TypeRef ApplyTypeQualifier(TypeRef type, TypeTag qualifier, TypeContext &types,
-                           DiagnosticContext &diagnostics,
-                           SourceLocation location);
+std::optional<TypeRef> ApplyTypeQualifier(TypeRef type, TypeTag qualifier,
+                                          TypeContext &types,
+                                          DiagnosticContext &diagnostics,
+                                          SourceLocation location);
 
-TypeRef ApplyTypeSpecifierQualifiers(TypeRef type,
-                                     const TypeSpecifier &specifier,
-                                     TypeContext &types,
-                                     DiagnosticContext &diagnostics);
+std::optional<TypeRef>
+ApplyTypeSpecifierQualifiers(TypeRef type, const TypeSpecifier &specifier,
+                             TypeContext &types,
+                             DiagnosticContext &diagnostics);
 
 TypeRef ApplyAggregateMemberQualifiers(TypeRef member_type,
                                        TypeRef aggregate_type,
                                        TypeContext &types);
 
-TypeRef ResolveTypeSpecifier(const TypeSpecifier &specifier,
-                             CompileContext &context);
+std::optional<TypeRef> ResolveTypeSpecifier(const TypeSpecifier &specifier,
+                                            CompileContext &context);
 
-ParsedType ParseDeclaratorType(const TypeSpecifier &spec,
-                               const Declarator &declarator,
-                               CompileContext &context);
+std::optional<ParsedType> ParseDeclaratorType(const TypeSpecifier &spec,
+                                              const Declarator &declarator,
+                                              CompileContext &context);

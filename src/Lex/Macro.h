@@ -84,7 +84,7 @@ public:
 
   ~MacroScanner() { _desc.is_expanding = false; }
 
-  Token PeekNextToken() override;
+  std::optional<Token> PeekNextToken() override;
 
   void ConsumeToken(Token token) override;
 

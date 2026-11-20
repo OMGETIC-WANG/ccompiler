@@ -4,5 +4,7 @@
 #include "../Util/Diagnostic.h"
 
 #include <cstdint>
+#include <optional>
 
-uint64_t EvalMacroCond(ASTNode *node, DiagnosticContext &diagnostics);
+std::optional<uint64_t> EvalMacroCond(ASTNode *node,
+                                      DiagnosticContext &diagnostics);

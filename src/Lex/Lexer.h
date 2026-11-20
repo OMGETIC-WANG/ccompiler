@@ -2,11 +2,13 @@
 
 #include "../Exception.h"
 #include "../SourceManager.h"
+#include "../Util/Util.h"
 #include "Macro.h"
 #include "Scanner.h"
 
 #include <deque>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <unordered_map>
@@ -16,7 +18,9 @@
 struct IRawLexer {
   virtual ~IRawLexer() = default;
 
-  virtual Token EmitToken() = 0;
+  // nullopt reports a diagnostic failure; end of input is an explicit
+  // EndOfFile token.
+  virtual std::optional<Token> EmitToken() = 0;
 };
 
 enum class PPCondBranch { Then, Else };
@@ -33,12 +37,15 @@ public:
   RawLexer(SourceHandle source, MacroContext &macro_context,
            SourceManager &source_manager, CompileContext &compile_context);
 
-  Token EmitToken() override;
+  std::optional<Token> EmitToken() override;
 
 private:
-  std::optional<Token> EmitTokenImpl();
+  struct RetryEmit {};
+  using EmitStep = std::variant<Token, RetryEmit>;
 
-  Token PeekScannerNextToken();
+  std::optional<EmitStep> EmitTokenImpl();
+
+  std::optional<Token> PeekScannerNextToken();
 
   bool IsInValidPPCond() const;
 
@@ -59,7 +66,7 @@ public:
   FixedLexer(std::vector<Token> tokens)
       : _tokens(std::move(tokens)), _index(0) {}
 
-  Token EmitToken() override {
+  std::optional<Token> EmitToken() override {
     if (_index >= _tokens.size()) {
       return Token{TokenType::EndOfFile};
     } else {
@@ -77,35 +84,40 @@ class Lexer {
 public:
   Lexer(IRawLexer &lexer) : _lexer(lexer) {}
 
-  Token PeekNextToken(size_t offset = 0) {
+  std::optional<Token> PeekNextToken(size_t offset = 0) {
     if (offset < _parsed_tokens.size()) {
       return _parsed_tokens[offset];
     }
     while (offset >= _parsed_tokens.size()) {
-      _parsed_tokens.push_back(_lexer.EmitToken());
+      TRY_ASSIGN_NEW(token, _lexer.EmitToken());
+      _parsed_tokens.push_back(std::move(token));
     }
     return _parsed_tokens[offset];
   }
 
-  Token ConsumeNextToken() {
-    Token tok = PeekNextToken();
+  std::optional<Token> ConsumeNextToken() {
+    TRY_ASSIGN_NEW(result, PeekNextToken());
     _parsed_tokens.pop_front();
-    _last_consumed_location = tok.location;
+    _last_consumed_location = result.location;
     ++_consumed_token_count;
-    return tok;
+    return result;
   }
 
-  void ConsumeTokens(size_t count = 1) {
+  std::optional<std::monostate> ConsumeTokens(size_t count = 1) {
     for (size_t i = 0; i < count; ++i) {
-      ConsumeNextToken();
+      TRY(ConsumeNextToken());
     }
+    return std::monostate{};
   }
 
-  void ConsumeToken(Token token) {
-    ASSERT(token == PeekNextToken(), "Token mismatch while consuming");
+  std::optional<std::monostate> ConsumeToken(Token token) {
+    std::optional<Token> next = PeekNextToken();
+    ASSERT(next.has_value(), "Cannot consume after lexer failure");
+    ASSERT(token == *next, "Token mismatch while consuming");
     _parsed_tokens.pop_front();
     _last_consumed_location = token.location;
     ++_consumed_token_count;
+    return std::monostate{};
   }
 
   SourceLocation GetLastConsumedLocation() const {
@@ -115,9 +127,9 @@ public:
   size_t GetConsumedTokenCount() const { return _consumed_token_count; }
 
   // Consume until any of <types>
-  bool ConsumeUntil(std::span<const TokenType> types) {
+  std::optional<bool> ConsumeUntil(std::span<const TokenType> types) {
     while (true) {
-      Token tok = PeekNextToken();
+      TRY_ASSIGN_NEW(tok, PeekNextToken());
       if (tok.type == TokenType::EndOfFile) {
         return false;
       }
@@ -126,11 +138,11 @@ public:
           return true;
         }
       }
-      ConsumeToken(tok);
+      TRY(ConsumeToken(tok));
     }
   }
 
-  bool ConsumeUntil(TokenType type) {
+  std::optional<bool> ConsumeUntil(TokenType type) {
     return ConsumeUntil(std::span<const TokenType>(&type, 1));
   }
 

@@ -148,25 +148,28 @@ static std::optional<BinaryOpType> GetAssignmentOperation(TokenType type) {
   }
 }
 
-std::vector<std::unique_ptr<ASTNode>> ParseQuotedExpr(Lexer &lexer,
-                                                      CompileContext &context) {
+static std::optional<std::vector<std::unique_ptr<ASTNode>>>
+ParseQuotedExpr(Lexer &lexer, CompileContext &context) {
   std::vector<std::unique_ptr<ASTNode>> results;
+  Token next;
   while (true) {
-    Token tok = lexer.PeekNextToken();
+    TRY_ASSIGN_NEW(tok, lexer.PeekNextToken());
     if (tok.type == TokenType::RParen || tok.type == TokenType::EndOfFile ||
         tok.type == TokenType::Semicolon) {
       break;
     }
 
-    results.push_back(ParseExpr(lexer, context));
+    TRY_ASSIGN_NEW(expression, ParseExpr(lexer, context));
+    results.push_back(std::move(expression));
 
-    tok = lexer.PeekNextToken();
+    TRY_ASSIGN(tok, lexer.PeekNextToken());
     if (tok.type == TokenType::RParen || tok.type == TokenType::EndOfFile ||
         tok.type == TokenType::Semicolon) {
       break;
     } else {
       if (tok.type != TokenType::Comma) {
-        RaiseParserError(context, tok.location, errs::ExpectedComma{});
+        ReportParserError(context, tok.location, errs::ExpectedComma{});
+        return std::nullopt;
       }
       lexer.ConsumeToken(tok);
     }
@@ -186,8 +189,8 @@ static bool IsOct(std::string_view s) {
   return true;
 }
 
-static std::unique_ptr<LiteralNum> ParseLiteralNum(Token tok,
-                                                   CompileContext &context) {
+static std::optional<std::unique_ptr<LiteralNum>>
+ParseLiteralNum(Token tok, CompileContext &context) {
   std::string_view s = context.Sources().GetText(tok);
   ASSERT(!s.empty(), "Unexpected empty literal num");
 
@@ -223,8 +226,9 @@ static std::unique_ptr<LiteralNum> ParseLiteralNum(Token tok,
     if (Contains(num, '.')) {
       is_float_num = true;
       if (!Contains(num, 'p') && !Contains(num, 'P')) {
-        RaiseParserError(context, tok.location,
-                         errs::HexFloatRequiresExponentMarker{});
+        ReportParserError(context, tok.location,
+                          errs::HexFloatRequiresExponentMarker{});
+        return std::nullopt;
       }
     } else if (Contains(num, 'p') || Contains(num, 'P')) {
       is_float_num = true;
@@ -286,7 +290,8 @@ static std::unique_ptr<LiteralNum> ParseLiteralNum(Token tok,
                                 : is_float_num;
 
   if (is_float && base == 8) {
-    context.Diagnostics().Fail(tok.location, errs::OctalFloatUnsupported{});
+    context.Diagnostics().Error(tok.location, errs::OctalFloatUnsupported{});
+    return std::nullopt;
   }
 
   auto literal_num = std::make_unique<LiteralNum>();
@@ -318,8 +323,9 @@ static std::unique_ptr<LiteralNum> ParseLiteralNum(Token tok,
     ec = res.ec;
   }
   if (ec != std::errc{} || ptr != num.data() + num.size()) {
-    RaiseParserError(context, tok.location,
-                     errs::InvalidNumericLiteral{std::string(s)});
+    ReportParserError(context, tok.location,
+                      errs::InvalidNumericLiteral{std::string(s)});
+    return std::nullopt;
   }
 
   literal_num->location = tok.location;
@@ -346,8 +352,9 @@ static bool IsSimpleEscape(char c) {
   }
 }
 
-static char CastSimpleEscape(char escape, SourceLocation location,
-                             DiagnosticContext &diagnostics) {
+static std::optional<char> CastSimpleEscape(char escape,
+                                            SourceLocation location,
+                                            DiagnosticContext &diagnostics) {
   switch (escape) {
   case '0':
     return '\0';
@@ -374,13 +381,13 @@ static char CastSimpleEscape(char escape, SourceLocation location,
   case 'v':
     return '\v';
   default:
-    RaiseParserError(diagnostics, location,
-                     errs::UnknownEscapeSequence{escape});
+    diagnostics.Error(location, errs::UnknownEscapeSequence{escape});
+    return std::nullopt;
   }
 }
 
-static int HexToInt(char c, SourceLocation location,
-                    DiagnosticContext &diagnostics) {
+static std::optional<int> HexToInt(char c, SourceLocation location,
+                                   DiagnosticContext &diagnostics) {
   if (c >= '0' && c <= '9') {
     return c - '0';
   } else if (c >= 'a' && c <= 'f') {
@@ -388,13 +395,14 @@ static int HexToInt(char c, SourceLocation location,
   } else if (c >= 'A' && c <= 'F') {
     return c - 'A' + 10;
   } else {
-    RaiseParserError(diagnostics, location, errs::InvalidHexDigit{c});
+    diagnostics.Error(location, errs::InvalidHexDigit{c});
+    return std::nullopt;
   }
 }
 
-static CowString ParseLiteralStringValue(std::string_view s_,
-                                         SourceLocation location,
-                                         DiagnosticContext &diagnostics) {
+static std::optional<CowString>
+ParseLiteralStringValue(std::string_view s_, SourceLocation location,
+                        DiagnosticContext &diagnostics) {
   std::string_view s = s_.substr(1, s_.size() - 2); // remove quote
   for (auto c : s) {
     if (c == '\\') {
@@ -412,11 +420,13 @@ has_escape:;
       i++;
     } else {
       if (IsSimpleEscape(s[i + 1])) {
-        res.push_back(CastSimpleEscape(s[i + 1], location, diagnostics));
+        TRY_ASSIGN_NEW(escaped,
+                       CastSimpleEscape(s[i + 1], location, diagnostics));
+        res.push_back(escaped);
         i += 2;
       } else if (s[i + 1] == 'x') {
-        int h1 = HexToInt(s[i + 2], location, diagnostics);
-        int h0 = HexToInt(s[i + 3], location, diagnostics);
+        TRY_ASSIGN_NEW(h1, HexToInt(s[i + 2], location, diagnostics));
+        TRY_ASSIGN_NEW(h0, HexToInt(s[i + 3], location, diagnostics));
         res.push_back(static_cast<char>(h1 * 16 + h0));
         i += 4;
       } else {
@@ -424,7 +434,8 @@ has_escape:;
         int o1 = s[i + 2] - '0';
         int o0 = s[i + 3] - '0';
         if (o2 < 0 || o2 > 7 || o1 < 0 || o1 > 7 || o0 < 0 || o0 > 7) {
-          RaiseParserError(diagnostics, location, errs::InvalidOctalEscape{});
+          diagnostics.Error(location, errs::InvalidOctalEscape{});
+          return std::nullopt;
         }
         res.push_back(static_cast<char>(o2 * 64 + o1 * 8 + o0));
         i += 4;
@@ -434,8 +445,10 @@ has_escape:;
   return res;
 }
 
-std::unique_ptr<ASTNode> ParsePrimary(Lexer &lexer, CompileContext &context) {
-  Token tok = lexer.PeekNextToken();
+std::optional<std::unique_ptr<ASTNode>> ParsePrimary(Lexer &lexer,
+                                                     CompileContext &context) {
+  Token next;
+  TRY_ASSIGN_NEW(tok, lexer.PeekNextToken());
   switch (tok.type) {
   case TokenType::LiteralNum: {
     lexer.ConsumeToken(tok);
@@ -445,18 +458,24 @@ std::unique_ptr<ASTNode> ParsePrimary(Lexer &lexer, CompileContext &context) {
     lexer.ConsumeToken(tok);
     auto literal_string = std::make_unique<LiteralString>();
     literal_string->location = tok.location;
-    CowString s = ParseLiteralStringValue(context.Sources().GetText(tok),
-                                          tok.location, context.Diagnostics());
-    while (lexer.PeekNextToken().type == TokenType::LiteralString) {
-      Token next = lexer.ConsumeNextToken();
-      s.string() +=
-          ParseLiteralStringValue(context.Sources().GetText(next),
-                                  next.location, context.Diagnostics())
-              .view();
+    TRY_ASSIGN_NEW(
+        string, ParseLiteralStringValue(context.Sources().GetText(tok),
+                                        tok.location, context.Diagnostics()));
+    while (true) {
+      TRY_ASSIGN(next, lexer.PeekNextToken());
+      if (next.type != TokenType::LiteralString) {
+        break;
+      }
+      TRY_ASSIGN_NEW(next_literal, lexer.ConsumeNextToken());
+      TRY_ASSIGN_NEW(next_value,
+                     ParseLiteralStringValue(
+                         context.Sources().GetText(next_literal),
+                         next_literal.location, context.Diagnostics()));
+      string.string() += next_value.view();
       literal_string->location =
-          CombineLocation(literal_string->location, next.location);
+          CombineLocation(literal_string->location, next_literal.location);
     }
-    literal_string->value = std::move(s);
+    literal_string->value = std::move(string);
     return literal_string;
   }
   case TokenType::Identifier: {
@@ -467,7 +486,8 @@ std::unique_ptr<ASTNode> ParsePrimary(Lexer &lexer, CompileContext &context) {
     } else {
       ValueDecl *decl = context.FindValue(name);
       if (!decl) {
-        RaiseParserError(context, tok.location, errs::UnknownVar{name});
+        ReportParserError(context, tok.location, errs::UnknownVar{name});
+        return std::nullopt;
       }
       auto var_ref = std::make_unique<VarRef>(decl);
       var_ref->location = tok.location;
@@ -476,32 +496,36 @@ std::unique_ptr<ASTNode> ParsePrimary(Lexer &lexer, CompileContext &context) {
   }
   case TokenType::LParen: {
     lexer.ConsumeToken(tok);
-    auto expr = ParseQuotedExpr(lexer, context);
-    Token rparen = lexer.PeekNextToken();
+    TRY_ASSIGN_NEW(expressions, ParseQuotedExpr(lexer, context));
+    TRY_ASSIGN(next, lexer.PeekNextToken());
+    Token rparen = next;
     if (rparen.type != TokenType::RParen) {
-      RaiseParserError(context, rparen.location, errs::ExpectedClosingParen{});
+      ReportParserError(context, rparen.location, errs::ExpectedClosingParen{});
+      return std::nullopt;
     }
     lexer.ConsumeToken(rparen);
-    if (expr.size() == 1) {
-      expr[0]->location = CombineLocation(tok.location, rparen.location);
-      return std::move(expr[0]);
+    if (expressions.size() == 1) {
+      expressions[0]->location = CombineLocation(tok.location, rparen.location);
+      return std::move(expressions[0]);
     } else {
       auto seq_eval = std::make_unique<SequenceEval>();
       seq_eval->location = CombineLocation(tok.location, rparen.location);
-      seq_eval->expressions = std::move(expr);
+      seq_eval->expressions = std::move(expressions);
       return seq_eval;
     }
   }
   default:
-    RaiseParserError(context, tok.location, errs::UnexpectedToken{});
+    ReportParserError(context, tok.location, errs::UnexpectedToken{});
+    return std::nullopt;
   }
 }
 
-std::unique_ptr<ASTNode> ParsePostfix(Lexer &lexer, CompileContext &context,
-                                      SourceLocation primary_start,
-                                      std::unique_ptr<ASTNode> primary) {
+static std::optional<std::unique_ptr<ASTNode>>
+ParsePostfix(Lexer &lexer, CompileContext &context,
+             SourceLocation primary_start, std::unique_ptr<ASTNode> primary) {
+  Token next;
   while (true) {
-    Token tok = lexer.PeekNextToken();
+    TRY_ASSIGN_NEW(tok, lexer.PeekNextToken());
     switch (tok.type) {
     case TokenType::EndOfFile:
     case TokenType::Semicolon:
@@ -511,11 +535,14 @@ std::unique_ptr<ASTNode> ParsePostfix(Lexer &lexer, CompileContext &context,
       lexer.ConsumeToken(tok);
       auto func_invoke = std::make_unique<FunctionInvocation>();
       func_invoke->function = std::move(primary);
-      func_invoke->arguments = ParseQuotedExpr(lexer, context);
-      Token rparen = lexer.PeekNextToken();
+      TRY_ASSIGN_NEW(arguments, ParseQuotedExpr(lexer, context));
+      func_invoke->arguments = std::move(arguments);
+      TRY_ASSIGN(next, lexer.PeekNextToken());
+      Token rparen = next;
       if (rparen.type != TokenType::RParen) {
-        RaiseParserError(context, rparen.location,
-                         errs::ExpectedClosingParen{});
+        ReportParserError(context, rparen.location,
+                          errs::ExpectedClosingParen{});
+        return std::nullopt;
       }
       lexer.ConsumeToken(rparen);
       func_invoke->location = CombineLocation(primary_start, rparen.location);
@@ -526,11 +553,14 @@ std::unique_ptr<ASTNode> ParsePostfix(Lexer &lexer, CompileContext &context,
       lexer.ConsumeToken(tok);
       auto subscript_op = std::make_unique<BinaryOp>(BinaryOpType::Subscript);
       subscript_op->left = std::move(primary);
-      subscript_op->right = ParseExpr(lexer, context);
-      Token rbracket = lexer.PeekNextToken();
+      TRY_ASSIGN_NEW(index, ParseExpr(lexer, context));
+      subscript_op->right = std::move(index);
+      TRY_ASSIGN(next, lexer.PeekNextToken());
+      Token rbracket = next;
       if (rbracket.type != TokenType::RBracket) {
-        RaiseParserError(context, rbracket.location,
-                         errs::ExpectedClosingBracket{});
+        ReportParserError(context, rbracket.location,
+                          errs::ExpectedClosingBracket{});
+        return std::nullopt;
       }
       lexer.ConsumeToken(rbracket);
       subscript_op->location =
@@ -542,10 +572,12 @@ std::unique_ptr<ASTNode> ParsePostfix(Lexer &lexer, CompileContext &context,
       lexer.ConsumeToken(tok);
       auto get_field_op = std::make_unique<PtrGetField>();
       get_field_op->operand = std::move(primary);
-      Token field_tok = lexer.PeekNextToken();
+      TRY_ASSIGN(next, lexer.PeekNextToken());
+      Token field_tok = next;
       if (field_tok.type != TokenType::Identifier) {
-        RaiseParserError(context, field_tok.location,
-                         errs::ExpectedFieldName{});
+        ReportParserError(context, field_tok.location,
+                          errs::ExpectedFieldName{});
+        return std::nullopt;
       }
       lexer.ConsumeToken(field_tok);
       get_field_op->field_name = context.Sources().GetText(field_tok);
@@ -558,10 +590,12 @@ std::unique_ptr<ASTNode> ParsePostfix(Lexer &lexer, CompileContext &context,
       lexer.ConsumeToken(tok);
       auto get_field_op = std::make_unique<GetField>();
       get_field_op->operand = std::move(primary);
-      Token field_tok = lexer.PeekNextToken();
+      TRY_ASSIGN(next, lexer.PeekNextToken());
+      Token field_tok = next;
       if (field_tok.type != TokenType::Identifier) {
-        RaiseParserError(context, field_tok.location,
-                         errs::ExpectedFieldName{});
+        ReportParserError(context, field_tok.location,
+                          errs::ExpectedFieldName{});
+        return std::nullopt;
       }
       lexer.ConsumeToken(field_tok);
       get_field_op->field_name = context.Sources().GetText(field_tok);
@@ -614,11 +648,12 @@ static std::unordered_map<TokenType, UnaryOpType> tok_to_unary_op_type = {
     {TokenType::BitNot, UnaryOpType::BitNot},
     {TokenType::Not, UnaryOpType::Not}};
 
-std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(Lexer &lexer,
-                                                CompileContext &context) {
+static std::optional<std::unique_ptr<ASTNode>>
+ParsePrefixPostfixExpr(Lexer &lexer, CompileContext &context) {
   std::unique_ptr<UnaryOp> prefix;
   UnaryOp *last_prefix = nullptr;
   std::vector<UnaryOp *> prefix_nodes;
+  Token next;
   auto add_prefix = [&prefix, &last_prefix,
                      &prefix_nodes](std::unique_ptr<UnaryOp> new_prefix) {
     if (prefix) {
@@ -631,11 +666,11 @@ std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(Lexer &lexer,
     prefix_nodes.push_back(last_prefix);
   };
   while (true) {
-    Token tok = lexer.PeekNextToken();
+    TRY_ASSIGN_NEW(tok, lexer.PeekNextToken());
     switch (tok.type) {
     case TokenType::EndOfFile:
     case TokenType::Semicolon:
-      return nullptr;
+      return std::unique_ptr<ASTNode>{};
     case TokenType::AddAdd:
     case TokenType::SubSub:
     case TokenType::Add:
@@ -653,24 +688,28 @@ std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(Lexer &lexer,
       }
       break;
     case TokenType::LParen: {
-      Token type_start = lexer.PeekNextToken(1);
+      TRY_ASSIGN_NEW(type_start, lexer.PeekNextToken(1));
       if (IsDeclarationSpecifier(type_start, context)) {
         lexer.ConsumeToken(tok);
 
-        TypeRef target_type = ParseTypeName(lexer, context);
-        if (lexer.PeekNextToken().type == TokenType::Comma) {
-          RaiseParserError(context, tok.location,
-                           errs::ExpectedSingleCastType{});
+        TRY_ASSIGN_NEW(target_type, ParseTypeName(lexer, context));
+        TRY_ASSIGN(next, lexer.PeekNextToken());
+        if (next.type == TokenType::Comma) {
+          ReportParserError(context, tok.location,
+                            errs::ExpectedSingleCastType{});
+          return std::nullopt;
         }
 
         auto type_cast = std::make_unique<TypeCast>();
         type_cast->location = tok.location;
         type_cast->target_type = target_type;
         add_prefix(std::move(type_cast));
-        Token rparen = lexer.PeekNextToken();
+        TRY_ASSIGN(next, lexer.PeekNextToken());
+        Token rparen = next;
         if (rparen.type != TokenType::RParen) {
-          RaiseParserError(context, rparen.location,
-                           errs::ExpectedClosingParen{});
+          ReportParserError(context, rparen.location,
+                            errs::ExpectedClosingParen{});
+          return std::nullopt;
         }
         lexer.ConsumeToken(rparen);
         break;
@@ -678,9 +717,10 @@ std::unique_ptr<ASTNode> ParsePrefixPostfixExpr(Lexer &lexer,
     }
     default:
       Token primary_start = tok;
-      auto primary = ParsePrimary(lexer, context);
-      auto postfixed = ParsePostfix(lexer, context, primary_start.location,
-                                    std::move(primary));
+      TRY_ASSIGN_NEW(primary, ParsePrimary(lexer, context));
+      TRY_ASSIGN_NEW(postfixed,
+                     ParsePostfix(lexer, context, primary_start.location,
+                                  std::move(primary)));
       if (last_prefix) {
         last_prefix->operand = std::move(postfixed);
         for (auto it = prefix_nodes.rbegin(); it != prefix_nodes.rend(); ++it) {
@@ -755,12 +795,14 @@ static bool IsRightCombineOp(TokenType op) {
   }
 }
 
-std::unique_ptr<ASTNode> ParseSingleExpr(Lexer &lexer, CompileContext &context,
-                                         int min_prec = 0) {
-  Token start_token = lexer.PeekNextToken();
-  auto lhs = ParsePrefixPostfixExpr(lexer, context);
+static std::optional<std::unique_ptr<ASTNode>>
+ParseSingleExpr(Lexer &lexer, CompileContext &context, int min_prec = 0) {
+  Token next;
+  TRY_ASSIGN_NEW(start_token, lexer.PeekNextToken());
+  TRY_ASSIGN_NEW(lhs, ParsePrefixPostfixExpr(lexer, context));
   while (true) {
-    Token tok = lexer.PeekNextToken();
+    TRY_ASSIGN(next, lexer.PeekNextToken());
+    Token tok = next;
     switch (tok.type) {
     case TokenType::EndOfFile:
     case TokenType::Semicolon:
@@ -785,7 +827,7 @@ std::unique_ptr<ASTNode> ParseSingleExpr(Lexer &lexer, CompileContext &context,
       const bool is_assignment = IsRightCombineOp(tok.type);
       int next_min_prec = is_assignment ? op_prec : op_prec + 1;
 
-      auto rhs = ParseSingleExpr(lexer, context, next_min_prec);
+      TRY_ASSIGN_NEW(rhs, ParseSingleExpr(lexer, context, next_min_prec));
 
       std::unique_ptr<BinaryOp> bin_op;
       if (is_assignment) {
@@ -806,21 +848,28 @@ std::unique_ptr<ASTNode> ParseSingleExpr(Lexer &lexer, CompileContext &context,
   return lhs;
 }
 
-std::unique_ptr<ASTNode> ParseExpr(Lexer &lexer, CompileContext &context) {
-  Token start_token = lexer.PeekNextToken();
-  auto expr = ParseSingleExpr(lexer, context);
-  if (lexer.PeekNextToken().type == TokenType::Question) {
-    lexer.ConsumeNextToken();
+std::optional<std::unique_ptr<ASTNode>> ParseExpr(Lexer &lexer,
+                                                  CompileContext &context) {
+  Token next;
+  TRY_ASSIGN_NEW(start_token, lexer.PeekNextToken());
+  TRY_ASSIGN_NEW(expr, ParseSingleExpr(lexer, context));
+  TRY_ASSIGN(next, lexer.PeekNextToken());
+  if (next.type == TokenType::Question) {
+    TRY(lexer.ConsumeNextToken());
     auto cond_expr = std::make_unique<ConditionalExpr>();
     cond_expr->condition = std::move(expr);
-    cond_expr->true_expr = ParseExpr(lexer, context);
-    Token colon = lexer.PeekNextToken();
+    TRY_ASSIGN_NEW(true_expr, ParseExpr(lexer, context));
+    cond_expr->true_expr = std::move(true_expr);
+    TRY_ASSIGN(next, lexer.PeekNextToken());
+    Token colon = next;
     if (colon.type != TokenType::Colon) {
-      RaiseParserError(context, colon.location,
-                       errs::ExpectedConditionalColon{});
+      ReportParserError(context, colon.location,
+                        errs::ExpectedConditionalColon{});
+      return std::nullopt;
     }
     lexer.ConsumeToken(colon);
-    cond_expr->false_expr = ParseExpr(lexer, context);
+    TRY_ASSIGN_NEW(false_expr, ParseExpr(lexer, context));
+    cond_expr->false_expr = std::move(false_expr);
     cond_expr->location =
         CombineLocation(start_token.location,
                         cond_expr->false_expr ? cond_expr->false_expr->location
