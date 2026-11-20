@@ -68,6 +68,7 @@ Testing/
 .cache/
 
 .clangd
+clice.toml
 
 imgui.ini
 
