@@ -72,6 +72,10 @@ public:
 
   RValue CreateNumericCast(const RValue &value, TypeRef target_type);
 
+  RValue CreatePointerToInteger(const RValue &value, TypeRef target_type);
+
+  RValue CreateIntegerToPointer(const RValue &value, TypeRef target_type);
+
   RValue CreatePhi(const RValue &value1, llvm::BasicBlock *block1,
                    const RValue &value2, llvm::BasicBlock *block2);
 

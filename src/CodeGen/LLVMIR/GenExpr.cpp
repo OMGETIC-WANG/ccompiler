@@ -47,6 +47,53 @@ static bool IsLiteralStringInit(const ArrayType *type,
          initializer->As<ValueInitializer>()->value->Is<LiteralString>();
 }
 
+class StructInitializerRef {
+public:
+  StructInitializerRef(Initializer *initializer) {
+    if (initializer->Is<FieldInitializer>()) {
+      _inits = initializer->As<FieldInitializer>();
+    } else if (initializer->Is<ArrayInitializer>()) {
+      _inits = initializer->As<ArrayInitializer>();
+    } else {
+      _inits = std::monostate{};
+    }
+  }
+
+  Initializer *GetInitializer(const StructField &field) {
+    if (std::holds_alternative<FieldInitializer *>(_inits)) {
+      return GetFromFieldInitializer(field);
+    } else {
+      return GetFromArrayInitializer(field.index);
+    }
+  }
+
+  bool IsValid() const {
+    // TODO: Add checks
+    return !std::holds_alternative<std::monostate>(_inits);
+  }
+
+private:
+  Initializer *GetFromFieldInitializer(const StructField &field) {
+    FieldInitializer *field_init = std::get<FieldInitializer *>(_inits);
+    for (const auto &[name, init] : field_init->field_initializers) {
+      if (name == field.name) {
+        return init.get();
+      }
+    }
+    return nullptr;
+  }
+
+  Initializer *GetFromArrayInitializer(size_t index) {
+    ArrayInitializer *array_init = std::get<ArrayInitializer *>(_inits);
+    if (index < array_init->initializers.size()) {
+      return array_init->initializers[index].get();
+    }
+    return nullptr;
+  }
+
+  std::variant<std::monostate, FieldInitializer *, ArrayInitializer *> _inits;
+};
+
 struct ExprEmitter::detail {
   static void GenVarInitializer(const LValue &value, TypeRef type,
                                 Initializer *initializer, ExprEmitter &self) {
@@ -88,53 +135,22 @@ struct ExprEmitter::detail {
     }
 
     if (auto *struct_type = type->DynCast<StructType>()) {
-      if (auto *field_init = initializer->DynCast<FieldInitializer>()) {
-        std::vector<uint8_t> fields_inited(struct_type->fields.size(), false);
-        for (const auto &[name, init] : field_init->field_initializers) {
-          auto field = struct_type->GetField(name);
-          ASSERT(field.has_value(), "Sema accepted an unknown field");
-          size_t field_index = 0;
-          bool found = false;
-          for (size_t i = 0; i < struct_type->fields.size(); ++i) {
-            if (struct_type->fields[i].name == name) {
-              field_index = i;
-              found = true;
-              break;
-            }
-          }
-          ASSERT(found, "Sema accepted an unknown field");
-          fields_inited[field_index] = true;
-          GenVarInitializer(self.builder.GetElementPtr(value, field.value(),
-                                                       field_init->location),
-                            field->type, init.get(), self);
-        }
-        for (size_t i = 0; i < struct_type->fields.size(); i++) {
-          if (!fields_inited[i]) {
-            self.builder.CreateStore(
-                CreateNullValue(struct_type->fields[i].type, self.context),
-                self.builder.GetElementPtr(value, struct_type->fields[i]));
-          }
-        }
+      StructInitializerRef struct_init(initializer);
+      if (!struct_init.IsValid()) {
+        RAISE_ERROR("Invalid initializer");
       }
-      if (auto *array_init = initializer->DynCast<ArrayInitializer>()) {
-        ASSERT(array_init->initializers.size() <= struct_type->fields.size(),
-               "Sema accepted an oversized struct initializer");
-        for (size_t i = 0; i < array_init->initializers.size(); i++) {
-          auto &field = struct_type->fields[i];
-          GenVarInitializer(self.builder.GetElementPtr(value, field),
-                            field.type, array_init->initializers[i].get(),
-                            self);
+      for (const auto &field : struct_type->fields) {
+        Initializer *field_init = struct_init.GetInitializer(field);
+        if (field_init) {
+          GenVarInitializer(self.builder.GetElementPtr(value, field.name,
+                                                       initializer->location),
+                            field.type, field_init, self);
+        } else {
+          self.builder.CreateStore(
+              CreateNullValue(field.type, self.context),
+              self.builder.GetElementPtr(value, field.name,
+                                         initializer->location));
         }
-        for (size_t i = array_init->initializers.size();
-             i < struct_type->fields.size(); i++) {
-          auto &field = struct_type->fields[i];
-          self.builder.CreateStore(CreateNullValue(field.type, self.context),
-                                   self.builder.GetElementPtr(value, field));
-        }
-      }
-      if (auto *value_init = initializer->DynCast<ValueInitializer>()) {
-        RValue val = self.EmitRValue(value_init->value.get());
-        self.builder.CreateStore(val, value);
       }
       return;
     }
@@ -172,6 +188,10 @@ struct ExprEmitter::detail {
 
   static RValue EmitCast(TypeRef target_type, const RValue &value,
                          ExprEmitter &self) {
+    if (target_type->Is<BuiltinType>() &&
+        target_type->As<BuiltinType>()->Kind() == BuiltinKind::Void) {
+      return RValue{target_type, nullptr};
+    }
     if (target_type == value.c_type ||
         self.context.LLVMType(target_type) ==
             self.context.LLVMType(value.c_type)) {
@@ -189,10 +209,16 @@ struct ExprEmitter::detail {
          value.c_type->Is<FunctionType>())) {
       return RValue{target_type, value.ir_value};
     }
+    if (value.c_type->Is<PointerType>() && IsIntegerType(target_type)) {
+      return self.builder.CreatePointerToInteger(value, target_type);
+    }
+    if (IsIntegerType(value.c_type) && target_type->Is<PointerType>()) {
+      return self.builder.CreateIntegerToPointer(value, target_type);
+    }
     if (IsNumericType(target_type) && IsNumericType(value.c_type)) {
       return self.builder.CreateNumericCast(value, target_type);
     }
-    RAISE_ERROR("Sema approved an unsupported implicit conversion");
+    RAISE_ERROR("Sema approved an unsupported cast or conversion");
   }
 
   enum class EvalAndOr { And, Or };

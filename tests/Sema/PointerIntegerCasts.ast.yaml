@@ -1,0 +1,112 @@
+TranslationUnit:
+  decls:
+    - VarDecl: {name: target}
+    - VarDecl:
+        name: global_pointer
+        type:
+          PointerType:
+            pointee_type: {BuiltinType: {type_name: int}}
+        initializer:
+          ValueInitializer:
+            value:
+              TypeCast:
+                type:
+                  PointerType:
+                    pointee_type: {BuiltinType: {type_name: int}}
+                value_category: RValue
+                constant_value: 5
+                target_type:
+                  PointerType:
+                    pointee_type: {BuiltinType: {type_name: int}}
+                operand:
+                  LiteralNum:
+                    type: {BuiltinType: {type_name: int}}
+                    value: 5
+    - VarDecl:
+        name: global_address
+        type: {BuiltinType: {type_name: long}}
+        initializer:
+          ValueInitializer:
+            value:
+              TypeCast:
+                type: {BuiltinType: {type_name: long}}
+                value_category: RValue
+                target_type: {BuiltinType: {type_name: long}}
+                operand:
+                  UnaryExpr:
+                    type:
+                      PointerType:
+                        pointee_type: {BuiltinType: {type_name: int}}
+                    value_category: RValue
+                    op_type: GetAddress
+                    operand:
+                      VarRef:
+                        type: {BuiltinType: {type_name: int}}
+                        value_category: LValue
+                        name: target
+    - VarDecl:
+        name: global_roundtrip
+        initializer:
+          ValueInitializer:
+            value:
+              TypeCast:
+                type:
+                  PointerType:
+                    pointee_type: {BuiltinType: {type_name: int}}
+                target_type:
+                  PointerType:
+                    pointee_type: {BuiltinType: {type_name: int}}
+                operand:
+                  TypeCast:
+                    type: {BuiltinType: {type_name: long}}
+                    target_type: {BuiltinType: {type_name: long}}
+    - FunctionDecl:
+        name: main
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl: {name: local}
+              - VarDecl:
+                  name: null_pointer
+                  initializer:
+                    ValueInitializer:
+                      value:
+                        ImplicitCast:
+                          type:
+                            PointerType:
+                              pointee_type: {BuiltinType: {type_name: int}}
+                          value_category: RValue
+                          constant_value: 0
+                          target_type:
+                            PointerType:
+                              pointee_type: {BuiltinType: {type_name: int}}
+                          operand:
+                            LiteralNum:
+                              type: {BuiltinType: {type_name: int}}
+                              value: 0
+              - VarDecl:
+                  name: address
+                  initializer:
+                    ValueInitializer:
+                      value:
+                        TypeCast:
+                          type: {BuiltinType: {type_name: long}}
+                          target_type: {BuiltinType: {type_name: long}}
+              - VarDecl:
+                  name: restored
+                  initializer:
+                    ValueInitializer:
+                      value:
+                        TypeCast:
+                          type:
+                            PointerType:
+                              pointee_type: {BuiltinType: {type_name: int}}
+                          target_type:
+                            PointerType:
+                              pointee_type: {BuiltinType: {type_name: int}}
+                          operand:
+                            VarRef:
+                              type: {BuiltinType: {type_name: long}}
+                              value_category: LValue
+                              name: address
+              - ReturnStmt: {}

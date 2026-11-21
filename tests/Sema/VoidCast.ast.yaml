@@ -1,0 +1,35 @@
+TranslationUnit:
+  decls:
+    - VarDecl: {name: calls}
+    - FunctionDecl: {name: bump}
+    - FunctionDecl:
+        name: main
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl: {name: value}
+              - TypeCast:
+                  type: {BuiltinType: {type_name: void}}
+                  value_category: RValue
+                  target_type: {BuiltinType: {type_name: void}}
+                  operand:
+                    VarRef:
+                      type: {BuiltinType: {type_name: int}}
+                      value_category: LValue
+                      name: value
+              - TypeCast:
+                  type: {BuiltinType: {type_name: void}}
+                  value_category: RValue
+                  target_type: {BuiltinType: {type_name: void}}
+                  operand:
+                    FunctionInvocation:
+                      type: {BuiltinType: {type_name: void}}
+              - TypeCast:
+                  type: {BuiltinType: {type_name: void}}
+                  value_category: RValue
+                  target_type: {BuiltinType: {type_name: void}}
+                  operand:
+                    BinaryExpr:
+                      type: {BuiltinType: {type_name: int}}
+                      op_type: Assignment
+              - ReturnStmt: {}

@@ -10,12 +10,14 @@ set(CODEGEN_JIT_CASES
     LongDouble
     LongDoublePrecision
     Operators
+    PointerIntegerCasts
     Qualifiers
     Recursion
     Sequence
     SemanticTypes
     SizeofTypes
-    SwitchFallthrough)
+    SwitchFallthrough
+    VoidCast)
 
 foreach(case_name IN LISTS CODEGEN_JIT_CASES)
   ccompiler_add_jit_case(CodeGen.${case_name} ${case_name}.c "codegen;frontend")

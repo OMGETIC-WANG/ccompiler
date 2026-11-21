@@ -49,6 +49,24 @@ bool IsIntegerOrEnum(TypeRef type) {
   return IsIntegerType(type) || type->Is<EnumType>();
 }
 
+bool IsVoidType(TypeRef type) {
+  return type->Is<BuiltinType>() &&
+         type->As<BuiltinType>()->Kind() == BuiltinKind::Void;
+}
+
+bool IsNullPointerConstant(const Expr *expr) {
+  if (!expr || !IsIntegerOrEnum(expr->type) || !expr->constant_value) {
+    return false;
+  }
+  return std::visit([](auto value) { return value == decltype(value){0}; },
+                    *expr->constant_value);
+}
+
+bool IsPointerIntegerConversion(TypeRef from, TypeRef to) {
+  return (from->Is<PointerType>() && IsIntegerType(to)) ||
+         (IsIntegerType(from) && to->Is<PointerType>());
+}
+
 bool IsScalar(TypeRef type) {
   return IsNumericType(type) || type->Is<PointerType>() || type->Is<EnumType>();
 }
@@ -275,8 +293,10 @@ private:
     Expr *expr = AsExpr(node.get());
     expr->type = result.type;
     expr->value_category = result.value_category;
-    if (auto value = EvaluateConstant(expr)) {
-      expr->constant_value = std::move(value);
+    if (!IsVoidType(result.type)) {
+      if (auto value = EvaluateConstant(expr)) {
+        expr->constant_value = std::move(value);
+      }
     }
     if (HasBooleanOperationResult(node.get())) {
       ASSERT(IsBooleanType(result.type),
@@ -404,6 +424,17 @@ private:
       if (LosesPointerQualifiers(info.type, target_type)) {
         diagnostics.Error(location,
                           errs::PointerAssignmentDiscardsQualifiers{});
+        return std::nullopt;
+      }
+      InsertImplicitCast(node, target_type);
+      return ExprInfo{target_type, ValueCategory::RValue};
+    }
+    if (target_type->Is<PointerType>() && IsIntegerOrEnum(info.type)) {
+      if (!IsNullPointerConstant(AsExpr(node.get()))) {
+        diagnostics.Error(location, errs::TypeMismatch{
+                                        target_type,
+                                        info.type,
+                                    });
         return std::nullopt;
       }
       InsertImplicitCast(node, target_type);
@@ -670,6 +701,9 @@ private:
     TRY_ASSIGN_NEW(operand, AnalyzeExpr(type_cast->operand));
     operand = Decay(type_cast->operand, operand);
     TypeRef target = type_cast->target_type;
+    if (IsVoidType(target)) {
+      return ExprInfo{target, ValueCategory::RValue};
+    }
     if (operand.type != target) {
       if (operand.type->Is<PointerType>() && target->Is<PointerType>()) {
         if (LosesPointerQualifiers(operand.type, target)) {
@@ -677,6 +711,9 @@ private:
                             errs::PointerCastDiscardsQualifiers{});
           return std::nullopt;
         }
+      } else if (IsPointerIntegerConversion(operand.type, target)) {
+        // Explicit pointer/integer conversions are intentionally supported
+        // only through casts, not through general implicit conversion.
       } else if (!IsNumericType(operand.type) || !IsNumericType(target)) {
         diagnostics.Error(type_cast->location,
                           errs::UnsupportedTypeCast{operand.type, target});
@@ -1259,24 +1296,7 @@ private:
       }
       TRY_ASSIGN_NEW(value, AnalyzeExpr(value_init->value));
       value = Decay(value_init->value, value);
-      if (global) {
-        if (!AsExpr(value_init->value.get())->constant_value) {
-          diagnostics.Error(value_init->location,
-                            errs::GlobalPointerRequiresConstant{});
-          return std::nullopt;
-        }
-        if (!value.type->Is<PointerType>()) {
-          if (!IsIntegerType(value.type) && !value.type->Is<EnumType>()) {
-            diagnostics.Error(value_init->location,
-                              errs::TypeMismatch{pointer, value.type});
-            return std::nullopt;
-          }
-          InsertImplicitCast(value_init->value, pointer);
-        }
-      } else {
-        TRY(ConvertExpr(value_init->value, value, pointer,
-                        value_init->location));
-      }
+      TRY(ConvertExpr(value_init->value, value, pointer, value_init->location));
       return std::monostate{};
     }
 
@@ -1494,6 +1514,9 @@ private:
       return ConvertConstant(*value, implicit_cast->target_type);
     }
     if (auto *type_cast = expr->DynCast<TypeCast>()) {
+      if (IsVoidType(type_cast->target_type)) {
+        return std::nullopt;
+      }
       auto value = EvaluateConstant(AsExpr(type_cast->operand.get()));
       if (!value) {
         return std::nullopt;

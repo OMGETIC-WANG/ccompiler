@@ -1,0 +1,9 @@
+diagnostics:
+  - error: UnsupportedTypeCast
+    file: "@SOURCE_FILE@"
+    location: "(int *)1.5"
+    fields:
+      from_type: "double"
+      to_type:
+        PointerType:
+          pointee_type: {BuiltinType: {type_name: int}}

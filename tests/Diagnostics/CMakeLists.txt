@@ -101,6 +101,11 @@ add_frontend_diagnostic_case(Parser.OutOfScopeFor OutOfScopeFor)
 add_frontend_diagnostic_case(Sema.StringTooLong StringTooLong)
 add_frontend_diagnostic_case(Sema.ReturnType SemaReturnType)
 add_frontend_diagnostic_case(Sema.CallArgument SemaCallArgument)
+add_frontend_diagnostic_case(Sema.NonzeroIntegerToPointer
+                             SemaNonzeroIntegerToPointer)
+add_frontend_diagnostic_case(Sema.ImplicitPointerToInteger
+                             SemaImplicitPointerToInteger)
+add_frontend_diagnostic_case(Sema.FloatToPointerCast SemaFloatToPointerCast)
 add_frontend_diagnostic_case(Sema.ConstAssignment SemaConstAssignment)
 add_frontend_diagnostic_case(Sema.ConstStructMember SemaConstStructMember)
 add_frontend_diagnostic_case(Sema.CaseConstant SemaCaseConstant)

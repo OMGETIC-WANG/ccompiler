@@ -3,6 +3,7 @@
 
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/Module.h>
 
 #include <string>
 #include <vector>
@@ -217,6 +218,43 @@ RValue IRBuilder::CreateNumericCast(const RValue &value, TypeRef target_type) {
     }
   }
   return RValue{target_type, result};
+}
+
+RValue IRBuilder::CreatePointerToInteger(const RValue &value,
+                                         TypeRef target_type) {
+  ASSERT(value.c_type->Is<PointerType>() && IsIntegerType(target_type),
+         "Pointer-to-integer cast has invalid source or target type");
+  return RValue{
+      target_type,
+      _builder.CreatePtrToInt(value.ir_value, _context.LLVMType(target_type))};
+}
+
+RValue IRBuilder::CreateIntegerToPointer(const RValue &value,
+                                         TypeRef target_type) {
+  ASSERT(IsIntegerType(value.c_type) && target_type->Is<PointerType>(),
+         "Integer-to-pointer cast has invalid source or target type");
+
+  auto *integer_type =
+      llvm::cast<llvm::IntegerType>(_context.LLVMType(value.c_type));
+  auto *pointer_integer_type =
+      _builder.getIntPtrTy(_context.Module().getDataLayout());
+  llvm::Value *normalized = value.ir_value;
+  const unsigned integer_width = integer_type->getBitWidth();
+  const unsigned pointer_width = pointer_integer_type->getBitWidth();
+  if (integer_width > pointer_width) {
+    normalized = _builder.CreateTrunc(normalized, pointer_integer_type);
+  } else if (integer_width < pointer_width) {
+    const bool is_unsigned =
+        HasTypeTag(value.c_type, TypeTag::Unsigned) ||
+        (value.c_type->Is<BuiltinType>() &&
+         value.c_type->As<BuiltinType>()->Kind() == BuiltinKind::I1);
+    normalized = is_unsigned
+                     ? _builder.CreateZExt(normalized, pointer_integer_type)
+                     : _builder.CreateSExt(normalized, pointer_integer_type);
+  }
+
+  return RValue{target_type, _builder.CreateIntToPtr(
+                                 normalized, _context.LLVMType(target_type))};
 }
 
 RValue IRBuilder::CreatePhi(const RValue &value1, llvm::BasicBlock *block1,

@@ -153,21 +153,16 @@ llvm::Constant *GenConstInitializer(TypeRef type, Initializer *initializer,
     auto *value = val_init->value ? val_init->value->DynCast<Expr>() : nullptr;
     ASSERT(value && value->type == builtin_type,
            "Sema left an initializer with the wrong type");
-    return LowerNumericConstant(value->type, value, context);
+    return LowerConstantExpression(value->type, value, context);
   }
 
   if (auto *ptr_type = type->DynCast<PointerType>()) {
     auto *val_init = initializer->DynCast<ValueInitializer>();
     ASSERT(val_init, "Sema accepted an invalid pointer initializer");
-    auto *cast = val_init->value->DynCast<ImplicitCast>();
-    ASSERT(cast && cast->target_type == ptr_type,
-           "Sema omitted the global pointer initializer conversion");
-    auto *source = cast->operand ? cast->operand->DynCast<Expr>() : nullptr;
-    ASSERT(source && source->constant_value.has_value(),
-           "Sema did not retain the pointer initializer constant");
-    auto *intptr = LowerNumericConstant(source->type, source, context);
-    return llvm::ConstantExpr::getIntToPtr(intptr,
-                                           context.LLVMType(cast->target_type));
+    auto *value = val_init->value->DynCast<Expr>();
+    ASSERT(value && value->type == ptr_type,
+           "Sema left a pointer initializer with the wrong type");
+    return LowerConstantExpression(ptr_type, value, context);
   }
 
   RAISE_ERROR("Sema accepted an unsupported global initializer");

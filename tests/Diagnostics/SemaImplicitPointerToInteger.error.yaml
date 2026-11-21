@@ -1,0 +1,9 @@
+diagnostics:
+  - error: TypeMismatch
+    file: "@SOURCE_FILE@"
+    location: "&value"
+    fields:
+      expected_type: "long"
+      actual_type:
+        PointerType:
+          pointee_type: {BuiltinType: {type_name: int}}

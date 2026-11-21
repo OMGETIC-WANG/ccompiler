@@ -136,13 +136,27 @@ bool IsConstantFoldable(const ASTNode *node) {
     return true;
   }
   if (auto *var_ref = node->DynCast<VarRef>()) {
-    return var_ref->constant_value.has_value();
+    if (var_ref->constant_value.has_value()) {
+      return true;
+    }
+    if (var_ref->decl->DynCast<FunctionDecl>()) {
+      return true;
+    }
+    if (auto *variable = var_ref->decl->DynCast<VarDecl>()) {
+      return variable->type->Is<ArrayType>();
+    }
+    return false;
   }
   if (auto *bin_expr = node->DynCast<BinaryOp>()) {
     return IsConstantFoldable(bin_expr->left.get()) &&
            IsConstantFoldable(bin_expr->right.get());
   }
   if (auto *unary_expr = node->DynCast<UnaryOp>()) {
+    if (unary_expr->op_type == UnaryOpType::GetAddress) {
+      auto *var_ref = unary_expr->operand->DynCast<VarRef>();
+      return var_ref && (var_ref->decl->DynCast<VarDecl>() ||
+                         var_ref->decl->DynCast<FunctionDecl>());
+    }
     return IsConstantFoldable(unary_expr->operand.get());
   }
   if (auto *implicit_cast = node->DynCast<ImplicitCast>()) {
