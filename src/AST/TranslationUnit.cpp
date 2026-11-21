@@ -596,11 +596,14 @@ static OptUnique<ASTNode> ParseReturnStmt(Lexer &lexer,
   TRY_ASSIGN_NEW(start_token, lexer.PeekNextToken());
   auto ret_stmt = std::make_unique<ReturnStmt>();
   TRY(lexer.ConsumeNextToken()); // consume "return"
-  TRY_ASSIGN_NEW(value, ParseExpr(lexer, context));
-  ret_stmt->ret_value = std::move(value);
-  ret_stmt->location = CombineLocation(
-      start_token.location, ret_stmt->ret_value ? ret_stmt->ret_value->location
-                                                : start_token.location);
+  if (lexer.PeekNextToken().value_or(TokenType::Unknown).type !=
+      TokenType::Semicolon) {
+    TRY_ASSIGN(ret_stmt->ret_value, ParseExpr(lexer, context));
+    ret_stmt->location =
+        CombineLocation(start_token.location,
+                        ret_stmt->ret_value ? ret_stmt->ret_value->location
+                                            : start_token.location);
+  }
   return ret_stmt;
 }
 
