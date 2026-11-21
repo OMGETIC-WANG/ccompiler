@@ -615,6 +615,14 @@ RValue ExprEmitter::EmitRValue(ASTNode *node) {
       break;
     }
   }
+  if (auto *sequence = node->DynCast<SequenceEval>()) {
+    ASSERT(!sequence->expressions.empty(),
+           "SequenceEval requires at least one expression");
+    for (size_t i = 0; i + 1 < sequence->expressions.size(); ++i) {
+      (void)EmitRValue(sequence->expressions[i].get());
+    }
+    return EmitRValue(sequence->expressions.back().get());
+  }
   if (auto cond_expr = node->DynCast<ConditionalExpr>()) {
     size_t label_id = context.counter();
     llvm::BasicBlock *true_block = llvm::BasicBlock::Create(

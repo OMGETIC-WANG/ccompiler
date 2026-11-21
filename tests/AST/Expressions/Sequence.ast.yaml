@@ -10,3 +10,42 @@ TranslationUnit:
                   - {LiteralNum: {value: 1}}
                   - {LiteralNum: {value: 2}}
                   - {LiteralNum: {value: 3}}
+    - FunctionDecl:
+        name: evaluate
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: left
+                  initializer:
+                    ValueInitializer:
+                      value: {LiteralNum: {value: 1}}
+              - VarDecl:
+                  name: right
+                  initializer:
+                    ValueInitializer:
+                      value: {LiteralNum: {value: 2}}
+              - SequenceEval:
+                  expressions:
+                    - BinaryExpr:
+                        op_type: Assignment
+                        left: {VarRef: {name: left}}
+                        right:
+                          BinaryExpr:
+                            op_type: Add
+                            left: {VarRef: {name: left}}
+                            right: {LiteralNum: {value: 1}}
+                    - BinaryExpr:
+                        op_type: Assignment
+                        left: {VarRef: {name: right}}
+                        right:
+                          BinaryExpr:
+                            op_type: Add
+                            left: {VarRef: {name: right}}
+                            right: {LiteralNum: {value: 1}}
+              - ReturnStmt:
+                  ret_value:
+                    SequenceEval:
+                      expressions:
+                        - {VarRef: {name: left}}
+                        - {VarRef: {name: right}}

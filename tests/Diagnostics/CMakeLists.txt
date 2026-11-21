@@ -118,6 +118,9 @@ add_frontend_diagnostic_case(Sema.VolatilePointerDiscard
 add_frontend_diagnostic_case(Sema.RestrictFunctionPointer
                              SemaRestrictFunctionPointer)
 add_frontend_diagnostic_case(Sema.AssignmentLValue SemaAssignmentLValue)
+add_frontend_diagnostic_case(Sema.SequenceAssignment SemaSequenceAssignment)
+add_frontend_diagnostic_case(Sema.SequenceGlobalConstant
+                             SemaSequenceGlobalConstant)
 add_frontend_diagnostic_case(Sema.NumericOperands SemaNumericOperands)
 add_frontend_diagnostic_case(Sema.SubscriptIndex SemaSubscriptIndex)
 add_frontend_diagnostic_case(Sema.DereferencePointer SemaDereferencePointer)

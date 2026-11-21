@@ -59,7 +59,7 @@ OptUnique<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,
     IntrinsicCallArgKind kind = desc->arg_kinds[i];
     switch (kind) {
     case IntrinsicCallArgKind::Expr: {
-      TRY_ASSIGN_NEW(argument, ParseExpr(lexer, context));
+      TRY_ASSIGN_NEW(argument, ParseAssignmentExpr(lexer, context));
       call->args.push_back(std::move(argument));
       break;
     }
@@ -74,7 +74,7 @@ OptUnique<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,
         TRY_ASSIGN_NEW(argument, ParseTypeName(lexer, context));
         call->args.push_back(argument);
       } else {
-        TRY_ASSIGN_NEW(argument, ParseExpr(lexer, context));
+        TRY_ASSIGN_NEW(argument, ParseAssignmentExpr(lexer, context));
         call->args.push_back(std::move(argument));
       }
     } break;

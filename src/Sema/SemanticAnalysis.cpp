@@ -328,8 +328,7 @@ private:
       return AnalyzeConditional(conditional);
     }
     if (auto *sequence = node->DynCast<SequenceEval>()) {
-      diagnostics.Error(sequence->location, errs::UnsupportedSequenceEval{});
-      return std::nullopt;
+      return AnalyzeSequence(sequence);
     }
     diagnostics.Error(node->location,
                       errs::UnsupportedExpressionASTNode{node->GetType()});
@@ -843,6 +842,21 @@ private:
     TRY(ConvertExpr(conditional->false_expr, false_info, common,
                     conditional->location));
     return ExprInfo{common, ValueCategory::RValue};
+  }
+
+  std::optional<ExprInfo> AnalyzeSequence(SequenceEval *sequence) {
+    ASSERT(!sequence->expressions.empty(),
+           "SequenceEval requires at least one expression");
+
+    ExprInfo result;
+    for (size_t i = 0; i < sequence->expressions.size(); ++i) {
+      TRY_ASSIGN_NEW(expression, AnalyzeExpr(sequence->expressions[i]));
+      if (i + 1 == sequence->expressions.size()) {
+        expression = Decay(sequence->expressions[i], std::move(expression));
+        result = ExprInfo{expression.type, ValueCategory::RValue};
+      }
+    }
+    return result;
   }
 
   std::optional<std::monostate> AnalyzeDeclStmt(DeclStmt *stmt, bool global) {
@@ -1555,6 +1569,17 @@ private:
           std::visit([](auto value) { return value != 0; }, *condition);
       return EvaluateConstant(AsExpr(
           (truth ? conditional->true_expr : conditional->false_expr).get()));
+    }
+    if (auto *sequence = expr->DynCast<SequenceEval>()) {
+      if (sequence->expressions.empty()) {
+        return std::nullopt;
+      }
+      for (const auto &expression : sequence->expressions) {
+        if (!IsConstantFoldable(expression.get())) {
+          return std::nullopt;
+        }
+      }
+      return EvaluateConstant(AsExpr(sequence->expressions.back().get()));
     }
     if (auto *intrinsic = expr->DynCast<IntrinsicCall>()) {
       if (intrinsic->desc->name != "sizeof") {

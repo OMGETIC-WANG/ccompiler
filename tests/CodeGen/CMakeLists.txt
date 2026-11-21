@@ -12,6 +12,7 @@ set(CODEGEN_JIT_CASES
     Operators
     Qualifiers
     Recursion
+    Sequence
     SemanticTypes
     SizeofTypes
     SwitchFallthrough)

@@ -28,12 +28,6 @@ union Value value = {1};
 int number = (int){1};
 ```
 
-### Sequence expressions after Sema
-
-Parenthesized comma expressions are represented as `SequenceEval` in the AST,
-but Sema rejects them with `UnsupportedSequenceEval`, so they have no Sema or
-CodeGen coverage.
-
 ## Incorrect supported behavior
 
 ### Multi-token macro stringification loses spaces

@@ -1,0 +1,5 @@
+diagnostics:
+  - error: AssignmentRequiresLValue
+    file: "@SOURCE_FILE@"
+    location: "(left, right) = 3"
+    fields: {}

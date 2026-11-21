@@ -573,7 +573,7 @@ static OptUnique<Declarator> ParseDeclarator(Lexer &lexer,
 static OptUnique<ValueInitializer>
 ParseValueInitializer(Lexer &lexer, CompileContext &context) {
   auto value_initializer = std::make_unique<ValueInitializer>();
-  TRY_ASSIGN_NEW(value, ParseExpr(lexer, context));
+  TRY_ASSIGN_NEW(value, ParseAssignmentExpr(lexer, context));
   value_initializer->value = std::move(value);
   value_initializer->location = value_initializer->value
                                     ? value_initializer->value->location
@@ -988,7 +988,7 @@ ParseEnumContent(Lexer &lexer, CompileContext &context, EnumDecl *decl) {
     TRY_ASSIGN(tok, lexer.PeekNextToken());
     if (tok.type == TokenType::Equal) {
       lexer.ConsumeToken(tok);
-      TRY_ASSIGN_NEW(value, ParseExpr(lexer, context));
+      TRY_ASSIGN_NEW(value, ParseAssignmentExpr(lexer, context));
       elem_decl->value = std::move(value);
       elem_decl->location =
           CombineLocation(name_token.location, elem_decl->value->location);

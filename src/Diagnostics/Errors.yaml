@@ -4,10 +4,6 @@
 #   string, string_view, char, size_t, TypeRef, TokenType, ASTNodeType,
 #   BinaryOpType, UnaryOpType
 
-UnsupportedSequenceEval:
-  format: "Unsupported AST node type: SequenceEval"
-  fields: []
-
 UnsupportedExpressionASTNode:
   format: "Unsupported expression AST node: %node_type%"
   fields:

@@ -529,7 +529,7 @@ static OptUnique<SwitchStmt> ParseSwitchStmt(Lexer &lexer,
             break;
           }
           TRY(lexer.ConsumeNextToken());
-          TRY_ASSIGN_NEW(case_value, ParseExpr(lexer, context));
+          TRY_ASSIGN_NEW(case_value, ParseAssignmentExpr(lexer, context));
           case_stmt->case_vals.push_back(std::move(case_value));
           case_end = case_stmt->case_vals.back()->location;
           TRY_ASSIGN(next, lexer.PeekNextToken());

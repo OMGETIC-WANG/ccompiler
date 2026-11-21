@@ -90,7 +90,7 @@ are listed in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 | Prefix/postfix increments, unary arithmetic, address/deref | Covered | Covered | Covered | `AST.Expressions.UnaryOperators`, `CodeGen.Operators`, `CodeGen.AggregatesPointers` | Covered |
 | Calls, nested calls, function-pointer calls | Covered | Covered | Covered | `AST.Expressions.Calls`, `Sema.Core.FunctionCalls`, `CodeGen.Functions` | Covered |
 | Field and pointer-field access | Covered | Covered | Covered | `AST.Expressions.PostfixAccess`, `Sema.Core.AggregateAccess`, `CodeGen.AggregatesPointers` | Covered |
-| Cast, conditional, and sequence syntax | AST | Cast/conditional Sema | Cast/conditional CodeGen | `AST.Expressions.*`, `Sema.Core.Expressions` | Partial: sequence expressions are rejected after Sema |
+| Cast, conditional, and sequence syntax | Covered | Covered | Covered | `AST.Expressions.*`, `Sema.Core.Expressions`, `Sema.Core.Sequence`, `CodeGen.Sequence` | Covered |
 | Precedence and associativity across the operator ladder | Covered | N/A | Runtime cases | `AST.Expressions.Precedence` | Covered |
 | Lvalue, operand type, subscript, dereference, call arity rejection | N/A | Diagnostics | N/A | `Diagnostics.Sema.*` | Covered |
 

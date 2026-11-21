@@ -1,0 +1,102 @@
+TranslationUnit:
+  decls:
+    - VarDecl:
+        name: global_sequence
+        type: {BuiltinType: {type_name: int}}
+        initializer:
+          ValueInitializer:
+            value:
+              SequenceEval:
+                type: {BuiltinType: {type_name: int}}
+                value_category: RValue
+                constant_value: 3
+                expressions:
+                  - LiteralNum: {value: 1, constant_value: 1}
+                  - LiteralNum: {value: 2, constant_value: 2}
+                  - LiteralNum: {value: 3, constant_value: 3}
+    - FunctionDecl:
+        name: main
+        body:
+          CompoundStmt:
+            statements:
+              - VarDecl:
+                  name: value
+              - VarDecl:
+                  name: result
+                  initializer:
+                    ValueInitializer:
+                      value:
+                        SequenceEval:
+                          type: {BuiltinType: {type_name: int}}
+                          value_category: RValue
+                          expressions:
+                            - BinaryExpr:
+                                type: {BuiltinType: {type_name: int}}
+                                value_category: RValue
+                                op_type: Assignment
+                                left:
+                                  VarRef:
+                                    type: {BuiltinType: {type_name: int}}
+                                    value_category: LValue
+                                    name: value
+                                right:
+                                  LiteralNum: {value: 1}
+                            - VarRef:
+                                type: {BuiltinType: {type_name: int}}
+                                value_category: LValue
+                                name: value
+              - VarDecl:
+                  name: values
+                  type:
+                    ArrayType:
+                      size: 2
+                      element_type: {BuiltinType: {type_name: int}}
+              - VarDecl:
+                  name: pointer
+                  type:
+                    PointerType:
+                      pointee_type: {BuiltinType: {type_name: int}}
+                  initializer:
+                    ValueInitializer:
+                      value:
+                        SequenceEval:
+                          type:
+                            PointerType:
+                              pointee_type: {BuiltinType: {type_name: int}}
+                          value_category: RValue
+                          expressions:
+                            - VarRef:
+                                name: result
+                            - ImplicitCast:
+                                type:
+                                  PointerType:
+                                    pointee_type:
+                                      {BuiltinType: {type_name: int}}
+                                value_category: RValue
+                                target_type:
+                                  PointerType:
+                                    pointee_type:
+                                      {BuiltinType: {type_name: int}}
+                                operand:
+                                  VarRef:
+                                    type:
+                                      ArrayType:
+                                        size: 2
+                                        element_type:
+                                          {BuiltinType: {type_name: int}}
+                                    value_category: LValue
+                                    name: values
+              - ReturnStmt:
+                  ret_value:
+                    SequenceEval:
+                      type: {BuiltinType: {type_name: int}}
+                      value_category: RValue
+                      expressions:
+                        - BinaryExpr:
+                            type: {BuiltinType: {type_name: int}}
+                            value_category: LValue
+                            op_type: Subscript
+                        - VarRef:
+                            type: {BuiltinType: {type_name: int}}
+                            value_category: LValue
+                            name: result

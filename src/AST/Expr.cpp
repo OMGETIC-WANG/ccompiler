@@ -159,7 +159,7 @@ ParseQuotedExpr(Lexer &lexer, CompileContext &context) {
       break;
     }
 
-    TRY_ASSIGN_NEW(expression, ParseExpr(lexer, context));
+    TRY_ASSIGN_NEW(expression, ParseAssignmentExpr(lexer, context));
     results.push_back(std::move(expression));
 
     TRY_ASSIGN(tok, lexer.PeekNextToken());
@@ -632,6 +632,10 @@ OptUnique<ASTNode> ParsePrimary(Lexer &lexer, CompileContext &context) {
       return std::nullopt;
     }
     lexer.ConsumeToken(rparen);
+    if (expressions.empty()) {
+      ReportParserError(context, rparen.location, errs::UnexpectedToken{});
+      return std::nullopt;
+    }
     if (expressions.size() == 1) {
       expressions[0]->location = CombineLocation(tok.location, rparen.location);
       return std::move(expressions[0]);
@@ -868,7 +872,6 @@ ParsePrefixPostfixExpr(Lexer &lexer, CompileContext &context) {
 
 static bool IsBinaryOp(TokenType type) {
   switch (type) {
-  case TokenType::Equal:
   case TokenType::Add:
   case TokenType::Sub:
   case TokenType::Star:
@@ -879,17 +882,7 @@ static bool IsBinaryOp(TokenType type) {
   case TokenType::BitAnd:
   case TokenType::BitOr:
   case TokenType::BitXor:
-  case TokenType::AddEqual:
-  case TokenType::SubEqual:
-  case TokenType::MulEqual:
-  case TokenType::DivEqual:
-  case TokenType::ModEqual:
-  case TokenType::LShiftEqual:
-  case TokenType::RShiftEqual:
-  case TokenType::BitAndEqual:
   case TokenType::Et:
-  case TokenType::BitOrEqual:
-  case TokenType::BitXorEqual:
   case TokenType::And:
   case TokenType::Or:
   case TokenType::Eq:
@@ -904,7 +897,7 @@ static bool IsBinaryOp(TokenType type) {
   }
 }
 
-static bool IsRightCombineOp(TokenType op) {
+static bool IsAssignmentOp(TokenType op) {
   switch (op) {
   case TokenType::Equal:
   case TokenType::AddEqual:
@@ -924,7 +917,7 @@ static bool IsRightCombineOp(TokenType op) {
 }
 
 static std::optional<std::unique_ptr<ASTNode>>
-ParseSingleExpr(Lexer &lexer, CompileContext &context, int min_prec = 0) {
+ParseBinaryExpr(Lexer &lexer, CompileContext &context, int min_prec = 0) {
   Token next;
   TRY_ASSIGN_NEW(start_token, lexer.PeekNextToken());
   TRY_ASSIGN_NEW(lhs, ParsePrefixPostfixExpr(lexer, context));
@@ -952,18 +945,9 @@ ParseSingleExpr(Lexer &lexer, CompileContext &context, int min_prec = 0) {
 
       lexer.ConsumeToken(tok);
 
-      const bool is_assignment = IsRightCombineOp(tok.type);
-      int next_min_prec = is_assignment ? op_prec : op_prec + 1;
+      TRY_ASSIGN_NEW(rhs, ParseBinaryExpr(lexer, context, op_prec + 1));
 
-      TRY_ASSIGN_NEW(rhs, ParseSingleExpr(lexer, context, next_min_prec));
-
-      std::unique_ptr<BinaryOp> bin_op;
-      if (is_assignment) {
-        bin_op = std::make_unique<BinaryOp>(BinaryOpType::Assignment);
-        bin_op->compound_op = GetAssignmentOperation(tok.type);
-      } else {
-        bin_op = std::make_unique<BinaryOp>(GetBinaryOpType(tok.type));
-      }
+      auto bin_op = std::make_unique<BinaryOp>(GetBinaryOpType(tok.type));
       bin_op->left = std::move(lhs);
       bin_op->right = std::move(rhs);
       bin_op->location = CombineLocation(start_token.location,
@@ -976,11 +960,11 @@ ParseSingleExpr(Lexer &lexer, CompileContext &context, int min_prec = 0) {
   return lhs;
 }
 
-std::optional<std::unique_ptr<ASTNode>> ParseExpr(Lexer &lexer,
-                                                  CompileContext &context) {
+static std::optional<std::unique_ptr<ASTNode>>
+ParseConditionalExpr(Lexer &lexer, CompileContext &context) {
   Token next;
   TRY_ASSIGN_NEW(start_token, lexer.PeekNextToken());
-  TRY_ASSIGN_NEW(expr, ParseSingleExpr(lexer, context));
+  TRY_ASSIGN_NEW(expr, ParseBinaryExpr(lexer, context));
   TRY_ASSIGN(next, lexer.PeekNextToken());
   if (next.type == TokenType::Question) {
     TRY(lexer.ConsumeNextToken());
@@ -996,7 +980,7 @@ std::optional<std::unique_ptr<ASTNode>> ParseExpr(Lexer &lexer,
       return std::nullopt;
     }
     lexer.ConsumeToken(colon);
-    TRY_ASSIGN_NEW(false_expr, ParseExpr(lexer, context));
+    TRY_ASSIGN_NEW(false_expr, ParseConditionalExpr(lexer, context));
     cond_expr->false_expr = std::move(false_expr);
     cond_expr->location =
         CombineLocation(start_token.location,
@@ -1005,4 +989,59 @@ std::optional<std::unique_ptr<ASTNode>> ParseExpr(Lexer &lexer,
     return cond_expr;
   }
   return expr;
+}
+
+std::optional<std::unique_ptr<ASTNode>>
+ParseAssignmentExpr(Lexer &lexer, CompileContext &context) {
+  TRY_ASSIGN_NEW(lhs, ParseConditionalExpr(lexer, context));
+
+  Token next;
+  TRY_ASSIGN(next, lexer.PeekNextToken());
+  if (!IsAssignmentOp(next.type)) {
+    return lhs;
+  }
+
+  lexer.ConsumeToken(next);
+  TRY_ASSIGN_NEW(rhs, ParseAssignmentExpr(lexer, context));
+
+  auto bin_op = std::make_unique<BinaryOp>(BinaryOpType::Assignment);
+  bin_op->compound_op = GetAssignmentOperation(next.type);
+  bin_op->left = std::move(lhs);
+  bin_op->right = std::move(rhs);
+  bin_op->location =
+      CombineLocation(bin_op->left->location, bin_op->right->location);
+  return bin_op;
+}
+
+std::optional<std::unique_ptr<ASTNode>> ParseExpr(Lexer &lexer,
+                                                  CompileContext &context) {
+  Token start_token;
+  TRY_ASSIGN(start_token, lexer.PeekNextToken());
+
+  std::vector<std::unique_ptr<ASTNode>> expressions;
+  while (true) {
+    std::optional<std::unique_ptr<ASTNode>> expression =
+        ParseAssignmentExpr(lexer, context);
+    if (!expression || !*expression) {
+      return std::nullopt;
+    }
+    expressions.push_back(std::move(*expression));
+
+    Token next;
+    TRY_ASSIGN(next, lexer.PeekNextToken());
+    if (next.type != TokenType::Comma) {
+      break;
+    }
+    lexer.ConsumeToken(next);
+  }
+
+  if (expressions.size() == 1) {
+    return std::move(expressions.front());
+  }
+
+  auto seq_eval = std::make_unique<SequenceEval>();
+  seq_eval->location =
+      CombineLocation(start_token.location, expressions.back()->location);
+  seq_eval->expressions = std::move(expressions);
+  return seq_eval;
 }

@@ -156,6 +156,17 @@ bool IsConstantFoldable(const ASTNode *node) {
            IsConstantFoldable(cond_expr->true_expr.get()) &&
            IsConstantFoldable(cond_expr->false_expr.get());
   }
+  if (auto *sequence = node->DynCast<SequenceEval>()) {
+    if (sequence->expressions.empty()) {
+      return false;
+    }
+    for (const auto &expression : sequence->expressions) {
+      if (!IsConstantFoldable(expression.get())) {
+        return false;
+      }
+    }
+    return true;
+  }
   if (auto *intrinsic_call = node->DynCast<IntrinsicCall>()) {
     return intrinsic_call->desc && intrinsic_call->desc->is_constant_evalable;
   }
