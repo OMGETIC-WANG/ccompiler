@@ -545,7 +545,7 @@ static size_t AdvanceEscapeSeq(std::string_view s, size_t start) {
   if (start < s.size()) {
     char next = s[start];
     if (IsSimpleEscape(next)) {
-      return start + 1;
+      return start + 2;
     } else if (next == 'x') {
       if (start + 2 < s.size()) { // x <num1> <num2>
         return start + 3;
