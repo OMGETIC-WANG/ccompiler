@@ -1,8 +1,13 @@
 #pragma once
 
+#include <cassert>
+#include <compare>
+#include <concepts>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -74,6 +79,246 @@ private:
   T *_ptr;
   bool _own;
 };
+
+template <typename T, typename Deleter = std::default_delete<T>>
+class OptUnique;
+
+namespace detail {
+
+template <typename T> struct is_optional_unnullable : std::false_type {};
+
+template <typename T, typename D>
+struct is_optional_unnullable<OptUnique<T, D>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_optional_unnullable_v =
+    is_optional_unnullable<std::decay_t<T>>::value;
+
+} // namespace detail
+
+template <typename T, typename Deleter> class OptUnique {
+public:
+  using value_type = std::unique_ptr<T, Deleter>;
+  using pointer = typename value_type::pointer;
+  using element_type = T;
+  using deleter_type = Deleter;
+
+  OptUnique() noexcept = default;
+
+  OptUnique(std::nullopt_t) noexcept : ptr_(nullptr) {}
+
+  OptUnique(const OptUnique &) = delete;
+  OptUnique(OptUnique &&) noexcept = default;
+
+  template <typename U, typename E>
+    requires(!(std::is_same_v<U, T> && std::is_same_v<E, Deleter>) &&
+             std::is_constructible_v<value_type, std::unique_ptr<U, E> &&>)
+  explicit(!std::is_convertible_v<std::unique_ptr<U, E> &&, value_type>)
+      OptUnique(OptUnique<U, E> &&other) noexcept
+      : ptr_(std::move(other.ptr_)) {}
+
+  template <typename... Args>
+    requires std::is_constructible_v<value_type, Args...>
+  explicit OptUnique(std::in_place_t, Args &&...args)
+      : ptr_(std::forward<Args>(args)...) {
+    assert(ptr_ != nullptr && "OptUnique cannot hold a null pointer");
+  }
+
+  template <typename U = value_type>
+    requires(!detail::is_optional_unnullable_v<U> &&
+             !std::is_same_v<std::decay_t<U>, std::in_place_t> &&
+             !std::is_same_v<std::decay_t<U>, std::nullopt_t> &&
+             std::is_constructible_v<value_type, U &&>)
+  explicit(!std::is_convertible_v<U &&, value_type>) OptUnique(U &&value)
+      : ptr_(std::forward<U>(value)) {
+    assert(ptr_ != nullptr && "OptUnique cannot hold a null pointer");
+  }
+
+  ~OptUnique() = default;
+
+  OptUnique &operator=(std::nullopt_t) noexcept {
+    ptr_.reset();
+    return *this;
+  }
+
+  OptUnique &operator=(const OptUnique &) = delete;
+  OptUnique &operator=(OptUnique &&) noexcept = default;
+
+  template <typename U, typename E>
+    requires(!(std::is_same_v<U, T> && std::is_same_v<E, Deleter>) &&
+             std::is_constructible_v<value_type, std::unique_ptr<U, E> &&> &&
+             std::is_assignable_v<value_type &, std::unique_ptr<U, E> &&>)
+  OptUnique &operator=(OptUnique<U, E> &&other) noexcept {
+    ptr_ = std::move(other.ptr_);
+    return *this;
+  }
+
+  template <typename U = value_type>
+    requires(!detail::is_optional_unnullable_v<U> &&
+             !std::is_same_v<std::decay_t<U>, std::nullopt_t> &&
+             std::is_constructible_v<value_type, U &&> &&
+             std::is_assignable_v<value_type &, U &&>)
+  OptUnique &operator=(U &&value) {
+    value_type tmp(std::forward<U>(value));
+    assert(tmp != nullptr && "OptUnique cannot hold a null pointer");
+    ptr_ = std::move(tmp);
+    return *this;
+  }
+
+  const value_type *operator->() const noexcept {
+    assert(has_value());
+    return &ptr_;
+  }
+
+  value_type *operator->() noexcept {
+    assert(has_value());
+    return &ptr_;
+  }
+
+  const value_type &operator*() const & noexcept {
+    assert(has_value());
+    return ptr_;
+  }
+
+  value_type &operator*() & noexcept {
+    assert(has_value());
+    return ptr_;
+  }
+
+  const value_type &&operator*() const && noexcept {
+    assert(has_value());
+    return std::move(ptr_);
+  }
+
+  value_type &&operator*() && noexcept {
+    assert(has_value());
+    return std::move(ptr_);
+  }
+
+  explicit operator bool() const noexcept { return has_value(); }
+
+  bool has_value() const noexcept { return ptr_ != nullptr; }
+
+  value_type &value() & {
+    if (!has_value()) {
+      throw std::bad_optional_access();
+    }
+    return ptr_;
+  }
+
+  const value_type &value() const & {
+    if (!has_value()) {
+      throw std::bad_optional_access();
+    }
+    return ptr_;
+  }
+
+  value_type &&value() && {
+    if (!has_value()) {
+      throw std::bad_optional_access();
+    }
+    return std::move(ptr_);
+  }
+
+  const value_type &&value() const && {
+    if (!has_value()) {
+      throw std::bad_optional_access();
+    }
+    return std::move(ptr_);
+  }
+
+  template <typename U>
+    requires std::is_convertible_v<U &&, value_type>
+  value_type value_or(U &&default_value) && {
+    return has_value() ? std::move(ptr_)
+                       : value_type(std::forward<U>(default_value));
+  }
+
+  // --- 修改器 ---
+
+  void swap(OptUnique &other) noexcept { ptr_.swap(other.ptr_); }
+
+  void reset() noexcept { ptr_.reset(); }
+
+  template <typename... Args>
+    requires std::is_constructible_v<value_type, Args...>
+  value_type &emplace(Args &&...args) {
+    value_type tmp(std::forward<Args>(args)...);
+    assert(tmp != nullptr && "OptUnique cannot hold a null pointer");
+    ptr_ = std::move(tmp);
+    return ptr_;
+  }
+
+private:
+  template <typename U, typename E> friend class OptUnique;
+
+  value_type ptr_;
+};
+
+template <typename T, typename Deleter>
+void swap(OptUnique<T, Deleter> &lhs, OptUnique<T, Deleter> &rhs) noexcept {
+  lhs.swap(rhs);
+}
+
+template <typename T1, typename D1, typename T2, typename D2>
+  requires requires(const std::unique_ptr<T1, D1> &a,
+                    const std::unique_ptr<T2, D2> &b) {
+    { a == b } -> std::convertible_to<bool>;
+  }
+bool operator==(const OptUnique<T1, D1> &lhs, const OptUnique<T2, D2> &rhs) {
+  return lhs.has_value() == rhs.has_value() &&
+         (!lhs.has_value() || *lhs == *rhs);
+}
+
+template <typename T1, typename D1, typename T2, typename D2>
+  requires requires(const std::unique_ptr<T1, D1> &a,
+                    const std::unique_ptr<T2, D2> &b) { a <=> b; }
+auto operator<=>(const OptUnique<T1, D1> &lhs, const OptUnique<T2, D2> &rhs)
+    -> std::compare_three_way_result_t<std::unique_ptr<T1, D1>,
+                                       std::unique_ptr<T2, D2>> {
+  if (lhs.has_value() && rhs.has_value()) {
+    return *lhs <=> *rhs;
+  }
+  return lhs.has_value() <=> rhs.has_value();
+}
+
+template <typename T, typename D>
+bool operator==(const OptUnique<T, D> &opt, std::nullopt_t) noexcept {
+  return !opt.has_value();
+}
+
+template <typename T, typename D>
+std::strong_ordering operator<=>(const OptUnique<T, D> &opt,
+                                 std::nullopt_t) noexcept {
+  return opt.has_value() <=> false;
+}
+
+template <typename T, typename D, typename U>
+  requires(!detail::is_optional_unnullable_v<U> &&
+           !std::is_same_v<std::decay_t<U>, std::nullopt_t> &&
+           requires(const std::unique_ptr<T, D> &p, const U &v) {
+             { p == v } -> std::convertible_to<bool>;
+           })
+bool operator==(const OptUnique<T, D> &opt, const U &val) {
+  return opt.has_value() ? (*opt == val) : false;
+}
+
+template <typename T, typename D, typename U>
+  requires(!detail::is_optional_unnullable_v<U> &&
+           !std::is_same_v<std::decay_t<U>, std::nullopt_t> &&
+           requires(const std::unique_ptr<T, D> &p, const U &v) { p <=> v; })
+auto operator<=>(const OptUnique<T, D> &opt, const U &val)
+    -> std::compare_three_way_result_t<std::unique_ptr<T, D>, U> {
+  return opt.has_value() ? (*opt <=> val) : std::strong_ordering::less;
+}
+
+namespace std {
+template <typename T, typename Deleter> struct hash<OptUnique<T, Deleter>> {
+  std::size_t operator()(const OptUnique<T, Deleter> &opt) const noexcept {
+    return opt.has_value() ? std::hash<std::unique_ptr<T, Deleter>>{}(*opt) : 0;
+  }
+};
+} // namespace std
 
 template <class T> using RefPtr = T *;
 

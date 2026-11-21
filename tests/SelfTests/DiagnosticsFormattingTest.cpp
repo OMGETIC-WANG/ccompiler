@@ -47,7 +47,7 @@ std::optional<int> TryAssignNewValue(bool fail) {
   return value;
 }
 
-std::optional<std::unique_ptr<int>> OptionalPointer(bool fail) {
+OptUnique<int> OptionalPointer(bool fail) {
   if (fail) {
     return std::nullopt;
   }
@@ -253,7 +253,7 @@ TEST(DiagnosticsFormatting, LexerFailureStopsTranslationUnit) {
   RawLexer raw_lexer(source, macros, sources, context);
   Lexer lexer(raw_lexer);
 
-  std::optional<std::unique_ptr<TranslationUnit>> translation_unit =
+  OptUnique<TranslationUnit> translation_unit =
       ParseTranslationUnit(lexer, types, sources, diagnostics);
 
   EXPECT_FALSE(translation_unit.has_value());
@@ -270,7 +270,7 @@ TEST(DiagnosticsFormatting, PreprocessorFailureStopsTranslationUnit) {
   RawLexer raw_lexer(source, macros, sources, context);
   Lexer lexer(raw_lexer);
 
-  std::optional<std::unique_ptr<TranslationUnit>> translation_unit =
+  OptUnique<TranslationUnit> translation_unit =
       ParseTranslationUnit(lexer, types, sources, diagnostics);
 
   EXPECT_FALSE(translation_unit.has_value());
@@ -288,7 +288,7 @@ TEST(DiagnosticsFormatting, ParserRecoveryReturnsPartialTranslationUnit) {
   RawLexer raw_lexer(source, macros, sources, context);
   Lexer lexer(raw_lexer);
 
-  std::optional<std::unique_ptr<TranslationUnit>> translation_unit =
+  OptUnique<TranslationUnit> translation_unit =
       ParseTranslationUnit(lexer, types, sources, diagnostics);
 
   ASSERT_TRUE(translation_unit.has_value());
@@ -307,7 +307,7 @@ TEST(DiagnosticsFormatting, SemaFailureLeavesTranslationUnitUnanalyzed) {
   RawLexer raw_lexer(source, macros, sources, context);
   Lexer lexer(raw_lexer);
 
-  std::optional<std::unique_ptr<TranslationUnit>> translation_unit =
+  OptUnique<TranslationUnit> translation_unit =
       ParseTranslationUnit(lexer, types, sources, diagnostics);
   ASSERT_TRUE(translation_unit.has_value());
   ASSERT_NE(*translation_unit, nullptr);

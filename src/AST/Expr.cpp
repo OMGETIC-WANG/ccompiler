@@ -189,8 +189,8 @@ static bool IsOct(std::string_view s) {
   return true;
 }
 
-static std::optional<std::unique_ptr<LiteralNum>>
-ParseLiteralNum(Token tok, CompileContext &context) {
+static OptUnique<LiteralNum> ParseLiteralNum(Token tok,
+                                             CompileContext &context) {
   std::string_view s = context.Sources().GetText(tok);
   ASSERT(!s.empty(), "Unexpected empty literal num");
 
@@ -512,8 +512,8 @@ ParseCharacterLiteralValue(std::string_view spelling, SourceLocation location,
   return static_cast<unsigned char>(value);
 }
 
-static std::optional<std::unique_ptr<LiteralNum>>
-ParseLiteralChar(Token tok, CompileContext &context) {
+static OptUnique<LiteralNum> ParseLiteralChar(Token tok,
+                                              CompileContext &context) {
   TRY_ASSIGN_NEW(value,
                  ParseCharacterLiteralValue(context.Sources().GetText(tok),
                                             tok.location, context));
@@ -570,8 +570,7 @@ has_escape:;
   return res;
 }
 
-std::optional<std::unique_ptr<ASTNode>> ParsePrimary(Lexer &lexer,
-                                                     CompileContext &context) {
+OptUnique<ASTNode> ParsePrimary(Lexer &lexer, CompileContext &context) {
   Token next;
   TRY_ASSIGN_NEW(tok, lexer.PeekNextToken());
   switch (tok.type) {
@@ -649,9 +648,9 @@ std::optional<std::unique_ptr<ASTNode>> ParsePrimary(Lexer &lexer,
   }
 }
 
-static std::optional<std::unique_ptr<ASTNode>>
-ParsePostfix(Lexer &lexer, CompileContext &context,
-             SourceLocation primary_start, std::unique_ptr<ASTNode> primary) {
+static OptUnique<ASTNode> ParsePostfix(Lexer &lexer, CompileContext &context,
+                                       SourceLocation primary_start,
+                                       std::unique_ptr<ASTNode> primary) {
   Token next;
   while (true) {
     TRY_ASSIGN_NEW(tok, lexer.PeekNextToken());

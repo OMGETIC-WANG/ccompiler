@@ -131,26 +131,23 @@ ParseControlCondExpr(Lexer &lexer, CompileContext &context) {
   return expression;
 }
 
-static std::optional<std::unique_ptr<ASTNode>>
-ParseIfStmt(Lexer &lexer, CompileContext &context);
+static OptUnique<ASTNode> ParseIfStmt(Lexer &lexer, CompileContext &context);
 
-static std::optional<std::unique_ptr<WhileStmt>>
-ParseWhileStmt(Lexer &lexer, CompileContext &context);
+static OptUnique<WhileStmt> ParseWhileStmt(Lexer &lexer,
+                                           CompileContext &context);
 
-static std::optional<std::unique_ptr<DoWhileStmt>>
-ParseDoWhileStmt(Lexer &lexer, CompileContext &context);
+static OptUnique<DoWhileStmt> ParseDoWhileStmt(Lexer &lexer,
+                                               CompileContext &context);
 
-static std::optional<std::unique_ptr<ForStmt>>
-ParseForStmt(Lexer &lexer, CompileContext &context);
+static OptUnique<ForStmt> ParseForStmt(Lexer &lexer, CompileContext &context);
 
-static std::optional<std::unique_ptr<SwitchStmt>>
-ParseSwitchStmt(Lexer &lexer, CompileContext &context);
+static OptUnique<SwitchStmt> ParseSwitchStmt(Lexer &lexer,
+                                             CompileContext &context);
 
-static std::optional<std::unique_ptr<ASTNode>>
-ParseReturnStmt(Lexer &lexer, CompileContext &context);
+static OptUnique<ASTNode> ParseReturnStmt(Lexer &lexer,
+                                          CompileContext &context);
 
-static std::optional<std::unique_ptr<ASTNode>>
-ParseGotoStmt(Lexer &lexer, CompileContext &context);
+static OptUnique<ASTNode> ParseGotoStmt(Lexer &lexer, CompileContext &context);
 
 static std::optional<std::unique_ptr<ASTNode>>
 ParseStmtOnly(Lexer &lexer, CompileContext &context) {
@@ -266,7 +263,8 @@ ParseStmt(Lexer &lexer, CompileContext &context) {
   Token next;
   TRY_ASSIGN_NEW(tok, lexer.PeekNextToken());
   if (tok.type == TokenType::LBrace) {
-    return ParseCompoundStmt(lexer, context);
+    TRY_ASSIGN_NEW(compound_stmt, ParseCompoundStmt(lexer, context));
+    return std::move(compound_stmt);
   }
   if (tok.type == TokenType::RBrace) {
     return std::unique_ptr<ASTNode>{};
@@ -301,8 +299,8 @@ ParseStmt(Lexer &lexer, CompileContext &context) {
   return stmt;
 }
 
-std::optional<std::unique_ptr<CompoundStmt>>
-ParseCompoundStmt(Lexer &lexer, CompileContext &context) {
+OptUnique<CompoundStmt> ParseCompoundStmt(Lexer &lexer,
+                                          CompileContext &context) {
   Token next;
   TRY_ASSIGN_NEW(tok, lexer.PeekNextToken());
   if (tok.type != TokenType::LBrace) {
@@ -346,8 +344,7 @@ ParseCompoundStmt(Lexer &lexer, CompileContext &context) {
   return CS;
 }
 
-static std::optional<std::unique_ptr<ASTNode>>
-ParseIfStmt(Lexer &lexer, CompileContext &context) {
+static OptUnique<ASTNode> ParseIfStmt(Lexer &lexer, CompileContext &context) {
   Token next;
   TRY_ASSIGN_NEW(start_token, lexer.PeekNextToken());
   auto if_stmt = std::make_unique<IfStmt>();
@@ -376,8 +373,8 @@ ParseIfStmt(Lexer &lexer, CompileContext &context) {
   return if_stmt;
 }
 
-static std::optional<std::unique_ptr<WhileStmt>>
-ParseWhileStmt(Lexer &lexer, CompileContext &context) {
+static OptUnique<WhileStmt> ParseWhileStmt(Lexer &lexer,
+                                           CompileContext &context) {
   TRY_ASSIGN_NEW(start_token, lexer.PeekNextToken());
   auto while_stmt = std::make_unique<WhileStmt>();
   TRY(lexer.ConsumeNextToken()); // consume "while"
@@ -395,8 +392,8 @@ ParseWhileStmt(Lexer &lexer, CompileContext &context) {
   return while_stmt;
 }
 
-static std::optional<std::unique_ptr<DoWhileStmt>>
-ParseDoWhileStmt(Lexer &lexer, CompileContext &context) {
+static OptUnique<DoWhileStmt> ParseDoWhileStmt(Lexer &lexer,
+                                               CompileContext &context) {
   Token next;
   TRY_ASSIGN_NEW(start_token, lexer.PeekNextToken());
   auto do_while_stmt = std::make_unique<DoWhileStmt>();
@@ -421,8 +418,7 @@ ParseDoWhileStmt(Lexer &lexer, CompileContext &context) {
   return do_while_stmt;
 }
 
-static std::optional<std::unique_ptr<ForStmt>>
-ParseForStmt(Lexer &lexer, CompileContext &context) {
+static OptUnique<ForStmt> ParseForStmt(Lexer &lexer, CompileContext &context) {
   Token next;
   TRY_ASSIGN_NEW(start_token, lexer.PeekNextToken());
   auto for_stmt = std::make_unique<ForStmt>();
@@ -498,8 +494,8 @@ static bool IsCaseEnd(TokenType type) {
          type == TokenType::RBrace;
 }
 
-static std::optional<std::unique_ptr<SwitchStmt>>
-ParseSwitchStmt(Lexer &lexer, CompileContext &context) {
+static OptUnique<SwitchStmt> ParseSwitchStmt(Lexer &lexer,
+                                             CompileContext &context) {
   Token next;
   TRY_ASSIGN_NEW(start_token, lexer.PeekNextToken());
   auto switch_stmt = std::make_unique<SwitchStmt>();
@@ -595,8 +591,8 @@ ParseSwitchStmt(Lexer &lexer, CompileContext &context) {
   }
 }
 
-static std::optional<std::unique_ptr<ASTNode>>
-ParseReturnStmt(Lexer &lexer, CompileContext &context) {
+static OptUnique<ASTNode> ParseReturnStmt(Lexer &lexer,
+                                          CompileContext &context) {
   TRY_ASSIGN_NEW(start_token, lexer.PeekNextToken());
   auto ret_stmt = std::make_unique<ReturnStmt>();
   TRY(lexer.ConsumeNextToken()); // consume "return"
@@ -608,8 +604,7 @@ ParseReturnStmt(Lexer &lexer, CompileContext &context) {
   return ret_stmt;
 }
 
-static std::optional<std::unique_ptr<ASTNode>>
-ParseGotoStmt(Lexer &lexer, CompileContext &context) {
+static OptUnique<ASTNode> ParseGotoStmt(Lexer &lexer, CompileContext &context) {
   Token next;
   TRY_ASSIGN_NEW(start_token, lexer.PeekNextToken());
   auto goto_stmt = std::make_unique<GotoStmt>();
@@ -642,7 +637,7 @@ static void AddVaList(CompileContext &context) {
                               context.Types().Array(va_list_type, 1));
 }
 
-std::optional<std::unique_ptr<TranslationUnit>>
+OptUnique<TranslationUnit>
 ParseTranslationUnit(Lexer &lexer, TypeContext &types, SourceManager &sources,
                      DiagnosticContext &diagnostics) {
   std::unique_ptr<TranslationUnit> TU = std::make_unique<TranslationUnit>();

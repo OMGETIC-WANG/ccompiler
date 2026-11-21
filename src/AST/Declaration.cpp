@@ -7,18 +7,18 @@
 #include "TranslationUnit.h"
 #include <list>
 
-static std::optional<std::unique_ptr<StructDecl>>
+static OptUnique<StructDecl>
 ParseStructDecl(Lexer &lexer, std::string_view name, CompileContext &context);
 
-static std::optional<std::unique_ptr<UnionDecl>>
-ParseUnionDecl(Lexer &lexer, std::string_view name, CompileContext &context);
+static OptUnique<UnionDecl> ParseUnionDecl(Lexer &lexer, std::string_view name,
+                                           CompileContext &context);
 
-static std::optional<std::unique_ptr<EnumDecl>>
-ParseEnumDecl(Lexer &lexer, std::string_view name, CompileContext &context);
+static OptUnique<EnumDecl> ParseEnumDecl(Lexer &lexer, std::string_view name,
+                                         CompileContext &context);
 
-static std::optional<std::unique_ptr<FunctionDecl>>
-ParseFunctionDecl(Lexer &lexer, ParsedType type, StorageClass storage_class,
-                  CompileContext &context);
+static OptUnique<FunctionDecl> ParseFunctionDecl(Lexer &lexer, ParsedType type,
+                                                 StorageClass storage_class,
+                                                 CompileContext &context);
 
 std::string_view DeclBase::GetNodeTypeName() const {
   return EnumRefl<DeclType>::GetName(GetType());
@@ -373,8 +373,8 @@ ParseDeclarationSpecifier(Lexer &lexer, CompileContext &context) {
   return decl_spec;
 }
 
-static std::optional<std::unique_ptr<Declarator>>
-ParseDeclarator(Lexer &lexer, CompileContext &context);
+static OptUnique<Declarator> ParseDeclarator(Lexer &lexer,
+                                             CompileContext &context);
 
 static std::optional<ParamListItem>
 ParseParamListItem(Lexer &lexer, CompileContext &context) {
@@ -399,8 +399,8 @@ ParseParamListItem(Lexer &lexer, CompileContext &context) {
   return item;
 }
 
-static std::optional<std::unique_ptr<ParamList>>
-ParseParamList(Lexer &lexer, CompileContext &context) {
+static OptUnique<ParamList> ParseParamList(Lexer &lexer,
+                                           CompileContext &context) {
   auto param_list = std::make_unique<ParamList>();
   Token next;
   TRY_ASSIGN_NEW(tok, lexer.PeekNextToken());
@@ -440,8 +440,8 @@ ParseParamList(Lexer &lexer, CompileContext &context) {
   return param_list;
 }
 
-static std::optional<std::unique_ptr<ArraySuffix>>
-ParseArraySuffix(Lexer &lexer, CompileContext &context) {
+static OptUnique<ArraySuffix> ParseArraySuffix(Lexer &lexer,
+                                               CompileContext &context) {
   auto array_suffix = std::make_unique<ArraySuffix>();
   Token next;
   TRY_ASSIGN_NEW(start_token, lexer.PeekNextToken());
@@ -527,8 +527,8 @@ ParseDirectDeclarator(Lexer &lexer, CompileContext &context) {
   return direct_declarator;
 }
 
-static std::optional<std::unique_ptr<Declarator>>
-ParseDeclarator(Lexer &lexer, CompileContext &context) {
+static OptUnique<Declarator> ParseDeclarator(Lexer &lexer,
+                                             CompileContext &context) {
   auto declarator = std::make_unique<Declarator>();
   Token next;
   TRY_ASSIGN_NEW(start_token, lexer.PeekNextToken());
@@ -570,7 +570,7 @@ ParseDeclarator(Lexer &lexer, CompileContext &context) {
   return declarator;
 }
 
-static std::optional<std::unique_ptr<ValueInitializer>>
+static OptUnique<ValueInitializer>
 ParseValueInitializer(Lexer &lexer, CompileContext &context) {
   auto value_initializer = std::make_unique<ValueInitializer>();
   TRY_ASSIGN_NEW(value, ParseExpr(lexer, context));
@@ -581,7 +581,7 @@ ParseValueInitializer(Lexer &lexer, CompileContext &context) {
   return value_initializer;
 }
 
-static std::optional<std::unique_ptr<FieldInitializer>>
+static OptUnique<FieldInitializer>
 ParseFieldInitializer(Lexer &lexer, CompileContext &context) {
   auto initializer = std::make_unique<FieldInitializer>();
   Token next;
@@ -630,7 +630,7 @@ ParseFieldInitializer(Lexer &lexer, CompileContext &context) {
   return initializer;
 }
 
-static std::optional<std::unique_ptr<ArrayInitializer>>
+static OptUnique<ArrayInitializer>
 ParseArrayInitializer(Lexer &lexer, CompileContext &context) {
   auto initializer = std::make_unique<ArrayInitializer>();
   Token next;
@@ -662,8 +662,8 @@ ParseArrayInitializer(Lexer &lexer, CompileContext &context) {
   return initializer;
 }
 
-static std::optional<std::unique_ptr<Initializer>>
-ParseInitializer(Lexer &lexer, CompileContext &context) {
+static OptUnique<Initializer> ParseInitializer(Lexer &lexer,
+                                               CompileContext &context) {
   Token next;
   TRY_ASSIGN_NEW(tok, lexer.PeekNextToken());
   if (tok.type == TokenType::EndOfFile || tok.type == TokenType::Semicolon ||
@@ -850,7 +850,7 @@ ParseDeclaration(Lexer &lexer, CompileContext &context) {
   return decl_stmt_builder.Build();
 }
 
-static std::optional<std::unique_ptr<StructDecl>>
+static OptUnique<StructDecl>
 ParseStructDecl(Lexer &lexer, std::string_view name, CompileContext &context) {
   auto struct_decl = std::make_unique<StructDecl>();
   struct_decl->name = name;
@@ -905,8 +905,8 @@ ParseStructDecl(Lexer &lexer, std::string_view name, CompileContext &context) {
   return struct_decl;
 }
 
-static std::optional<std::unique_ptr<UnionDecl>>
-ParseUnionDecl(Lexer &lexer, std::string_view name, CompileContext &context) {
+static OptUnique<UnionDecl> ParseUnionDecl(Lexer &lexer, std::string_view name,
+                                           CompileContext &context) {
   auto union_decl = std::make_unique<UnionDecl>();
   union_decl->name = name;
   union_decl->type =
@@ -1002,8 +1002,8 @@ ParseEnumContent(Lexer &lexer, CompileContext &context, EnumDecl *decl) {
   }
 }
 
-static std::optional<std::unique_ptr<EnumDecl>>
-ParseEnumDecl(Lexer &lexer, std::string_view name, CompileContext &context) {
+static OptUnique<EnumDecl> ParseEnumDecl(Lexer &lexer, std::string_view name,
+                                         CompileContext &context) {
   auto enum_decl = std::make_unique<EnumDecl>();
   enum_decl->name = name;
   enum_decl->type =
@@ -1041,9 +1041,9 @@ ParseEnumDecl(Lexer &lexer, std::string_view name, CompileContext &context) {
   return enum_decl;
 }
 
-static std::optional<std::unique_ptr<FunctionDecl>>
-ParseFunctionDecl(Lexer &lexer, ParsedType type, StorageClass storage_class,
-                  CompileContext &context) {
+static OptUnique<FunctionDecl> ParseFunctionDecl(Lexer &lexer, ParsedType type,
+                                                 StorageClass storage_class,
+                                                 CompileContext &context) {
   auto function_decl = std::make_unique<FunctionDecl>();
   function_decl->location = type.location;
   function_decl->name = type.declarator_name;

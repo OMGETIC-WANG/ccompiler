@@ -120,7 +120,7 @@ protected:
   DiagnosticContext diagnostics{sources};
   MacroContext macros;
   TypeContext types;
-  std::optional<std::unique_ptr<TranslationUnit>> translation_unit;
+  OptUnique<TranslationUnit> translation_unit;
 
   VarDecl *global = nullptr;
   EnumDecl *color = nullptr;

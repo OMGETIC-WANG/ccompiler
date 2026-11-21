@@ -42,9 +42,9 @@ std::vector<const ASTNode *> IntrinsicCall::GetPrintChildren() const {
   return print_children;
 }
 
-std::optional<std::unique_ptr<IntrinsicCall>>
-ParseIntrinsicCall(const IntrinsicDesc *desc, Token name_token, Lexer &lexer,
-                   CompileContext &context) {
+OptUnique<IntrinsicCall> ParseIntrinsicCall(const IntrinsicDesc *desc,
+                                            Token name_token, Lexer &lexer,
+                                            CompileContext &context) {
   auto call = std::make_unique<IntrinsicCall>();
   call->desc = desc;
   Token next;

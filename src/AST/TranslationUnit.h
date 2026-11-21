@@ -17,9 +17,10 @@ public:
   bool is_semantically_analyzed = false;
 };
 
-std::optional<std::unique_ptr<CompoundStmt>>
-ParseCompoundStmt(Lexer &lexer, CompileContext &context);
+OptUnique<CompoundStmt> ParseCompoundStmt(Lexer &lexer,
+                                          CompileContext &context);
 
-std::optional<std::unique_ptr<TranslationUnit>>
-ParseTranslationUnit(Lexer &lexer, TypeContext &types, SourceManager &sources,
-                     DiagnosticContext &diagnostics);
+OptUnique<TranslationUnit> ParseTranslationUnit(Lexer &lexer,
+                                                TypeContext &types,
+                                                SourceManager &sources,
+                                                DiagnosticContext &diagnostics);
